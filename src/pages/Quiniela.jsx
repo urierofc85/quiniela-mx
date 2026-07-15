@@ -6,7 +6,11 @@ export default function Quiniela() {
   const [partidos, setPartidos] = useState([]);
   const [pronosticos, setPronosticos] = useState({});
   const [jornadaActiva, setJornadaActiva] = useState(null);
-  const [jornadaCerrada, setJornadaCerrada] = useState(false);
+  const [jornadaCerrada, setJornadaCerrada] =
+    useState(false);
+
+  const [quinielaGuardada, setQuinielaGuardada] =
+    useState([]);
 
   useEffect(() => {
     cargarPartidos();
@@ -20,126 +24,226 @@ export default function Quiniela() {
 
     setPartidos(data || []);
   };
- 
 
+  const cargarMiQuiniela = async (
+    jornadaId
+  ) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-const cargarJornadaActiva = async () => {
-  const { data } = await supabase
-    .from("jornadas")
-    .select("*")
-    .eq("activa", true)
-    .single();
+    if (!user || !jornadaId) return;
 
-  setJornadaActiva(data);
+    const { data, error } =
+      await supabase
+        .from("quinielas")
+        .select("*")
+        .eq(
+          "usuario_id",
+          user.id
+        )
+        .eq(
+          "jornada_id",
+          jornadaId
+        );
 
-  if (data?.fecha_limite) {
-    const fechaLimite = new Date(
-      data.fecha_limite
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    console.log(
+      "QUINIELA GUARDADA:",
+      data
     );
 
-    const ahora = new Date();
-
-    setJornadaCerrada(
-      ahora > fechaLimite
-    );
-  }
-};
-
-const actualizarPronostico = (
-  partidoId,
-  valor
-) => {
-
-  console.log("FUNCION EJECUTADA");
-  console.log("PARTIDO:", partidoId);
-  console.log("VALOR:", valor);
-
-
-  const nuevo = {
-    ...pronosticos,
-    [partidoId]: valor,
+    setQuinielaGuardada(data || []);
   };
 
-  console.log("NUEVO:", nuevo);
+  const cargarJornadaActiva =
+    async () => {
+      const { data } =
+        await supabase
+          .from("jornadas")
+          .select("*")
+          .eq("activa", true)
+          .single();
 
-  setPronosticos(nuevo);
+      setJornadaActiva(data);
+
+      if (data?.id) {
+        await cargarMiQuiniela(
+          data.id
+        );
+      }
+
+      if (data?.fecha_limite) {
+        const fechaLimite =
+          new Date(
+            data.fecha_limite
+          );
+
+        const ahora =
+          new Date();
+
+        setJornadaCerrada(
+          ahora > fechaLimite
+        );
+      }
+    };
+
+  const actualizarPronostico = (partidoId, valor) => {
+
+  console.log(
+    "PARTIDO:",
+    partidoId
+  );
+
+  console.log(
+    "VALOR:",
+    valor
+  );
+
+  setPronosticos({
+    ...pronosticos,
+    [partidoId]: valor,
+  });
+
 };
 
 
-  const guardarQuiniela = async () => {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const guardarQuiniela =
+    async () => {
+      const {
+        data: { user },
+      } =
+        await supabase.auth.getUser();
 
-const {
-  data: jornadaActiva,
-  error: jornadaError,
-} = await supabase
-  .from("jornadas")
-  .select("*")
-  .eq("activa", true)
-  .single();
+      const {
+        data: jornadaActiva,
+        error: jornadaError,
+      } = await supabase
+        .from("jornadas")
+        .select("*")
+        .eq("activa", true)
+        .single();
 
-if (jornadaError || !jornadaActiva) {
-  alert("No existe una jornada activa");
-  return;
-}
+      if (
+        jornadaError ||
+        !jornadaActiva
+      ) {
+        alert(
+          "No existe una jornada activa"
+        );
+        return;
+      }
 
-const fechaLimite = new Date(
-  jornadaActiva.fecha_limite
-);
+      const fechaLimite =
+        new Date(
+          jornadaActiva.fecha_limite
+        );
 
-const ahora = new Date();
+      const ahora =
+        new Date();
 
-if (ahora > fechaLimite) {
-  alert(
-    "La jornada ya fue cerrada"
-  );
-  return;
-}
+      if (
+        ahora > fechaLimite
+      ) {
+        alert(
+          "La jornada ya fue cerrada"
+        );
+        return;
+      }
 
+      const {
+        data: existente,
+      } = await supabase
+        .from("quinielas")
+        .select("id")
+        .eq(
+          "usuario_id",
+          user.id
+        )
+        .eq(
+          "jornada_id",
+          jornadaActiva.id
+        )
+        .limit(1);
 
-const { data: existente } = await supabase
-  .from("quinielas")
-  .select("id")
-  .eq("usuario_id", user.id)
-  .eq("jornada_id", jornadaActiva.id)
-  .limit(1);
+      if (
+        existente &&
+        existente.length >
+          0
+      ) {
+        alert(
+          "Ya enviaste tu quiniela para esta jornada"
+        );
 
-if (existente && existente.length > 0) {
-  alert(
-    "Ya enviaste tu quiniela para esta jornada"
-  );
-  return;
-}
+        return;
+      }
 
-  console.log("PRONOSTICOS:", pronosticos);
-  
-const registros = Object.entries(pronosticos).map(
-  ([partidoId, valor]) => ({
-    usuario: user.email,
-    usuario_id: user.id,
-    partido_id: Number(partidoId),
-    pronostico: valor,
-    jornada_id: jornadaActiva.id,
-    fecha_envio: new Date().toISOString(),
-  })
-);
+      console.log(
+        "PRONOSTICOS:",
+        pronosticos
+      );
 
-console.log("REGISTROS:", registros);
+      console.log(
+        "OBJECT ENTRIES:",
+        Object.entries(pronosticos)
+      );
 
+      const registros =
+        Object.entries(
+          pronosticos
+        ).map(
+          ([
+            partidoId,
+            valor,
+          ]) => ({
+            usuario:
+              user.email,
+            usuario_id:
+              user.id,
+            partido_id:
+              Number(
+                partidoId
+              ),
+            pronostico:
+              valor,
+            jornada_id:
+              jornadaActiva.id,
+            fecha_envio:
+              new Date().toISOString(),
+          })
+        );
 
-  const { error } = await supabase
-    .from("quinielas")
-    .insert(registros);
+        console.log(
+          "REGISTROS:",
+          registros
+        );
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+      const { error } =
+        await supabase
+          .from("quinielas")
+          .insert(
+            registros
+          );
 
-  alert("Quiniela guardada");
-};
+      if (error) {
+        alert(
+          error.message
+        );
+        return;
+      }
+
+      await cargarMiQuiniela(
+        jornadaActiva.id
+      );
+
+      alert(
+        "Quiniela guardada correctamente"
+      );
+    };
 
   return (
     <div className="max-w-4xl mx-auto p-4">
@@ -155,7 +259,7 @@ console.log("REGISTROS:", registros);
           Ranking General
         </Link>
       </div>
-      
+
       <Link
         to="/perfil"
         className="bg-blue-600 text-white px-4 py-2 rounded"
@@ -163,74 +267,77 @@ console.log("REGISTROS:", registros);
         Mi Perfil
       </Link>
 
-{jornadaActiva && (
-  <p className="mb-4 text-red-600 font-semibold">
-    ⏰ Fecha límite:
-    {" "}
-    {new Date(
-      jornadaActiva.fecha_limite
-    ).toLocaleString("es-MX")}
-  </p>
-)}
+      {jornadaActiva && (
+        <p className="mb-4 mt-4 text-red-600 font-semibold">
+          ⏰ Fecha límite:{" "}
+          {new Date(
+            jornadaActiva.fecha_limite
+          ).toLocaleString(
+            "es-MX"
+          )}
+        </p>
+      )}
 
+      {partidos.map(
+        (partido) => (
+          <div
+            key={partido.id}
+            className="border rounded p-4 mb-3"
+          >
+            <h3 className="font-semibold">
+              {partido.local} vs{" "}
+              {
+                partido.visitante
+              }
+            </h3>
 
-      {partidos.map((partido) => (
-        <div
-          key={partido.id}
-          className="border rounded p-4 mb-3"
-        >
-          <h3 className="font-semibold">
-            {partido.local} vs{" "}
-            {partido.visitante}
-          </h3>
+            <div className="flex gap-4 mt-3">
+              <label>
+                <input
+                  type="radio"
+                  name={`partido-${partido.id}`}
+                  onChange={() =>
+                    actualizarPronostico(
+                      partido.id,
+                      "L"
+                    )
+                  }
+                />
+                {" "}Local
+              </label>
 
-          <div className="flex gap-4 mt-3">
-            <label>
-              <input
-                type="radio"
-                name={`partido-${partido.id}`}
-                onChange={() =>
-                  actualizarPronostico(
-                    partido.id,
-                    "L"
-                  )
-                }
-              />
-              Local
-            </label>
+              <label>
+                <input
+                  type="radio"
+                  name={`partido-${partido.id}`}
+                  onChange={() =>
+                    actualizarPronostico(
+                      partido.id,
+                      "E"
+                    )
+                  }
+                />
+                {" "}Empate
+              </label>
 
-            <label>
-              <input
-                type="radio"
-                name={`partido-${partido.id}`}
-                onChange={() =>
-                  actualizarPronostico(
-                    partido.id,
-                    "E"
-                  )
-                }
-              />
-              Empate
-            </label>
-
-            <label>
-              <input
-                type="radio"
-                name={`partido-${partido.id}`}
-                onChange={() =>
-                  actualizarPronostico(
-                    partido.id,
-                    "V"
-                  )
-                }
-              />
-              Visitante
-            </label>
+              <label>
+                <input
+                  type="radio"
+                  name={`partido-${partido.id}`}
+                  onChange={() =>
+                    actualizarPronostico(
+                      partido.id,
+                      "V"
+                    )
+                  }
+                />
+                {" "}Visitante
+              </label>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      )}
 
-    
       {jornadaCerrada && (
         <p className="text-red-600 font-bold mt-4">
           🔒 La jornada ya fue cerrada
@@ -239,7 +346,9 @@ console.log("REGISTROS:", registros);
 
       <button
         disabled={jornadaCerrada}
-        onClick={guardarQuiniela}
+        onClick={
+          guardarQuiniela
+        }
         className={`px-5 py-2 rounded mt-6 text-white ${
           jornadaCerrada
             ? "bg-gray-400"
@@ -248,7 +357,86 @@ console.log("REGISTROS:", registros);
       >
         Guardar Quiniela
       </button>
-      
-</div>
-);
+
+      {quinielaGuardada.length >
+        0 && (
+        <div className="mt-10">
+          <h2 className="text-2xl font-bold mb-4">
+            ✅ Mis Pronósticos
+            Enviados
+          </h2>
+
+          <div className="overflow-x-auto">
+            <table className="w-full border rounded">
+              <thead className="bg-gray-200">
+                <tr>
+                  <th className="p-2 border">
+                    Partido
+                  </th>
+
+                  <th className="p-2 border">
+                    Pronóstico
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+              
+                
+                {quinielaGuardada.map(
+                  (item) => {
+
+                    console.log(
+                      "ITEM:",
+                      item
+                    );
+
+                    console.log(
+                      "PARTIDOS:",
+                      partidos
+                    );
+                                     
+                    const partido =
+                      partidos.find(
+                        (p) =>
+                          String(p.id) ===
+                          String(item.partido_id)
+                      );
+
+                    return (
+                      <tr
+                        key={
+                          item.id
+                        }
+                      >
+                        <td className="p-2 border">
+                          {partido
+                            ? `${partido.local} vs ${partido.visitante}`
+                            : "Partido no encontrado"}
+                        </td>
+
+                        <td className="p-2 border font-semibold">
+                          {item.pronostico ===
+                            "L" &&
+                            "🏠 Local"}
+
+                          {item.pronostico ===
+                            "E" &&
+                            "🤝 Empate"}
+
+                          {item.pronostico ===
+                            "V" &&
+                            "✈️ Visitante"}
+                        </td>
+                      </tr>
+                    );
+                  }
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -1,6 +1,6 @@
+
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
-import { Link } from "react-router-dom";
 
 export default function Dashboard() {
   const [participantes, setParticipantes] =
@@ -15,9 +15,45 @@ export default function Dashboard() {
   const [quinielas, setQuinielas] =
     useState(0);
 
+  const [jornadasLista, setJornadasLista] =
+    useState([]);
+
+  const [jornadaSeleccionada, setJornadaSeleccionada] =
+    useState("");
+
   useEffect(() => {
     cargarDashboard();
   }, []);
+
+  const cargarQuinielasJornada = async (
+    jornadaId
+  ) => {
+
+    if (!jornadaId) {
+      setQuinielas(0);
+      return;
+    }
+
+    const { data } = await supabase
+      .from("quinielas")
+      .select("usuario_id")
+      .eq(
+        "jornada_id",
+        jornadaId
+      );
+
+    const usuariosUnicos = [
+      ...new Set(
+        data?.map(
+          (q) => q.usuario_id
+        ) || []
+      ),
+    ];
+
+    setQuinielas(
+      usuariosUnicos.length
+    );
+  };
 
   const cargarDashboard = async () => {
 
@@ -45,13 +81,40 @@ export default function Dashboard() {
           head: true,
         });
 
-    const { count: quinielasCount } =
+    const { data: jornadasData } =
       await supabase
-        .from("quinielas")
-        .select("*", {
-          count: "exact",
-          head: true,
+        .from("jornadas")
+        .select("*")
+        .order("id", {
+          ascending: false,
         });
+
+    setJornadasLista(
+      jornadasData || []
+    );
+
+    const { data: jornadaActiva } =
+      await supabase
+        .from("jornadas")
+        .select("id")
+        .eq("activa", true)
+        .single();
+
+    if (jornadaActiva) {
+
+      setJornadaSeleccionada(
+        jornadaActiva.id
+      );
+
+      await cargarQuinielasJornada(
+        jornadaActiva.id
+      );
+
+    } else {
+
+      setQuinielas(0);
+
+    }
 
     setParticipantes(
       participantesCount || 0
@@ -64,10 +127,6 @@ export default function Dashboard() {
     setPartidos(
       partidosCount || 0
     );
-
-    setQuinielas(
-      quinielasCount || 0
-    );
   };
 
   return (
@@ -76,6 +135,44 @@ export default function Dashboard() {
       <h1 className="text-3xl font-bold mb-6">
         📊 Dashboard Administrativo
       </h1>
+
+      <div className="mb-6">
+
+        <label className="block mb-2 font-bold">
+          Jornada para consulta
+        </label>
+
+        <select
+          value={jornadaSeleccionada}
+          onChange={(e) => {
+
+            setJornadaSeleccionada(
+              e.target.value
+            );
+
+            cargarQuinielasJornada(
+              e.target.value
+            );
+
+          }}
+          className="border p-2 rounded w-full"
+        >
+          <option value="">
+            Seleccionar Jornada
+          </option>
+
+          {jornadasLista.map((j) => (
+            <option
+              key={j.id}
+              value={j.id}
+            >
+              {j.nombre}
+            </option>
+          ))}
+
+        </select>
+
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
@@ -111,7 +208,7 @@ export default function Dashboard() {
 
         <div className="bg-purple-600 text-white p-6 rounded shadow">
           <h2 className="text-lg">
-            ✅ Quinielas
+            ✅ Quinielas Recibidas
           </h2>
 
           <p className="text-3xl font-bold mt-2">

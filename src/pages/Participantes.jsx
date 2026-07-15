@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
 
@@ -9,6 +8,9 @@ export default function Participantes() {
 
   const [busqueda, setBusqueda] =
     useState("");
+
+  const [seleccionados, setSeleccionados] =
+    useState([]);
 
   useEffect(() => {
     cargarParticipantes();
@@ -31,10 +33,127 @@ export default function Participantes() {
     setParticipantes(data || []);
   };
 
+  const toggleSeleccion = (id) => {
+
+    if (seleccionados.includes(id)) {
+
+      setSeleccionados(
+        seleccionados.filter(
+          (item) => item !== id
+        )
+      );
+
+    } else {
+
+      setSeleccionados([
+        ...seleccionados,
+        id,
+      ]);
+
+    }
+  };
+
+  
+const eliminarUsuarios = async () => {
+
+  if (seleccionados.length === 0) {
+    alert(
+      "Selecciona al menos un usuario"
+    );
+    return;
+  }
+
+  const confirmar = window.confirm(
+    `¿Deseas eliminar completamente ${seleccionados.length} usuario(s)?`
+  );
+
+  if (!confirmar) return;
+
+  
+for (const userId of seleccionados) {
+
+  try {
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const response = await fetch(
+      "https://cfybuywzclttwbhafjlq.supabase.co/functions/v1/clever-action",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          userId,
+        }),
+      }
+    );
+
+    const resultado =
+      await response.json();
+
+    console.log(
+      "RESPUESTA EDGE:",
+      resultado
+    );
+
+    if (!response.ok) {
+
+      alert(
+        resultado.error ||
+        "Error eliminando usuario de Authentication"
+      );
+
+      return;
+    }
+
+  } catch (error) {
+
+    console.log(
+      "Error eliminando auth user:",
+      error
+    );
+
+    alert(
+      "No fue posible conectar con la Edge Function."
+    );
+
+    return;
+  }
+
+}
+
+  const { error: errorProfiles } =
+    await supabase
+      .from("profiles")
+      .delete()
+      .in(
+        "id",
+        seleccionados
+      );
+
+  if (errorProfiles) {
+    alert(errorProfiles.message);
+    return;
+  }
+
+  alert(
+    "Usuarios eliminados completamente"
+  );
+
+  setSeleccionados([]);
+
+  await cargarParticipantes();
+};
+
   const participantesFiltrados =
     participantes.filter((p) => {
 
-      const texto = busqueda.toLowerCase();
+      const texto =
+        busqueda.toLowerCase();
 
       return (
         (p.nombre_usuario || "")
@@ -68,12 +187,22 @@ export default function Participantes() {
         className="border p-2 rounded w-full mb-4"
       />
 
-      <div className="mb-4">
-        Total participantes:
-        {" "}
-        <strong>
-          {participantesFiltrados.length}
-        </strong>
+      <div className="flex justify-between items-center mb-4">
+
+        <div>
+          Total participantes:{" "}
+          <strong>
+            {participantesFiltrados.length}
+          </strong>
+        </div>
+
+        <button
+          onClick={eliminarUsuarios}
+          className="bg-red-600 text-white px-4 py-2 rounded"
+        >
+          Eliminar Seleccionados
+        </button>
+
       </div>
 
       <div className="overflow-x-auto border rounded shadow">
@@ -83,6 +212,10 @@ export default function Participantes() {
           <thead className="bg-gray-200">
 
             <tr>
+
+              <th className="p-3 text-center">
+                Seleccionar
+              </th>
 
               <th className="p-3 text-left">
                 Usuario
@@ -120,19 +253,38 @@ export default function Participantes() {
 
             {participantesFiltrados.map(
               (participante) => (
+
                 <tr
                   key={participante.id}
                   className="border-t"
                 >
 
-                  <td className="p-3">
-                    {participante.nombre_usuario ||
-                      "-"}
+                  <td className="p-3 text-center">
+
+                    {participante.rol !== "admin" && (
+
+                      <input
+                        type="checkbox"
+                        checked={seleccionados.includes(
+                          participante.id
+                        )}
+                        onChange={() =>
+                          toggleSeleccion(
+                            participante.id
+                          )
+                        }
+                      />
+
+                    )}
+
                   </td>
 
                   <td className="p-3">
-                    {participante.nombre_completo ||
-                      "-"}
+                    {participante.nombre_usuario || "-"}
+                  </td>
+
+                  <td className="p-3">
+                    {participante.nombre_completo || "-"}
                   </td>
 
                   <td className="p-3">
@@ -140,18 +292,15 @@ export default function Participantes() {
                   </td>
 
                   <td className="p-3">
-                    {participante.telefono ||
-                      "-"}
+                    {participante.telefono || "-"}
                   </td>
 
                   <td className="p-3">
-                    {participante.banco ||
-                      "-"}
+                    {participante.banco || "-"}
                   </td>
 
                   <td className="p-3">
-                    {participante.clabe ||
-                      "-"}
+                    {participante.clabe || "-"}
                   </td>
 
                   <td className="p-3">
@@ -170,6 +319,7 @@ export default function Participantes() {
                   </td>
 
                 </tr>
+
               )
             )}
 
