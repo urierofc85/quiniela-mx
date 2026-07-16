@@ -21,6 +21,8 @@ import Perfil from "./pages/Perfil";
 
 import Participantes from "./pages/Participantes";
 import Dashboard from "./pages/Dashboard";
+import Survivor from "./pages/Survivor";
+import AdminSurvivor from "./pages/AdminSurvivor";
 
 function App() {
   return (
@@ -86,6 +88,17 @@ function App() {
           path="/dashboard"
           element={<Dashboard />}
         />
+        
+        <Route
+          path="/survivor"
+          element={<Survivor />}
+        />
+
+        <Route
+        path="/admin-survivor"
+        element={<AdminSurvivor />}
+        />
+
 
       </Routes>
     </BrowserRouter>

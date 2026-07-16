@@ -163,25 +163,43 @@ const exportarExcel = () => {
   } = await supabase
     .from("quinielas")
     .select(
-      "usuario, partido_id, pronostico"
+      "usuario_id, usuario, partido_id, pronostico"
     )
     .eq(
       "jornada_id",
       jornadaActiva.id
     );
 
+
+const {
+  data: perfiles,
+} = await supabase
+  .from("profiles")
+  .select(`
+    id,
+    nombre,
+    nombre_usuario,
+    nombre_completo,
+    email
+  `);
+
+
   const usuarios = [
     ...new Set(
       quinielas?.map(
-        (q) => q.usuario
+        (q) => q.usuario_id
       ) || []
     ),
   ];
 
-  const columnas = [
-    "Partido",
-    ...usuarios,
-  ];
+  
+const columnas = [
+  "Partido",
+  ...usuarios.map((usuarioId) => {
+    const perfil = perfiles?.find((p) => p.id === usuarioId);
+    return perfil?.nombre_usuario || perfil?.nombre_completo || perfil?.nombre || usuarioId;
+  }),
+];
 
   const filas = partidos.map(
     (partido) => {
@@ -190,21 +208,23 @@ const exportarExcel = () => {
         `${partido.local} vs ${partido.visitante}`,
       ];
 
-      usuarios.forEach(
-        (usuario) => {
+   
+    usuarios.forEach(
+      (usuarioId) => {
 
-          const pronostico =
-            quinielas.find(
-              (q) =>
+        const pronostico =
+          quinielas.find(
+            (q) =>
+              Number(
+                q.partido_id
+              ) ===
                 Number(
-                  q.partido_id
-                ) ===
-                  Number(
-                    partido.id
-                  ) &&
-                q.usuario ===
-                  usuario
-            );
+                  partido.id
+                ) &&
+              q.usuario_id ===
+                usuarioId
+          );
+
 
           fila.push(
             pronostico
@@ -315,6 +335,15 @@ const exportarExcel = () => {
         >
           Ranking
         </Link>
+
+        
+        <Link
+          to="/admin-survivor"
+          className="bg-pink-600 text-white px-4 py-2 rounded"
+        >
+          🏆 Survivor
+        </Link>
+
 
       </div>
 
