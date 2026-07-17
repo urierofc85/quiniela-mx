@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
 import { Link } from "react-router-dom";
+import { obtenerHoraMexico } from "../services/horario"
 
 export default function Quiniela() {
   const [partidos, setPartidos] = useState([]);
@@ -59,7 +60,7 @@ export default function Quiniela() {
 
     if (data?.fecha_limite) {
       const fechaLimite = new Date(data.fecha_limite);
-      const ahora = new Date();
+      const ahora = await obtenerHoraMexico();
       setJornadaCerrada(ahora > fechaLimite);
     }
   };
@@ -72,7 +73,7 @@ export default function Quiniela() {
   };
 
 const guardarQuiniela = async () => {
-
+  const horaMexico = await obtenerHoraMexico();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -102,7 +103,7 @@ const guardarQuiniela = async () => {
     );
 
   const ahora =
-    new Date();
+    await obtenerHoraMexico();
 
   if (ahora > fechaLimite) {
     alert(
@@ -127,7 +128,7 @@ const guardarQuiniela = async () => {
         jornada_id:
           jornadaActiva.id,
         fecha_envio:
-          new Date().toISOString(),
+          horaMexico.toISOString(),
       })
     );
 

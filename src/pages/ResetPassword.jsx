@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../services/supabase";
+import { obtenerHoraMexico } from "../services/horario"
 
 export default function ResetPassword() {
   const [password, setPassword] = useState("");

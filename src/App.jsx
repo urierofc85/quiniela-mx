@@ -1,4 +1,3 @@
-
 import {
   BrowserRouter,
   Routes,
@@ -11,14 +10,11 @@ import Partidos from "./Partidos";
 
 import Quiniela from "./pages/Quiniela";
 import AdminDashboard from "./pages/AdminDashboard";
-
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
-
 import ResultadosAdmin from "./pages/ResultadosAdmin";
 import Posiciones from "./pages/Posiciones";
 import Perfil from "./pages/Perfil";
-
 import Participantes from "./pages/Participantes";
 import Dashboard from "./pages/Dashboard";
 import Survivor from "./pages/Survivor";
@@ -88,17 +84,16 @@ function App() {
           path="/dashboard"
           element={<Dashboard />}
         />
-        
+
         <Route
           path="/survivor"
           element={<Survivor />}
         />
 
         <Route
-        path="/admin-survivor"
-        element={<AdminSurvivor />}
+          path="/admin-survivor"
+          element={<AdminSurvivor />}
         />
-
 
       </Routes>
     </BrowserRouter>

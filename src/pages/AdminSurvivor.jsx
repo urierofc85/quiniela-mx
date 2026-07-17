@@ -3,6 +3,7 @@ import {
   useState,
   useRef,
 } from "react";
+import { obtenerHoraMexico } from "../services/horario"
 
 import { supabase } from "../services/supabase";
 import html2canvas from "html2canvas";

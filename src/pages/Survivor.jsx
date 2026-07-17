@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
 import { Link } from "react-router-dom";
+import { obtenerHoraMexico } from "../services/horario"
 
 export default function Survivor() {
   const [equipos, setEquipos] = useState([]);
@@ -52,10 +53,15 @@ export default function Survivor() {
         data.fecha_limite
       );
 
-      setJornadaCerrada(
-        new Date() > limite
-      );
-    }
+   
+    const horaMexico =
+      await obtenerHoraMexico();
+
+    setJornadaCerrada(
+      horaMexico > limite
+    );
+  }
+
 
     await cargarSeleccionActual(
       data.id
@@ -326,17 +332,34 @@ export default function Survivor() {
       setVidasPerdidas(vidas);
     };
 
-  const guardarSeleccion =
-    async () => {
+ const guardarSeleccion =
+  async () => {
 
-      if (
-        !equipoSeleccionado
-      ) {
-        alert(
-          "Selecciona un equipo"
-        );
-        return;
-      }
+    const horaMexico =
+      await obtenerHoraMexico();
+
+    const fechaLimite =
+      new Date(
+        jornadaActiva.fecha_limite
+      );
+
+    if (
+      horaMexico > fechaLimite
+    ) {
+      alert(
+        "La jornada ya fue cerrada"
+      );
+      return;
+    }
+
+    if (
+      !equipoSeleccionado
+    ) {
+      alert(
+        "Selecciona un equipo"
+      );
+      return;
+    }
 
       const {
         data: { user },

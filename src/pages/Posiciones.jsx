@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
+import { obtenerHoraMexico } from "../services/horario"
 
 export default function Posiciones() {
   const [ranking, setRanking] = useState([]);

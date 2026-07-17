@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
 import * as XLSX from "xlsx";
 import { Link } from "react-router-dom";
+import { obtenerHoraMexico } from "../services/horario"
 
 import {
   BarChart,

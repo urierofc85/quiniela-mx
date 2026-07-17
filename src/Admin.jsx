@@ -1,16 +1,27 @@
-
 import { useState, useEffect } from "react";
 import { supabase } from "./services/supabase";
 import { Link } from "react-router-dom";
+import { obtenerHoraMexico } from "./services/horario";
 
 export default function Admin() {
   const [nombre, setNombre] = useState("");
   const [fechaCierre, setFechaCierre] = useState("");
   const [jornadas, setJornadas] = useState([]);
+  const [horaMexico, setHoraMexico] = useState(null);
 
   useEffect(() => {
     cargarJornadas();
+    cargarHoraMexico();
   }, []);
+
+  const cargarHoraMexico = async () => {
+    try {
+      const hora = await obtenerHoraMexico();
+      setHoraMexico(hora);
+    } catch (error) {
+      console.error("Error obteniendo hora CDMX:", error);
+    }
+  };
 
   const cargarJornadas = async () => {
     const { data } = await supabase
@@ -22,6 +33,11 @@ export default function Admin() {
   };
 
   const crearJornada = async () => {
+    if (!nombre || !fechaCierre) {
+      alert("Completa todos los campos");
+      return;
+    }
+
     const { error } = await supabase
       .from("jornadas")
       .insert([
@@ -188,6 +204,7 @@ export default function Admin() {
           key={jornada.id}
           className="border rounded p-4 mb-3 shadow-sm"
         >
+
           <div className="font-bold text-lg">
             {jornada.nombre}
           </div>
@@ -202,17 +219,17 @@ export default function Admin() {
           </div>
 
           <div className="mt-2">
-            {jornada.fecha_limite &&
-            new Date(jornada.fecha_limite) <
-              new Date() ? (
-              <span className="text-red-600 font-bold">
-                🔒 Jornada cerrada
-              </span>
-            ) : (
-              <span className="text-green-600 font-bold">
-                🟢 Jornada abierta
-              </span>
-            )}
+            {horaMexico &&
+              (new Date(jornada.fecha_limite) <
+              horaMexico ? (
+                <span className="text-red-600 font-bold">
+                  🔒 Jornada cerrada
+                </span>
+              ) : (
+                <span className="text-green-600 font-bold">
+                  🟢 Jornada abierta
+                </span>
+              ))}
           </div>
 
           <div className="mt-3 flex gap-2">
@@ -242,6 +259,7 @@ export default function Admin() {
             </button>
 
           </div>
+
         </div>
       ))}
 

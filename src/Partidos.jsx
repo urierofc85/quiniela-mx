@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "./services/supabase";
+import { obtenerHoraMexico } from "./services/horario"
 
 export default function Partidos() {
   const [jornadas, setJornadas] = useState([]);

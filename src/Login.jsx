@@ -1,25 +1,15 @@
-
 import { useState } from "react";
 import { supabase } from "./services/supabase";
 import { Link, useNavigate } from "react-router-dom";
 
 export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
   const login = async () => {
-
-    if (
-      !email.trim() ||
-      !password.trim()
-    ) {
+    if (!email.trim() || !password.trim()) {
       alert(
         "Debes capturar correo y contraseña"
       );
@@ -41,16 +31,23 @@ export default function Login() {
       data: { user },
     } = await supabase.auth.getUser();
 
+    if (!user) {
+      alert(
+        "No fue posible obtener la información del usuario."
+      );
+      return;
+    }
+
     const {
       data: perfil,
+      error: perfilError,
     } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", user.id)
       .single();
 
-    if (!perfil) {
-
+    if (perfilError || !perfil) {
       await supabase.auth.signOut();
 
       alert(
@@ -61,20 +58,13 @@ export default function Login() {
     }
 
     if (perfil.rol === "admin") {
-
-      navigate(
-        "/admin/dashboard"
-      );
-
+      navigate("/admin/dashboard");
     } else {
-
       navigate("/quiniela");
-
     }
   };
 
   const registrar = async () => {
-
     const emailValido =
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -106,32 +96,40 @@ export default function Login() {
       return;
     }
 
-    const { data, error } =
-      await supabase.auth.signUp({
-        email,
-        password,
-      });
+    const {
+      data,
+      error,
+    } = await supabase.auth.signUp({
+      email,
+      password,
+    });
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    const { error: perfilError } =
-      await supabase
-        .from("profiles")
-        .insert([
-          {
-            id: data.user.id,
-            email: email,
-            rol: "usuario",
-          },
-        ]);
+    if (!data.user) {
+      alert(
+        "No fue posible crear el usuario."
+      );
+      return;
+    }
+
+    const {
+      error: perfilError,
+    } = await supabase
+      .from("profiles")
+      .insert([
+        {
+          id: data.user.id,
+          email: email,
+          rol: "usuario",
+        },
+      ]);
 
     if (perfilError) {
-      alert(
-        perfilError.message
-      );
+      alert(perfilError.message);
       return;
     }
 
@@ -141,9 +139,7 @@ export default function Login() {
   };
 
   return (
-
     <div className="max-w-md mx-auto p-8">
-
       <div className="flex flex-col gap-4">
 
         <input
@@ -151,9 +147,7 @@ export default function Login() {
           placeholder="Correo"
           value={email}
           onChange={(e) =>
-            setEmail(
-              e.target.value
-            )
+            setEmail(e.target.value)
           }
         />
 
@@ -163,9 +157,7 @@ export default function Login() {
           placeholder="Contraseña"
           value={password}
           onChange={(e) =>
-            setPassword(
-              e.target.value
-            )
+            setPassword(e.target.value)
           }
         />
 
@@ -186,16 +178,13 @@ export default function Login() {
       </div>
 
       <div className="mt-6 text-center">
-
         <Link
           to="/forgot-password"
           className="text-blue-700 underline"
         >
           ¿Olvidaste tu contraseña?
         </Link>
-
       </div>
-
     </div>
   );
 }
