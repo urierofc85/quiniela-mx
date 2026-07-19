@@ -69,24 +69,21 @@ export default function Survivor() {
   };
 
   const cargarEquipos = async () => {
-    const { data } = await supabase
-      .from("partidos")
-      .select("local, visitante");
 
-    const lista = [
-      ...new Set(
-        (data || []).flatMap(
-          (p) => [
-            p.local,
-            p.visitante,
-          ]
-        )
-      ),
-    ].sort();
+  const { data, error } = await supabase
+    .from("equipos")
+    .select("nombre")
+    .order("nombre", { ascending: true });
 
-    setEquipos(lista);
-  };
+  if (error) {
+    console.error("Error cargando equipos:", error);
+    return;
+  }
 
+  console.log("Equipos:", data);
+
+  setEquipos(data.map(e => e.nombre));
+};
   const cargarSeleccionActual =
     async (jornadaId) => {
 
@@ -525,32 +522,24 @@ export default function Survivor() {
           </h2>
 
           <select
-            value={
-              equipoSeleccionado
-            }
-            onChange={(e) =>
-              setEquipoSeleccionado(
-                e.target.value
-              )
-            }
-            className="border p-2 rounded w-full"
-          >
-            <option value="">
-              Selecciona un equipo
-            </option>
+    value={equipoSeleccionado}
+    onChange={(e) =>
+        setEquipoSeleccionado(e.target.value)
+    }
+>
+    <option value="">
+        Selecciona un equipo
+    </option>
 
-            {equipos.map(
-              (equipo) => (
-                <option
-                  key={equipo}
-                  value={equipo}
-                >
-                  {equipo}
-                </option>
-              )
-            )}
-          </select>
-
+    {equipos.map((equipo) => (
+        <option
+            key={equipo}
+            value={equipo}
+        >
+            {equipo}
+        </option>
+    ))}
+</select>
           <button
             onClick={
               guardarSeleccion

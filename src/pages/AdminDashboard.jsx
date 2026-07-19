@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
-import * as XLSX from "xlsx";
 import { Link } from "react-router-dom";
 import { obtenerHoraMexico } from "../services/horario"
 
@@ -20,8 +19,7 @@ export default function AdminDashboard() {
   const [data, setData] = useState([]);
 
   const [jornadas, setJornadas] = useState([]);
-  const [jornadaSeleccionada, setJornadaSeleccionada] =
-  useState("");
+  const [jornadaSeleccionada, setJornadaSeleccionada] = useState("");
 
   useEffect(() => {
     cargarDashboard();
@@ -47,9 +45,7 @@ export default function AdminDashboard() {
     setJornadas(jornadasData || []);
 
     if (jornadasData?.length > 0) {
-      setJornadaSeleccionada(
-        jornadasData[0].id
-      );
+      setJornadaSeleccionada(jornadasData[0].id);
     }
 
     const { count: participantesCount } =
@@ -60,266 +56,135 @@ export default function AdminDashboard() {
           head: true,
         });
 
-    setParticipantes(
-      participantesCount || 0
-    );
+    setParticipantes(participantesCount || 0);
 
     if (jornadaData) {
-      const {
-        data: quinielasData,
-      } = await supabase
+      const { data: quinielasData } = await supabase
         .from("quinielas")
         .select("usuario_id")
-        .eq(
-          "jornada_id",
-          jornadaData.id
-        );
+        .eq("jornada_id", jornadaData.id);
 
       const usuariosUnicos = [
-        ...new Set(
-          quinielasData?.map(
-            (q) => q.usuario_id
-          ) || []
-        ),
+        ...new Set(quinielasData?.map((q) => q.usuario_id) || []),
       ];
 
-      setQuinielas(
-        usuariosUnicos.length
-      );
+      setQuinielas(usuariosUnicos.length);
     }
 
-    const {
-      data: participacion,
-    } = await supabase
-      .from(
-        "participacion_jornadas"
-      )
+    const { data: participacion } = await supabase
+      .from("participacion_jornadas")
       .select("*");
 
-    setData(
-      participacion || []
-    );
+    setData(participacion || []);
   };
 
-const exportarExcel = () => {
-
-  const worksheet =
-    XLSX.utils.json_to_sheet(
-      data
-    );
-
-  const workbook =
-    XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(
-    workbook,
-    worksheet,
-    "Participacion"
-  );
-
-  XLSX.writeFile(
-    workbook,
-    "participacion_jornadas.xlsx"
-  );
-
-};
-
   const exportarPDF = async () => {
+    const { default: jsPDF } = await import("jspdf");
+    const { default: autoTable } = await import("jspdf-autotable");
 
-  const { default: jsPDF } =
-    await import("jspdf");
+    const { data: jornadaActiva } = await supabase
+      .from("jornadas")
+      .select("*")
+      .eq("id", jornadaSeleccionada)
+      .single();
 
-  const { default: autoTable } =
-    await import("jspdf-autotable");
+    if (!jornadaActiva) {
+      alert("Selecciona una jornada válida");
+      return;
+    }
 
-  const {
-    data: jornadaActiva,
-  } = await supabase
-    .from("jornadas")
-    .select("*")
-    .eq(
-      "id",
-      jornadaSeleccionada
-    )
-    .single();
+    const { data: partidos } = await supabase
+      .from("partidos")
+      .select("id, local, visitante")
+      .order("id");
 
-  if (!jornadaActiva) {
-    alert(
-      "Selecciona una jornada válida"
-    );
-    return;
-  }
+    const { data: quinielas } = await supabase
+      .from("quinielas")
+      .select("usuario_id, usuario, partido_id, pronostico")
+      .eq("jornada_id", jornadaActiva.id);
 
-  const {
-    data: partidos,
-  } = await supabase
-    .from("partidos")
-    .select(
-      "id, local, visitante"
-    )
-    .order("id");
+    const { data: perfiles } = await supabase
+      .from("profiles")
+      .select(`
+        id,
+        nombre,
+        nombre_usuario,
+        nombre_completo,
+        email
+      `);
 
-  const {
-    data: quinielas,
-  } = await supabase
-    .from("quinielas")
-    .select(
-      "usuario_id, usuario, partido_id, pronostico"
-    )
-    .eq(
-      "jornada_id",
-      jornadaActiva.id
-    );
+    const usuarios = [
+      ...new Set(quinielas?.map((q) => q.usuario_id) || []),
+    ];
 
+    const columnas = [
+      "Partido",
+      ...usuarios.map((usuarioId) => {
+        const perfil = perfiles?.find((p) => p.id === usuarioId);
+        return perfil?.nombre_usuario || perfil?.nombre_completo || perfil?.nombre || usuarioId;
+      }),
+    ];
 
-const {
-  data: perfiles,
-} = await supabase
-  .from("profiles")
-  .select(`
-    id,
-    nombre,
-    nombre_usuario,
-    nombre_completo,
-    email
-  `);
+    const filas = partidos.map((partido) => {
+      const fila = [`${partido.local} vs ${partido.visitante}`];
 
+      usuarios.forEach((usuarioId) => {
+        const pronostico = quinielas.find(
+          (q) =>
+            Number(q.partido_id) === Number(partido.id) &&
+            q.usuario_id === usuarioId
+        );
 
-  const usuarios = [
-    ...new Set(
-      quinielas?.map(
-        (q) => q.usuario_id
-      ) || []
-    ),
-  ];
-
-  
-const columnas = [
-  "Partido",
-  ...usuarios.map((usuarioId) => {
-    const perfil = perfiles?.find((p) => p.id === usuarioId);
-    return perfil?.nombre_usuario || perfil?.nombre_completo || perfil?.nombre || usuarioId;
-  }),
-];
-
-  const filas = partidos.map(
-    (partido) => {
-
-      const fila = [
-        `${partido.local} vs ${partido.visitante}`,
-      ];
-
-   
-    usuarios.forEach(
-      (usuarioId) => {
-
-        const pronostico =
-          quinielas.find(
-            (q) =>
-              Number(
-                q.partido_id
-              ) ===
-                Number(
-                  partido.id
-                ) &&
-              q.usuario_id ===
-                usuarioId
-          );
-
-
-          fila.push(
-            pronostico
-              ? pronostico.pronostico
-              : "-"
-          );
-
-        }
-      );
+        fila.push(pronostico ? pronostico.pronostico : "-");
+      });
 
       return fila;
-    }
-  );
+    });
 
-  const doc =
-    new jsPDF(
-      "landscape"
-    );
+    const doc = new jsPDF("landscape");
+    doc.setFontSize(16);
+    doc.text(`Quinielas - ${jornadaActiva.nombre}`, 14, 15);
 
-  doc.setFontSize(16);
+    autoTable(doc, {
+      head: [columnas],
+      body: filas,
+      startY: 25,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [22, 163, 74] },
+    });
 
-  doc.text(
-    `Quinielas - ${jornadaActiva.nombre}`,
-    14,
-    15
-  );
-
-  autoTable(doc, {
-    head: [columnas],
-    body: filas,
-    startY: 25,
-    styles: {
-      fontSize: 8,
-    },
-    headStyles: {
-      fillColor: [
-        22, 163, 74,
-      ],
-    },
-  });
-
-  doc.save(
-    `Quinielas_${jornadaActiva.nombre}.pdf`
-  );
-
-};
+    doc.save(`Quinielas_${jornadaActiva.nombre}.pdf`);
+  };
 
   return (
     <div className="p-6">
-
-      <h1 className="text-3xl font-bold mb-4">
-        Dashboard Administrador
-      </h1>
+      <h1 className="text-3xl font-bold mb-4">Dashboard Administrador</h1>
 
       <div className="flex flex-wrap gap-3 mb-6">
-
-
-<select
-  value={jornadaSeleccionada}
-  onChange={(e) =>
-    setJornadaSeleccionada(
-      e.target.value
-    )
-  }
-  className="border px-3 py-2 rounded"
->
-  {jornadas.map((j) => (
-    <option
-      key={j.id}
-      value={j.id}
-    >
-      {j.nombre}
-    </option>
-  ))}
-</select>
-
-<button
-  onClick={exportarPDF}
-  className="bg-red-600 text-white px-4 py-2 rounded"
->
-  📄 Exportar PDF
-</button>
-
-        <Link
-          to="/admin"
-          className="bg-blue-600 text-white px-4 py-2 rounded"
+        <select
+          value={jornadaSeleccionada}
+          onChange={(e) => setJornadaSeleccionada(e.target.value)}
+          className="border px-3 py-2 rounded"
         >
+          {jornadas.map((j) => (
+            <option key={j.id} value={j.id}>
+              {j.nombre}
+            </option>
+          ))}
+        </select>
+
+        <button
+          onClick={exportarPDF}
+          className="bg-red-600 text-white px-4 py-2 rounded"
+        >
+          📄 Exportar PDF
+        </button>
+
+        <Link to="/admin" className="bg-blue-600 text-white px-4 py-2 rounded">
           🚨 Crear Jornada
         </Link>
 
-        <Link
-          to="/partidos"
-          className="bg-green-600 text-white px-4 py-2 rounded"
-        >
+        <Link to="/partidos" className="bg-green-600 text-white px-4 py-2 rounded">
           Crear Partidos
         </Link>
 
@@ -337,72 +202,31 @@ const columnas = [
           Ranking
         </Link>
 
-        
         <Link
           to="/admin-survivor"
           className="bg-pink-600 text-white px-4 py-2 rounded"
         >
           🏆 Survivor
         </Link>
-
-
       </div>
 
       <div>
-
-        <p>
-          Jornada Activa:{" "}
-          {jornada
-            ? jornada.nombre
-            : "Sin jornada activa"}
-        </p>
-
-        <p>
-          Participantes:{" "}
-          {participantes}
-        </p>
-
-        <p>
-          Quinielas Recibidas:{" "}
-          {quinielas}
-        </p>
-
-        <button
-          onClick={
-            exportarExcel
-          }
-          className="bg-green-600 text-white px-4 py-2 rounded mt-4"
-        >
-          Exportar Excel
-        </button>
+        <p>Jornada Activa: {jornada ? jornada.nombre : "Sin jornada activa"}</p>
+        <p>Participantes: {participantes}</p>
+        <p>Quinielas Recibidas: {quinielas}</p>
 
         <h2 className="text-xl font-bold mt-8 mb-4">
           Participación por Jornada
         </h2>
 
-        <BarChart
-          width={700}
-          height={300}
-          data={data}
-        >
+        <BarChart width={700} height={300} data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-
-          <XAxis
-            dataKey="jornada_id"
-          />
-
+          <XAxis dataKey="jornada_id" />
           <YAxis />
-
           <Tooltip />
-
-          <Bar
-            dataKey="total"
-            fill="#16a34a"
-          />
+          <Bar dataKey="total" fill="#16a34a" />
         </BarChart>
-
       </div>
-
     </div>
   );
 }

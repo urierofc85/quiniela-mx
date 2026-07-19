@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
 import { Link } from "react-router-dom";
-import { obtenerHoraMexico } from "../services/horario"
+import { obtenerHoraMexico } from "../services/horario";
 
 export default function Quiniela() {
   const [partidos, setPartidos] = useState([]);
@@ -11,12 +11,22 @@ export default function Quiniela() {
   const [quinielaGuardada, setQuinielaGuardada] = useState([]);
 
   useEffect(() => {
-    cargarPartidos();
     cargarJornadaActiva();
   }, []);
 
-  const cargarPartidos = async () => {
-    const { data } = await supabase.from("partidos").select("*");
+  const cargarPartidos = async (jornadaId) => {
+    if (!jornadaId) return;
+
+    const { data, error } = await supabase
+      .from("partidos")
+      .select("*")
+      .eq("jornada_id", jornadaId); // 👈 solo partidos de la jornada activa
+
+    if (error) {
+      console.error("Error cargando partidos:", error);
+      return;
+    }
+
     setPartidos(data || []);
   };
 
@@ -31,13 +41,12 @@ export default function Quiniela() {
       .eq("jornada_id", jornadaId);
 
     if (error) {
-      console.log(error);
+      console.error("Error cargando quiniela:", error);
       return;
     }
 
     setQuinielaGuardada(data || []);
 
-    // sincronizar radios con lo guardado
     const nuevosPronosticos = {};
     data?.forEach((item) => {
       nuevosPronosticos[item.partido_id] = item.pronostico;
@@ -46,16 +55,22 @@ export default function Quiniela() {
   };
 
   const cargarJornadaActiva = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("jornadas")
       .select("*")
       .eq("activa", true)
       .single();
 
+    if (error) {
+      console.error("Error cargando jornada activa:", error);
+      return;
+    }
+
     setJornadaActiva(data);
 
     if (data?.id) {
       await cargarMiQuiniela(data.id);
+      await cargarPartidos(data.id); // 👈 aquí se cargan solo los partidos de la jornada activa
     }
 
     if (data?.fecha_limite) {
@@ -72,127 +87,71 @@ export default function Quiniela() {
     });
   };
 
-const guardarQuiniela = async () => {
-  const horaMexico = await obtenerHoraMexico();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const guardarQuiniela = async () => {
+    const horaMexico = await obtenerHoraMexico();
+    const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: jornadaActiva,
-    error: jornadaError,
-  } = await supabase
-    .from("jornadas")
-    .select("*")
-    .eq("activa", true)
-    .single();
+    const { data: jornadaActiva, error: jornadaError } = await supabase
+      .from("jornadas")
+      .select("*")
+      .eq("activa", true)
+      .single();
 
-  if (
-    jornadaError ||
-    !jornadaActiva
-  ) {
-    alert(
-      "No existe una jornada activa"
-    );
-    return;
-  }
-
-  const fechaLimite =
-    new Date(
-      jornadaActiva.fecha_limite
-    );
-
-  const ahora =
-    await obtenerHoraMexico();
-
-  if (ahora > fechaLimite) {
-    alert(
-      "La jornada ya fue cerrada"
-    );
-    return;
-  }
-
-  const registros =
-    Object.entries(
-      pronosticos
-    ).map(
-      ([partidoId, valor]) => ({
-        usuario:
-          user.email,
-        usuario_id:
-          user.id,
-        partido_id:
-          Number(partidoId),
-        pronostico:
-          valor,
-        jornada_id:
-          jornadaActiva.id,
-        fecha_envio:
-          horaMexico.toISOString(),
-      })
-    );
-
-  // Eliminar quiniela previa
-  const {
-    error: deleteError,
-  } = await supabase
-    .from("quinielas")
-    .delete()
-    .eq(
-      "usuario_id",
-      user.id
-    )
-    .eq(
-      "jornada_id",
-      jornadaActiva.id
-    );
-
-  if (deleteError) {
-    alert(
-      deleteError.message
-    );
-    return;
-  }
-
-  // Insertar nueva quiniela
-  const {
-    data,
-    error,
-  } = await supabase
-    .from("quinielas")
-    .insert(registros)
-    .select();
-
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  setQuinielaGuardada(
-    data || []
-  );
-
-  const nuevosPronosticos =
-    {};
-
-  data?.forEach(
-    (item) => {
-      nuevosPronosticos[
-        item.partido_id
-      ] =
-        item.pronostico;
+    if (jornadaError || !jornadaActiva) {
+      alert("No existe una jornada activa");
+      return;
     }
-  );
 
-  setPronosticos(
-    nuevosPronosticos
-  );
+    const fechaLimite = new Date(jornadaActiva.fecha_limite);
+    const ahora = await obtenerHoraMexico();
 
-  alert(
-    "Quiniela guardada correctamente"
-  );
-};
+    if (ahora > fechaLimite) {
+      alert("La jornada ya fue cerrada");
+      return;
+    }
 
+    const registros = Object.entries(pronosticos).map(([partidoId, valor]) => ({
+      usuario: user.email,
+      usuario_id: user.id,
+      partido_id: Number(partidoId),
+      pronostico: valor,
+      jornada_id: jornadaActiva.id,
+      fecha_envio: horaMexico.toISOString(),
+    }));
+
+    const { error: deleteError } = await supabase
+      .from("quinielas")
+      .delete()
+      .eq("usuario_id", user.id)
+      .eq("jornada_id", jornadaActiva.id);
+
+    if (deleteError) {
+      console.error("Error eliminando quiniela previa:", deleteError);
+      alert(deleteError.message);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("quinielas")
+      .insert(registros)
+      .select();
+
+    if (error) {
+      console.error("Error guardando quiniela:", error);
+      alert(error.message);
+      return;
+    }
+
+    setQuinielaGuardada(data || []);
+
+    const nuevosPronosticos = {};
+    data?.forEach((item) => {
+      nuevosPronosticos[item.partido_id] = item.pronostico;
+    });
+    setPronosticos(nuevosPronosticos);
+
+    alert("Quiniela guardada correctamente");
+  };
   return (
     <div className="max-w-4xl mx-auto p-4">
       <h1 className="text-3xl font-bold mb-6">Captura tu Quiniela</h1>
@@ -213,7 +172,6 @@ const guardarQuiniela = async () => {
       >
         Survivor
       </Link>
-
 
       {jornadaActiva && (
         <p className="mb-4 mt-4 text-red-600 font-semibold">
@@ -317,3 +275,4 @@ const guardarQuiniela = async () => {
     </div>
   );
 }
+
