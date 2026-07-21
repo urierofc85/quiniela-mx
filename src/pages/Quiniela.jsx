@@ -153,25 +153,26 @@ export default function Quiniela() {
     alert("Quiniela guardada correctamente");
   };
   return (
-    <div className="max-w-4xl mx-auto p-4">
+    
+<div className="max-w-4xl mx-auto p-4 bg-white min-h-screen">
+
       <h1 className="text-3xl font-bold mb-6">Captura tu Quiniela</h1>
 
       <div className="mb-6">
-        <Link to="/posiciones" className="bg-orange-600 text-white px-4 py-2 rounded">
-          Ranking General
-        </Link>
-      </div>
+  <Link to="/posiciones" className="bg-orange-600 text-white px-4 py-2 rounded">
+    Ranking General
+  </Link>
+</div>
 
-      <Link to="/perfil" className="bg-blue-600 text-white px-4 py-2 rounded">
-        Mi Perfil
-      </Link>
-      
-      <Link
-        to="/survivor"
-        className="bg-purple-600 text-white px-4 py-2 rounded ml-2"
-      >
-        Survivor
-      </Link>
+<div className="flex gap-4 mb-6">
+  <Link to="/perfil" className="bg-blue-600 text-white px-4 py-2 rounded">
+    Mi Perfil
+  </Link>
+
+  <Link to="/survivor" className="bg-purple-600 text-white px-4 py-2 rounded">
+    Survivor
+  </Link>
+</div>
 
       {jornadaActiva && (
         <p className="mb-4 mt-4 text-red-600 font-semibold">
@@ -224,7 +225,7 @@ export default function Quiniela() {
         <p className="text-red-600 font-bold mt-4">🔒 La jornada ya fue cerrada</p>
       )}
 
-      <button
+     <button
         disabled={jornadaCerrada}
         onClick={guardarQuiniela}
         className={`px-5 py-2 rounded mt-6 text-white ${

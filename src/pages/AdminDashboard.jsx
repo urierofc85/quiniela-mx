@@ -96,6 +96,7 @@ export default function AdminDashboard() {
     const { data: partidos } = await supabase
       .from("partidos")
       .select("id, local, visitante")
+      .eq("jornada_id", jornadaActiva.id)
       .order("id");
 
     const { data: quinielas } = await supabase
