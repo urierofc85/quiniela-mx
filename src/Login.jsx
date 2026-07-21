@@ -138,53 +138,140 @@ export default function Login() {
     );
   };
 
-  return (
-    <div className="max-w-md mx-auto p-8">
-      <div className="flex flex-col gap-4">
+ return (
+  <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#07145e] via-[#0b2b86] to-[#19e4d3]">
 
-        <input
-          className="border p-2"
-          placeholder="Correo"
-          value={email}
-          onChange={(e) =>
-            setEmail(e.target.value)
-          }
-        />
+    {/* Decoraciones */}
+    <div className="absolute top-0 left-0 w-80 h-80 border-4 border-cyan-300/20 rounded-full -translate-x-24 -translate-y-24" />
 
-        <input
-          className="border p-2"
-          type="password"
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e) =>
-            setPassword(e.target.value)
-          }
-        />
+    <div className="absolute bottom-0 right-0 w-96 h-96 bg-cyan-400/10 rounded-full blur-3xl" />
 
-        <button
-          className="bg-blue-600 text-white p-2 rounded"
-          onClick={login}
-        >
-          Entrar
-        </button>
-
-        <button
-          className="bg-green-600 text-white p-2 rounded"
-          onClick={registrar}
-        >
-          Registrarse
-        </button>
-
-      </div>
-
-      <div className="mt-6 text-center">
-        <Link
-          to="/forgot-password"
-          className="text-blue-700 underline"
-        >
-          ¿Olvidaste tu contraseña?
-        </Link>
-      </div>
+    <div className="absolute top-16 left-12 text-[100px] opacity-20">
+      ⚽
     </div>
-  );
-}
+
+    <div className="absolute bottom-16 right-12 text-[120px] opacity-20">
+      ⚽
+    </div>
+
+    <div className="flex flex-col items-center justify-center min-h-screen px-4">
+
+      {/* Logo + Título */}
+     
+<div className="text-center mb-10">
+
+  /ligamx.png
+
+  <h1 className="text-white font-black text-6xl md:text-8xl tracking-tight">
+    Rinchiquiniela
+  </h1>
+
+  <p className="text-cyan-100 text-xl mt-3">
+    Liga MX Prediction Game
+  </p>
+
+</div>
+
+      {/* CARD LOGIN */}
+      <div
+        className="
+          w-full
+          max-w-md
+          bg-white/10
+          backdrop-blur-lg
+          border
+          border-white/20
+          rounded-3xl
+          shadow-2xl
+          p-8
+        "
+      >
+        <h2 className="text-center text-white text-3xl font-bold mb-6">
+          Iniciar Sesión
+        </h2>
+
+        <div className="space-y-4">
+
+          <input
+            type="email"
+            placeholder="Correo electrónico"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="
+              w-full
+              p-4
+              rounded-xl
+              bg-white
+              focus:outline-none
+              focus:ring-4
+              focus:ring-cyan-400
+            "
+          />
+
+          <input
+            type="password"
+            placeholder="Contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="
+              w-full
+              p-4
+              rounded-xl
+              bg-white
+              focus:outline-none
+              focus:ring-4
+              focus:ring-cyan-400
+            "
+          />
+
+          <button
+            onClick={login}
+            className="
+              w-full
+              py-4
+              rounded-xl
+              bg-yellow-400
+              text-blue-950
+              font-bold
+              text-lg
+              hover:bg-yellow-300
+              transition
+            "
+          >
+            Entrar
+          </button>
+
+          <button
+            onClick={registrar}
+            className="
+              w-full
+              py-4
+              rounded-xl
+              bg-emerald-500
+              text-white
+              font-bold
+              text-lg
+              hover:bg-emerald-600
+              transition
+            "
+          >
+            Registrarse
+          </button>
+
+        </div>
+
+        <div className="text-center mt-6">
+          <Link
+            to="/forgot-password"
+            className="text-cyan-100 hover:text-white underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+);
+};
