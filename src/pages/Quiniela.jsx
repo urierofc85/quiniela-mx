@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
 import { Link } from "react-router-dom";
-import { obtenerHoraMexico } from "../services/horario"
+import { obtenerHoraMexico } from "../services/horario";
+import { verificarJornadas } from "../services/jornadas";
 
 export default function Quiniela() {
   const [partidos, setPartidos] = useState([]);
@@ -11,10 +12,20 @@ export default function Quiniela() {
   const [quinielaGuardada, setQuinielaGuardada] = useState([]);
 
   useEffect(() => {
-    cargarPartidos();
-    cargarJornadaActiva();
-  }, []);
 
+  const iniciar = async () => {
+
+    await verificarJornadas();
+
+    await cargarPartidos();
+
+    await cargarJornadaActiva();
+
+  };
+
+  iniciar();
+
+}, []);
   const cargarPartidos = async () => {
     const { data } = await supabase.from("partidos").select("*");
     setPartidos(data || []);
