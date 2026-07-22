@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
-import * as XLSX from "xlsx";
 import { Link } from "react-router-dom";
 import { obtenerHoraMexico } from "../services/horario";
-import { verificarJornadas } from "../services/jornadas";
 
 import {
   BarChart,
@@ -19,29 +17,23 @@ export default function AdminDashboard() {
   const [participantes, setParticipantes] = useState(0);
   const [quinielas, setQuinielas] = useState(0);
   const [data, setData] = useState([]);
+
   const [jornadas, setJornadas] = useState([]);
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState("");
-  const [horaMexico, setHoraMexico] = useState(null);
 
-  // 🕒 Reloj en vivo: actualiza cada segundo
+  // ⏰ Estado para el reloj
+  const [horaActual, setHoraActual] = useState("");
+
   useEffect(() => {
-    const actualizarHora = async () => {
-      const hora = await obtenerHoraMexico();
-      setHoraMexico(hora);
-    };
+    cargarDashboard();
 
-    actualizarHora(); // primera carga
-    const intervalo = setInterval(actualizarHora, 1000); // cada segundo
+    // Actualizar reloj cada segundo
+    const intervalo = setInterval(() => {
+      const hora = obtenerHoraMexico(); // tu función que devuelve la hora
+      setHoraActual(hora);
+    }, 1000);
 
     return () => clearInterval(intervalo);
-  }, []);
-
-  useEffect(() => {
-    const init = async () => {
-      await verificarJornadas();
-      await cargarDashboard();
-    };
-    init();
   }, []);
 
   const cargarDashboard = async () => {
@@ -49,14 +41,17 @@ export default function AdminDashboard() {
       .from("jornadas")
       .select("*")
       .eq("activa", true)
-      .maybeSingle();
+      .single();
 
     setJornada(jornadaData);
-
-    const { data: jornadasData } = await supabase
-      .from("jornadas")
-      .select("*")
-      .order("id", { ascending: false });
+    
+    const { data: jornadasData } =
+      await supabase
+        .from("jornadas")
+        .select("*")
+        .order("id", {
+          ascending: false,
+        });
 
     setJornadas(jornadasData || []);
 
@@ -64,9 +59,13 @@ export default function AdminDashboard() {
       setJornadaSeleccionada(jornadasData[0].id);
     }
 
-    const { count: participantesCount } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true });
+    const { count: participantesCount } =
+      await supabase
+        .from("profiles")
+        .select("*", {
+          count: "exact",
+          head: true,
+        });
 
     setParticipantes(participantesCount || 0);
 
@@ -89,12 +88,6 @@ export default function AdminDashboard() {
 
     setData(participacion || []);
   };
-  const exportarExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Participacion");
-    XLSX.writeFile(workbook, "participacion_jornadas.xlsx");
-  };
 
   const exportarPDF = async () => {
     const { default: jsPDF } = await import("jspdf");
@@ -114,6 +107,7 @@ export default function AdminDashboard() {
     const { data: partidos } = await supabase
       .from("partidos")
       .select("id, local, visitante")
+      .eq("jornada_id", jornadaActiva.id)
       .order("id");
 
     const { data: quinielas } = await supabase
@@ -121,39 +115,41 @@ export default function AdminDashboard() {
       .select("usuario_id, usuario, partido_id, pronostico")
       .eq("jornada_id", jornadaActiva.id);
 
-    const { data: perfiles } = await supabase.from("profiles").select(`
-      id,
-      nombre,
-      nombre_usuario,
-      nombre_completo,
-      email
-    `);
+    const { data: perfiles } = await supabase
+      .from("profiles")
+      .select(`
+        id,
+        nombre,
+        nombre_usuario,
+        nombre_completo,
+        email
+      `);
 
-    const usuarios = [...new Set(quinielas?.map((q) => q.usuario_id) || [])];
+    const usuarios = [
+      ...new Set(quinielas?.map((q) => q.usuario_id) || []),
+    ];
 
     const columnas = [
       "Partido",
       ...usuarios.map((usuarioId) => {
         const perfil = perfiles?.find((p) => p.id === usuarioId);
-        return (
-          perfil?.nombre_usuario ||
-          perfil?.nombre_completo ||
-          perfil?.nombre ||
-          usuarioId
-        );
+        return perfil?.nombre_usuario || perfil?.nombre_completo || perfil?.nombre || usuarioId;
       }),
     ];
 
     const filas = partidos.map((partido) => {
       const fila = [`${partido.local} vs ${partido.visitante}`];
+
       usuarios.forEach((usuarioId) => {
         const pronostico = quinielas.find(
           (q) =>
             Number(q.partido_id) === Number(partido.id) &&
             q.usuario_id === usuarioId
         );
+
         fila.push(pronostico ? pronostico.pronostico : "-");
       });
+
       return fila;
     });
 
@@ -176,23 +172,78 @@ export default function AdminDashboard() {
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-4">Dashboard Administrador</h1>
 
-      {/* 🕒 Zona de reloj */}
-      <div className="bg-gray-100 p-4 rounded mb-6 shadow">
-        <h2 className="text-xl font-semibold mb-2">Hora actual en México</h2>
-        <p className="text-3xl font-mono text-green-700">
-          {horaMexico
-            ? new Date(horaMexico).toLocaleTimeString("es-MX", {
-                timeZone: "America/Mexico_City",
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              })
-            : "Cargando..."}
-        </p>
+      {/* ⏰ Sección del reloj */}
+      <div className="mb-6 text-lg font-semibold">
+        Hora actual (CDMX): {horaActual}
       </div>
 
-      {/* resto del dashboard: selects, botones, gráficas */}
-      {/* ... */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <select
+          value={jornadaSeleccionada}
+          onChange={(e) => setJornadaSeleccionada(e.target.value)}
+          className="border px-3 py-2 rounded"
+        >
+          {jornadas.map((j) => (
+            <option key={j.id} value={j.id}>
+              {j.nombre}
+            </option>
+          ))}
+        </select>
+
+        <button
+          onClick={exportarPDF}
+          className="bg-red-600 text-white px-4 py-2 rounded"
+        >
+          📄 Exportar PDF
+        </button>
+
+        <Link to="/admin" className="bg-blue-600 text-white px-4 py-2 rounded">
+          🚨 Crear Jornada
+        </Link>
+
+        <Link to="/partidos" className="bg-green-600 text-white px-4 py-2 rounded">
+          Crear Partidos
+        </Link>
+
+        <Link
+          to="/admin/resultados"
+          className="bg-orange-600 text-white px-4 py-2 rounded"
+        >
+          Capturar Resultados
+        </Link>
+
+        <Link
+          to="/posiciones"
+          className="bg-purple-600 text-white px-4 py-2 rounded"
+        >
+          Ranking
+        </Link>
+
+        <Link
+          to="/admin-survivor"
+          className="bg-pink-600 text-white px-4 py-2 rounded"
+        >
+          🏆 Survivor
+        </Link>
+      </div>
+
+      <div>
+        <p>Jornada Activa: {jornada ? jornada.nombre : "Sin jornada activa"}</p>
+        <p>Participantes: {participantes}</p>
+        <p>Quinielas Recibidas: {quinielas}</p>
+
+        <h2 className="text-xl font-bold mt-8 mb-4">
+          Participación por Jornada
+        </h2>
+
+        <BarChart width={700} height={300} data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="jornada_id" />
+          <YAxis />
+          <Tooltip />
+          <Bar dataKey="total" fill="#16a34a" />
+        </BarChart>
+      </div>
     </div>
   );
 }
