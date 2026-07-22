@@ -23,9 +23,14 @@ export default function AdminDashboard() {
   const [jornadaSeleccionada, setJornadaSeleccionada] =
   useState("");
 
-  useEffect(() => {
-    cargarDashboard();
-  }, []);
+ useEffect(() => {
+  const init = async () => {
+    await verificarJornadas(); // dispara el RPC
+    await cargarDashboard();   // refresca datos
+  };
+  init();
+}, []);
+
 
   const cargarDashboard = async () => {
     const { data: jornadaData } = await supabase
