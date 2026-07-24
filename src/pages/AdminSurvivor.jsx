@@ -3,7 +3,6 @@ import {
   useState,
   useRef,
 } from "react";
-import { obtenerHoraMexico } from "../services/horario"
 
 import { supabase } from "../services/supabase";
 import html2canvas from "html2canvas";
@@ -327,8 +326,7 @@ export default function AdminSurvivor() {
           "a"
         );
 
-      link.download =
-        "ranking-survivor.jpg";
+      link.download ="ranking-survivor.jpg";
 
       link.href =
         canvas.toDataURL(
@@ -374,7 +372,7 @@ export default function AdminSurvivor() {
     <div className="p-6">
 
       <h1 className="text-3xl font-bold mb-6">
-        🏆 Ranking Survivor
+        🏆 General Survivor
       </h1>
 
       <div className="flex gap-3 mb-6 flex-wrap">
@@ -385,7 +383,7 @@ export default function AdminSurvivor() {
           }
           className="bg-green-600 text-white px-4 py-2 rounded"
         >
-          🖼️ Exportar Ranking JPG
+          🖼️ Ranking JPG
         </button>
 
         <select
