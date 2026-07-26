@@ -1,0 +1,12 @@
+{
+  "appId": "app.vercel.rinchiquiniela",
+  "appName": "RinchieQuinielas",
+    "server": {
+    "url": "https://rinchiquiniela.vercel.app/"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false
+    }
+  }
+}
