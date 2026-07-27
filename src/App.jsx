@@ -19,6 +19,7 @@ import Participantes from "./pages/Participantes";
 import Dashboard from "./pages/Dashboard";
 import Survivor from "./pages/Survivor";
 import AdminSurvivor from "./pages/AdminSurvivor";
+import RankingSurvivor from "./pages/RankingSurvivor"; // 👈 1. Importar el componente
 
 function App() {
   return (
@@ -93,6 +94,12 @@ function App() {
         <Route
           path="/admin-survivor"
           element={<AdminSurvivor />}
+        />
+
+        {/* 👇 2. Agregar la ruta para RankingSurvivor */}
+        <Route
+          path="/ranking-survivor"
+          element={<RankingSurvivor />}
         />
 
       </Routes>
