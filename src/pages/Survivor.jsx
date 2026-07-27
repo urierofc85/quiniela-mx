@@ -380,7 +380,7 @@ export default function Survivor() {
                 • Cada jornada el equipo seleccionado puede tener tres resultados: <strong>Ganar, Empatar o Perder</strong>.
               </p>
               <p>
-                • Si Gana Obtienes 3 Puntos, si Emapta 1 Punto y si Pierde 0 puntos <strong>Cuando Pierde tu equipo, tu Pierdes 1 Vida</strong>.
+                • Si Gana Obtienes 3 Puntos, si Empata 1 Punto y si Pierde 0 puntos <strong>Cuando Pierde tu equipo, tu Pierdes 1 Vida</strong>.
               </p>
               <p>
                 • Solamente Tenemos 3 VIDAS en la temporada <strong>Gana el que Seleccione Mejor</strong>.
