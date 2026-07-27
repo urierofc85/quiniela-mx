@@ -1,10 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>quiniela-mx</title>
+    <title>Quiniela & Survivor MX</title>
+
+    <!-- Configuración PWA (Instalación en Celulares) -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2563eb" />
+
+    <!-- ONESIGNAL SDK (Notificaciones Push Gratuitas) -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "4ae576c4-e5f8-4c66-9892-878cb05d144b",
+        });
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
