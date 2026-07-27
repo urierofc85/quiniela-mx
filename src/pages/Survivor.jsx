@@ -12,6 +12,9 @@ export default function Survivor() {
   const [usoEquipos, setUsoEquipos] = useState([]);
   const [puntosTotales, setPuntosTotales] = useState(0);
   const [vidasPerdidas, setVidasPerdidas] = useState(0);
+  
+  // Estado para controlar el Popup/Modal de Reglas
+  const [mostrarReglas, setMostrarReglas] = useState(false);
 
   useEffect(() => {
     cargarDatos();
@@ -260,7 +263,7 @@ export default function Survivor() {
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Survivor Liga MX</h1>
 
-      {/* Enlaces de Navegación */}
+      {/* Enlaces de Navegación y Botón de Reglas */}
       <div className="flex flex-wrap gap-3 mb-6">
         <Link
           to="/quiniela"
@@ -275,6 +278,14 @@ export default function Survivor() {
         >
           🏆 Ranking Survivor
         </Link>
+
+        {/* Botón para abrir las Reglas */}
+        <button
+          onClick={() => setMostrarReglas(true)}
+          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded font-medium flex items-center gap-1"
+        >
+          📜 Reglas del Juego
+        </button>
       </div>
 
       <div className="bg-gray-100 rounded p-4 my-6">
@@ -352,6 +363,39 @@ export default function Survivor() {
           ))}
         </tbody>
       </table>
+
+      {/* POPUP / MODAL DE REGLAS */}
+      {mostrarReglas && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl relative animate-fade-in">
+            <h2 className="text-2xl font-bold mb-4 text-center text-gray-800">
+              Bienvenidos al Survivor Liga MX
+            </h2>
+            
+            <div className="space-y-3 text-gray-700 text-sm md:text-base leading-relaxed mb-6">
+              <p>
+                • Cada participante puede elegir <strong>3 veces a un mismo equipo</strong> durante todo el torneo, un equipo a elegir por Jornada.
+              </p>
+              <p>
+                • Cada jornada el equipo seleccionado puede tener tres resultados: <strong>Ganar, Empatar o Perder</strong>.
+              </p>
+              <p>
+                • Si Gana Obtienes 3 Puntos, si Emapta 1 Punto y si Pierde 0 puntos <strong>Cuando Pierde tu equipo, tu Pierdes 1 Vida</strong>.
+              </p>
+              <p>
+                • Solamente Tenemos 3 VIDAS en la temporada <strong>Gana el que Seleccione Mejor</strong>.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setMostrarReglas(false)}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded transition-colors"
+            >
+              ¡Entendido!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
