@@ -8,47 +8,79 @@ export default function ResetPassword() {
   const [errorSesion, setErrorSesion] = useState("");
 
   useEffect(() => {
-    // 1. Escuchar el evento de autenticación cuando Supabase procesa el enlace del correo
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        // El evento 'PASSWORD_RECOVERY' se dispara cuando entra por el link de restablecimiento
-        if (event === "PASSWORD_RECOVERY" || session) {
-          setListoParaCambiar(true);
-        }
-      }
-    );
+    console.log("==================================");
+    console.log("RECOVERY DEBUG");
+    console.log("URL:", window.location.href);
+    console.log("HASH:", window.location.hash);
+    console.log("SEARCH:", window.location.search);
+    console.log("==================================");
 
-    // 2. Verificar si ya existe una sesión temporal cargada
-    const comprobarSesion = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session) {
-        setListoParaCambiar(true);
-      } else {
-        // Dar un pequeño margen para que el SDK procese los parámetros de la URL
+    const verificarSesion = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+
+        console.log("GET SESSION:");
+        console.log(data);
+        console.log(error);
+
+        if (data?.session) {
+          console.log("Sesión encontrada");
+          setListoParaCambiar(true);
+          return;
+        }
+
+        // Esperar unos segundos para que Supabase procese el enlace
         setTimeout(async () => {
-          const { data: retryData } = await supabase.auth.getSession();
+          const { data: retryData, error: retryError } =
+            await supabase.auth.getSession();
+
+          console.log("RETRY SESSION:");
+          console.log(retryData);
+          console.log(retryError);
+
           if (retryData?.session) {
+            console.log("Sesión encontrada en reintento");
             setListoParaCambiar(true);
           } else {
             setErrorSesion(
-              "El enlace de recuperación es inválido o ha expirado. Por favor solicita uno nuevo."
+              "No fue posible validar el enlace de recuperación."
             );
           }
-        }, 1500);
+        }, 3000);
+      } catch (err) {
+        console.error(err);
+        setErrorSesion("Ocurrió un error al validar el enlace.");
       }
     };
 
-    comprobarSesion();
+    verificarSesion();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("AUTH EVENT:", event);
+      console.log("AUTH SESSION:", session);
+
+      if (event === "PASSWORD_RECOVERY") {
+        console.log("PASSWORD_RECOVERY detectado");
+        setListoParaCambiar(true);
+      }
+
+      if (session) {
+        console.log("Sesión detectada");
+        setListoParaCambiar(true);
+      }
+    });
 
     return () => {
-      authListener?.subscription?.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
   const actualizarPassword = async (e) => {
-    e?.preventDefault();
+    e.preventDefault();
 
-    if (!password || password.length < 6) {
+    if (password.length < 6) {
       alert("La contraseña debe tener al menos 6 caracteres.");
       return;
     }
@@ -56,59 +88,78 @@ export default function ResetPassword() {
     setCargando(true);
 
     const { error } = await supabase.auth.updateUser({
-      password: password,
+      password,
     });
 
     setCargando(false);
 
     if (error) {
-      alert("Error al actualizar: " + error.message);
+      console.error(error);
+      alert("Error al actualizar contraseña: " + error.message);
       return;
     }
 
-    alert("¡Contraseña actualizada con éxito! Ahora puedes iniciar sesión.");
-    
-    // Redireccionar al login si usas react-router-dom o window.location
+    alert(
+      "Contraseña actualizada correctamente. Ahora puedes iniciar sesión."
+    );
+
     window.location.href = "/login";
   };
 
   if (errorSesion && !listoParaCambiar) {
     return (
-      <div style={{ padding: "24px", maxWidth: "400px", margin: "0 auto", textAlign: "center" }}>
-        <h2 style={{ color: "#ef4444" }}>Enlace no válido</h2>
-        <p style={{ color: "#4b5563" }}>{errorSesion}</p>
-        <a href="/forgot-password" style={{ color: "#2563eb", textDecoration: "underline" }}>
-          Volver a solicitar correo
+      <div
+        style={{
+          padding: "24px",
+          maxWidth: "450px",
+          margin: "0 auto",
+          textAlign: "center",
+        }}
+      >
+        <h2 style={{ color: "#dc2626" }}>Enlace inválido</h2>
+
+        <p>{errorSesion}</p>
+
+        /forgot-password          style={{
+            color: "#2563eb",
+            textDecoration: "underline",
+          }}
+        >
+          Solicitar nuevo correo
         </a>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: "24px", maxWidth: "400px", margin: "0 auto" }}>
+    <div
+      style={{
+        padding: "24px",
+        maxWidth: "450px",
+        margin: "0 auto",
+      }}
+    >
       <h1>Nueva Contraseña</h1>
 
       {!listoParaCambiar ? (
-        <p style={{ color: "#6b7280" }}>Verificando enlace de recuperación...</p>
+        <p>Verificando enlace de recuperación...</p>
       ) : (
         <form onSubmit={actualizarPassword}>
-          <div style={{ marginBottom: "16px" }}>
-            <input
-              type="password"
-              placeholder="Escribe tu nueva contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={6}
-              required
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "1px solid #d1d5db",
-                boxSizing: "border-box"
-              }}
-            />
-          </div>
+          <input
+            type="password"
+            placeholder="Nueva contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            minLength={6}
+            required
+            style={{
+              width: "100%",
+              padding: "10px",
+              marginBottom: "12px",
+              border: "1px solid #d1d5db",
+              borderRadius: "6px",
+            }}
+          />
 
           <button
             type="submit"
@@ -116,12 +167,11 @@ export default function ResetPassword() {
             style={{
               width: "100%",
               padding: "10px",
-              backgroundColor: cargando ? "#9ca3af" : "#2563eb",
-              color: "#ffffff",
+              backgroundColor: "#2563eb",
+              color: "#fff",
               border: "none",
               borderRadius: "6px",
-              cursor: cargando ? "not-allowed" : "pointer",
-              fontWeight: "bold"
+              cursor: "pointer",
             }}
           >
             {cargando ? "Guardando..." : "Guardar Contraseña"}
