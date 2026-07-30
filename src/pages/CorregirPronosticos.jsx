@@ -9,6 +9,7 @@ export default function CorregirPronosticos() {
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState("");
 
   const [pronosticos, setPronosticos] = useState([]);
+  const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     cargarUsuarios();
@@ -18,7 +19,7 @@ export default function CorregirPronosticos() {
   const cargarUsuarios = async () => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id,nombre_usuario,nombre,nombre_completo")
+      .select("*")
       .order("nombre_usuario");
 
     if (error) {
@@ -46,44 +47,44 @@ export default function CorregirPronosticos() {
   const cargarPronosticos = async (usuarioId, jornadaId) => {
     if (!usuarioId || !jornadaId) return;
 
-    const { data: partidos, error } = await supabase
-      .from("partidos")
-      .select("*")
+    const { data, error } = await supabase
+      .from("quinielas")
+      .select(`
+        id,
+        pronostico,
+        partido_id,
+        partidos (
+          id,
+          local,
+          visitante
+        )
+      `)
+      .eq("usuario_id", usuarioId)
       .eq("jornada_id", jornadaId)
-      .order("id");
+      .order("partido_id");
 
     if (error) {
       console.error(error);
+      alert(error.message);
       return;
     }
 
-    const { data: quinielas } = await supabase
-      .from("quinielas")
-      .select("*")
-      .eq("usuario_id", usuarioId);
+    const formateado = (data || []).map((item) => ({
+      id: item.id,
+      partido_id: item.partido_id,
+      local: item.partidos?.local || "",
+      visitante: item.partidos?.visitante || "",
+      pronostico: item.pronostico || "",
+    }));
 
-    const resultado = partidos.map((partido) => {
-      const pronosticoUsuario = quinielas?.find(
-        (q) => q.partido_id === partido.id
-      );
-
-      return {
-        partido_id: partido.id,
-        local: partido.local,
-        visitante: partido.visitante,
-        pronostico_id: pronosticoUsuario?.id || null,
-        pronostico: pronosticoUsuario?.pronostico || "",
-      };
-    });
-
-    setPronosticos(resultado);
+    setPronosticos(formateado);
   };
 
-  const actualizarPronostico = (partidoId, valor) => {
+  const actualizarPronostico = (id, nuevoValor) => {
     setPronosticos((prev) =>
       prev.map((item) =>
-        item.partido_id === partidoId
-          ? { ...item, pronostico: valor }
+        item.id === id
+          ? { ...item, pronostico: nuevoValor }
           : item
       )
     );
@@ -91,35 +92,25 @@ export default function CorregirPronosticos() {
 
   const guardarCambios = async () => {
     try {
+      setGuardando(true);
+
       for (const item of pronosticos) {
-        if (!item.pronostico) continue;
+        const { error } = await supabase
+          .from("quinielas")
+          .update({
+            pronostico: item.pronostico,
+          })
+          .eq("id", item.id);
 
-        if (item.pronostico_id) {
-          const { error } = await supabase
-            .from("quinielas")
-            .update({
-              pronostico: item.pronostico,
-            })
-            .eq("id", item.pronostico_id);
-
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from("quinielas")
-            .insert({
-              usuario_id: usuarioSeleccionado,
-              partido_id: item.partido_id,
-              pronostico: item.pronostico,
-            });
-
-          if (error) throw error;
-        }
+        if (error) throw error;
       }
 
-      alert("Pronósticos actualizados correctamente");
+      alert("Pronósticos actualizados correctamente.");
     } catch (error) {
       console.error(error);
       alert(error.message);
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -144,13 +135,18 @@ export default function CorregirPronosticos() {
             }
           }}
         >
-          <option value="">Selecciona usuario</option>
+          <option value="">
+            Selecciona un usuario
+          </option>
 
-          {usuarios.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.nombre_usuario ||
-                u.nombre ||
-                u.nombre_completo}
+          {usuarios.map((usuario) => (
+            <option
+              key={usuario.id}
+              value={usuario.id}
+            >
+              {usuario.nombre_usuario ||
+                usuario.nombre ||
+                usuario.nombre_completo}
             </option>
           ))}
         </select>
@@ -163,15 +159,23 @@ export default function CorregirPronosticos() {
             setJornadaSeleccionada(jornada);
 
             if (usuarioSeleccionado) {
-              cargarPronosticos(usuarioSeleccionado, jornada);
+              cargarPronosticos(
+                usuarioSeleccionado,
+                jornada
+              );
             }
           }}
         >
-          <option value="">Selecciona jornada</option>
+          <option value="">
+            Selecciona una jornada
+          </option>
 
-          {jornadas.map((j) => (
-            <option key={j.id} value={j.id}>
-              {j.nombre}
+          {jornadas.map((jornada) => (
+            <option
+              key={jornada.id}
+              value={jornada.id}
+            >
+              {jornada.nombre}
             </option>
           ))}
         </select>
@@ -184,15 +188,23 @@ export default function CorregirPronosticos() {
 
             <thead>
               <tr className="bg-gray-100">
-                <th className="border p-2">Local</th>
-                <th className="border p-2">Visitante</th>
-                <th className="border p-2">Pronóstico</th>
+                <th className="border p-2">
+                  Local
+                </th>
+
+                <th className="border p-2">
+                  Visitante
+                </th>
+
+                <th className="border p-2">
+                  Pronóstico
+                </th>
               </tr>
             </thead>
 
             <tbody>
               {pronosticos.map((partido) => (
-                <tr key={partido.partido_id}>
+                <tr key={partido.id}>
                   <td className="border p-2">
                     {partido.local}
                   </td>
@@ -201,31 +213,27 @@ export default function CorregirPronosticos() {
                     {partido.visitante}
                   </td>
 
-                  <td className="border p-2">
+                  <td className="border p-2 text-center">
                     <select
-                      className="border rounded p-1"
+                      className="border rounded p-2"
                       value={partido.pronostico}
                       onChange={(e) =>
                         actualizarPronostico(
-                          partido.partido_id,
+                          partido.id,
                           e.target.value
                         )
                       }
                     >
-                      <option value="">
-                        Seleccionar
-                      </option>
-
                       <option value="L">
-                        Gana Local
+                        Gana Local (L)
                       </option>
 
                       <option value="E">
-                        Empate
+                        Empate (E)
                       </option>
 
                       <option value="V">
-                        Gana Visitante
+                        Gana Visitante (V)
                       </option>
                     </select>
                   </td>
@@ -237,12 +245,23 @@ export default function CorregirPronosticos() {
 
           <button
             onClick={guardarCambios}
+            disabled={guardando}
             className="mt-6 bg-green-600 text-white px-6 py-2 rounded"
           >
-            Guardar Cambios
+            {guardando
+              ? "Guardando..."
+              : "Guardar Cambios"}
           </button>
         </>
       )}
+
+      {usuarioSeleccionado &&
+        jornadaSeleccionada &&
+        pronosticos.length === 0 && (
+          <div className="bg-yellow-100 border border-yellow-300 rounded p-4 mt-4">
+            No existen pronósticos registrados para ese usuario en esa jornada.
+          </div>
+        )}
     </div>
   );
 }
