@@ -1,46 +1,55 @@
 import { useState } from "react";
 import { supabase } from "../services/supabase";
-import { obtenerHoraMexico } from "../services/horario"
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
+  const [cargando, setCargando] = useState(false);
 
-  const recuperarPassword = async () => {
-    const { error } =
-      await supabase.auth.resetPasswordForEmail(
-        email,
-        {
-          redirectTo:
-            "https://supreme-space-halibut-vppggqx64x54fpppj-5173.app.github.dev/reset-password",
-        }
-      );
-
-    if (error) {
-      alert(error.message);
+  const recuperarPassword = async (e) => {
+    e.preventDefault();
+    if (!email) {
+      alert("Por favor ingresa tu correo.");
       return;
     }
 
-    alert(
-      "Revisa tu correo para restablecer tu contraseña"
-    );
+    setCargando(true);
+
+    // Usa window.location.origin para detectar automáticamente el dominio actual
+    const redirectUrl = `${window.location.origin}/reset-password`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    });
+
+    setCargando(false);
+
+    if (error) {
+      alert("Error: " + error.message);
+      return;
+    }
+
+    alert("Revisa tu correo para restablecer tu contraseña.");
+    setEmail("");
   };
 
   return (
-    <div>
+    <div style={{ padding: "20px", maxWidth: "400px", margin: "0 auto" }}>
       <h1>Recuperar Contraseña</h1>
 
-      <input
-        type="email"
-        placeholder="Correo"
-        value={email}
-        onChange={(e) =>
-          setEmail(e.target.value)
-        }
-      />
+      <form onSubmit={recuperarPassword}>
+        <input
+          type="email"
+          placeholder="Correo electrónico"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          style={{ width: "100%", padding: "8px", marginBottom: "10px" }}
+        />
 
-      <button onClick={recuperarPassword}>
-        Enviar enlace
-      </button>
+        <button type="submit" disabled={cargando} style={{ padding: "10px 15px" }}>
+          {cargando ? "Enviando..." : "Enviar enlace"}
+        </button>
+      </form>
     </div>
   );
 }
