@@ -107,29 +107,23 @@ export default function ResetPassword() {
   };
 
   if (errorSesion && !listoParaCambiar) {
-    return (
-      <div
-        style={{
-          padding: "24px",
-          maxWidth: "450px",
-          margin: "0 auto",
-          textAlign: "center",
-        }}
-      >
-        <h2 style={{ color: "#dc2626" }}>Enlace inválido</h2>
+  return (
+    <div
+      style={{
+        padding: "24px",
+        maxWidth: "450px",
+        margin: "0 auto",
+        textAlign: "center",
+      }}
+    >
+      <h2 style={{ color: "#dc2626" }}>Enlace inválido</h2>
 
-        <p>{errorSesion}</p>
+      <p>{errorSesion}</p>
 
-        /forgot-password          style={{
-            color: "#2563eb",
-            textDecoration: "underline",
-          }}
-        >
-          Solicitar nuevo correo
-        </a>
-      </div>
-    );
-  }
+      /forgot-password
+    </div>
+  );
+}
 
   return (
     <div
