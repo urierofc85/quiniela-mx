@@ -45,39 +45,55 @@ export default function CorregirPronosticos() {
   };
 
   const cargarPronosticos = async (usuarioId, jornadaId) => {
-    if (!usuarioId || !jornadaId) return;
+    try {
+      if (!usuarioId || !jornadaId) return;
 
-    const { data, error } = await supabase
-      .from("quinielas")
-      .select(`
-        id,
-        pronostico,
-        partido_id,
-        partidos (
-          id,
-          local,
-          visitante
-        )
-      `)
-      .eq("usuario_id", usuarioId)
-      .eq("jornada_id", jornadaId)
-      .order("partido_id");
+      const { data: partidos, error: errorPartidos } = await supabase
+        .from("partidos")
+        .select("*")
+        .eq("jornada_id", jornadaId)
+        .order("id");
 
-    if (error) {
+      if (errorPartidos) {
+        throw errorPartidos;
+      }
+
+      const { data: quinielas, error: errorQuinielas } = await supabase
+        .from("quinielas")
+        .select("*")
+        .eq("usuario_id", usuarioId)
+        .eq("jornada_id", jornadaId);
+
+      if (errorQuinielas) {
+        throw errorQuinielas;
+      }
+
+      console.log("USUARIO:", usuarioId);
+      console.log("JORNADA:", jornadaId);
+      console.log("PARTIDOS:", partidos);
+      console.log("QUINIELAS:", quinielas);
+
+      const resultado = partidos.map((partido) => {
+        const pronosticoExistente = quinielas.find(
+          (q) => Number(q.partido_id) === Number(partido.id)
+        );
+
+        return {
+          id: pronosticoExistente?.id || null,
+          partido_id: partido.id,
+          local: partido.local,
+          visitante: partido.visitante,
+          pronostico: pronosticoExistente?.pronostico || "",
+        };
+      });
+
+      console.log("RESULTADO FINAL:", resultado);
+
+      setPronosticos(resultado);
+    } catch (error) {
       console.error(error);
       alert(error.message);
-      return;
     }
-
-    const formateado = (data || []).map((item) => ({
-      id: item.id,
-      partido_id: item.partido_id,
-      local: item.partidos?.local || "",
-      visitante: item.partidos?.visitante || "",
-      pronostico: item.pronostico || "",
-    }));
-
-    setPronosticos(formateado);
   };
 
   const actualizarPronostico = (id, nuevoValor) => {
@@ -95,6 +111,8 @@ export default function CorregirPronosticos() {
       setGuardando(true);
 
       for (const item of pronosticos) {
+        if (!item.id) continue;
+
         const { error } = await supabase
           .from("quinielas")
           .update({
@@ -102,10 +120,12 @@ export default function CorregirPronosticos() {
           })
           .eq("id", item.id);
 
-        if (error) throw error;
+        if (error) {
+          throw error;
+        }
       }
 
-      alert("Pronósticos actualizados correctamente.");
+      alert("Pronósticos actualizados correctamente");
     } catch (error) {
       console.error(error);
       alert(error.message);
@@ -128,6 +148,7 @@ export default function CorregirPronosticos() {
           value={usuarioSeleccionado}
           onChange={(e) => {
             const usuario = e.target.value;
+
             setUsuarioSeleccionado(usuario);
 
             if (jornadaSeleccionada) {
@@ -156,6 +177,7 @@ export default function CorregirPronosticos() {
           value={jornadaSeleccionada}
           onChange={(e) => {
             const jornada = e.target.value;
+
             setJornadaSeleccionada(jornada);
 
             if (usuarioSeleccionado) {
@@ -204,7 +226,7 @@ export default function CorregirPronosticos() {
 
             <tbody>
               {pronosticos.map((partido) => (
-                <tr key={partido.id}>
+                <tr key={partido.partido_id}>
                   <td className="border p-2">
                     {partido.local}
                   </td>
@@ -224,6 +246,10 @@ export default function CorregirPronosticos() {
                         )
                       }
                     >
+                      <option value="">
+                        Seleccionar
+                      </option>
+
                       <option value="L">
                         Gana Local (L)
                       </option>
@@ -262,6 +288,7 @@ export default function CorregirPronosticos() {
             No existen pronósticos registrados para ese usuario en esa jornada.
           </div>
         )}
+
     </div>
   );
 }
