@@ -175,6 +175,9 @@ export default function Admin() {
         <Link to="/participantes" className="bg-purple-600 text-white px-4 py-2 rounded">
           Participantes
         </Link>
+        <Link    to="/corregir-pronosticos"    className="bg-orange-600 text-white px-4 py-2 rounded"  >    
+        Corregir Pronósticos
+        </Link>
       </div>
 
       <h2 className="text-2xl font-bold mb-4">Nueva Jornada</h2>
