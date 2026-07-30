@@ -11,6 +11,10 @@ export default function CorregirPronosticos() {
   const [pronosticos, setPronosticos] = useState([]);
   const [guardando, setGuardando] = useState(false);
 
+  const [survivorId, setSurvivorId] = useState(null);
+  const [equipoSurvivor, setEquipoSurvivor] = useState("");
+  const [equiposDisponibles, setEquiposDisponibles] = useState([]);
+
   useEffect(() => {
     cargarUsuarios();
     cargarJornadas();
@@ -68,6 +72,43 @@ export default function CorregirPronosticos() {
         throw errorQuinielas;
       }
 
+      const { data: survivorRows, error: survivorError } = await supabase
+        .from("survivor")
+        .select("*")
+        .eq("usuario_id", usuarioId)
+        .eq("jornada_id", jornadaId);
+
+      if (survivorError) {
+        throw survivorError;
+      }
+
+      const survivorData =
+        survivorRows && survivorRows.length > 0
+          ? survivorRows[0]
+          : null;
+
+      const equipos = [];
+
+      partidos.forEach((p) => {
+        if (p.local && !equipos.includes(p.local)) {
+          equipos.push(p.local);
+        }
+
+        if (p.visitante && !equipos.includes(p.visitante)) {
+          equipos.push(p.visitante);
+        }
+      });
+
+      setEquiposDisponibles(equipos.sort());
+
+      if (survivorData) {
+        setSurvivorId(survivorData.id);
+        setEquipoSurvivor(survivorData.equipo);
+      } else {
+        setSurvivorId(null);
+        setEquipoSurvivor("");
+      }
+
       const resultado = partidos.map((partido) => {
         const pronosticoExistente = quinielas.find(
           (q) => Number(q.partido_id) === Number(partido.id)
@@ -81,8 +122,6 @@ export default function CorregirPronosticos() {
           pronostico: pronosticoExistente?.pronostico || "",
         };
       });
-
-      console.table(resultado);
 
       setPronosticos(resultado);
     } catch (error) {
@@ -105,6 +144,7 @@ export default function CorregirPronosticos() {
     try {
       setGuardando(true);
 
+      // Actualizar Quiniela
       for (const item of pronosticos) {
         if (!item.id) continue;
 
@@ -120,7 +160,44 @@ export default function CorregirPronosticos() {
         }
       }
 
-      alert("Pronósticos actualizados correctamente");
+      // Actualizar Survivor
+      if (equipoSurvivor) {
+        if (survivorId) {
+          const { error } = await supabase
+            .from("survivor")
+            .update({
+              equipo: equipoSurvivor,
+            })
+            .eq("id", survivorId);
+
+          if (error) {
+            throw error;
+          }
+        } else {
+          const usuarioObj = usuarios.find(
+            (u) => String(u.id) === String(usuarioSeleccionado)
+          );
+
+          const { error } = await supabase
+            .from("survivor")
+            .insert({
+              usuario_id: usuarioSeleccionado,
+              jornada_id: Number(jornadaSeleccionada),
+              usuario:
+                usuarioObj?.email ||
+                usuarioObj?.correo ||
+                usuarioObj?.nombre_usuario ||
+                "",
+              equipo: equipoSurvivor,
+            });
+
+          if (error) {
+            throw error;
+          }
+        }
+      }
+
+      alert("Pronósticos y Survivor actualizados correctamente");
     } catch (error) {
       console.error(error);
       alert(error.message);
@@ -244,6 +321,34 @@ export default function CorregirPronosticos() {
               ))}
             </tbody>
           </table>
+
+          <div className="mt-6 border rounded p-4 bg-gray-50">
+            <h2 className="text-xl font-bold mb-3">
+              Survivor
+            </h2>
+
+            <div className="mb-3 text-green-700 font-semibold">
+              Survivor actual: {equipoSurvivor || "Sin selección"}
+            </div>
+
+            <select
+              className="border p-2 rounded w-full"
+              value={equipoSurvivor}
+              onChange={(e) =>
+                setEquipoSurvivor(e.target.value)
+              }
+            >
+              <option value="">
+                Selecciona equipo Survivor
+              </option>
+
+              {equiposDisponibles.map((equipo) => (
+                <option key={equipo} value={equipo}>
+                  {equipo}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <button
             onClick={guardarCambios}
