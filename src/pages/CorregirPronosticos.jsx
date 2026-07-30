@@ -68,11 +68,6 @@ export default function CorregirPronosticos() {
         throw errorQuinielas;
       }
 
-      console.log("USUARIO:", usuarioId);
-      console.log("JORNADA:", jornadaId);
-      console.log("PARTIDOS:", partidos);
-      console.log("QUINIELAS:", quinielas);
-
       const resultado = partidos.map((partido) => {
         const pronosticoExistente = quinielas.find(
           (q) => Number(q.partido_id) === Number(partido.id)
@@ -87,7 +82,7 @@ export default function CorregirPronosticos() {
         };
       });
 
-      console.log("RESULTADO FINAL:", resultado);
+      console.table(resultado);
 
       setPronosticos(resultado);
     } catch (error) {
@@ -96,10 +91,10 @@ export default function CorregirPronosticos() {
     }
   };
 
-  const actualizarPronostico = (id, nuevoValor) => {
+  const actualizarPronostico = (partidoId, nuevoValor) => {
     setPronosticos((prev) =>
       prev.map((item) =>
-        item.id === id
+        item.partido_id === partidoId
           ? { ...item, pronostico: nuevoValor }
           : item
       )
@@ -136,13 +131,11 @@ export default function CorregirPronosticos() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-
       <h1 className="text-3xl font-bold mb-6">
         Corrección de Pronósticos
       </h1>
 
       <div className="grid md:grid-cols-2 gap-4 mb-6">
-
         <select
           className="border p-2 rounded"
           value={usuarioSeleccionado}
@@ -161,10 +154,7 @@ export default function CorregirPronosticos() {
           </option>
 
           {usuarios.map((usuario) => (
-            <option
-              key={usuario.id}
-              value={usuario.id}
-            >
+            <option key={usuario.id} value={usuario.id}>
               {usuario.nombre_usuario ||
                 usuario.nombre ||
                 usuario.nombre_completo}
@@ -193,34 +183,21 @@ export default function CorregirPronosticos() {
           </option>
 
           {jornadas.map((jornada) => (
-            <option
-              key={jornada.id}
-              value={jornada.id}
-            >
+            <option key={jornada.id} value={jornada.id}>
               {jornada.nombre}
             </option>
           ))}
         </select>
-
       </div>
 
       {pronosticos.length > 0 && (
         <>
           <table className="w-full border-collapse border">
-
             <thead>
               <tr className="bg-gray-100">
-                <th className="border p-2">
-                  Local
-                </th>
-
-                <th className="border p-2">
-                  Visitante
-                </th>
-
-                <th className="border p-2">
-                  Pronóstico
-                </th>
+                <th className="border p-2">Local</th>
+                <th className="border p-2">Visitante</th>
+                <th className="border p-2">Pronóstico</th>
               </tr>
             </thead>
 
@@ -241,7 +218,7 @@ export default function CorregirPronosticos() {
                       value={partido.pronostico}
                       onChange={(e) =>
                         actualizarPronostico(
-                          partido.id,
+                          partido.partido_id,
                           e.target.value
                         )
                       }
@@ -266,7 +243,6 @@ export default function CorregirPronosticos() {
                 </tr>
               ))}
             </tbody>
-
           </table>
 
           <button
@@ -288,7 +264,6 @@ export default function CorregirPronosticos() {
             No existen pronósticos registrados para ese usuario en esa jornada.
           </div>
         )}
-
     </div>
   );
 }
