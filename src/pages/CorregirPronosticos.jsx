@@ -110,16 +110,16 @@ export default function CorregirPronosticos() {
       }
 
       const resultado = partidos.map((partido) => {
-        const pronosticoExistente = quinielas.find(
+        const quiniela = quinielas.find(
           (q) => Number(q.partido_id) === Number(partido.id)
         );
 
         return {
-          id: pronosticoExistente?.id || null,
+          id: quiniela?.id || null,
           partido_id: partido.id,
           local: partido.local,
           visitante: partido.visitante,
-          pronostico: pronosticoExistente?.pronostico || "",
+          pronostico: quiniela?.pronostico || "",
         };
       });
 
@@ -144,23 +144,43 @@ export default function CorregirPronosticos() {
     try {
       setGuardando(true);
 
-      // Actualizar Quiniela
+      const usuarioObj = usuarios.find(
+        (u) => String(u.id) === String(usuarioSeleccionado)
+      );
+
+      // QUINIELA
       for (const item of pronosticos) {
-        if (!item.id) continue;
+        if (!item.pronostico) continue;
 
-        const { error } = await supabase
-          .from("quinielas")
-          .update({
-            pronostico: item.pronostico,
-          })
-          .eq("id", item.id);
+        if (item.id) {
+          const { error } = await supabase
+            .from("quinielas")
+            .update({
+              pronostico: item.pronostico,
+            })
+            .eq("id", item.id);
 
-        if (error) {
-          throw error;
+          if (error) {
+            throw error;
+          }
+        } else {
+          const { error } = await supabase
+            .from("quinielas")
+            .insert({
+              usuario_id: usuarioSeleccionado,
+              usuario: usuarioObj?.email || "",
+              jornada_id: Number(jornadaSeleccionada),
+              partido_id: item.partido_id,
+              pronostico: item.pronostico,
+            });
+
+          if (error) {
+            throw error;
+          }
         }
       }
 
-      // Actualizar Survivor
+      // SURVIVOR
       if (equipoSurvivor) {
         if (survivorId) {
           const { error } = await supabase
@@ -174,20 +194,12 @@ export default function CorregirPronosticos() {
             throw error;
           }
         } else {
-          const usuarioObj = usuarios.find(
-            (u) => String(u.id) === String(usuarioSeleccionado)
-          );
-
           const { error } = await supabase
             .from("survivor")
             .insert({
               usuario_id: usuarioSeleccionado,
+              usuario: usuarioObj?.email || "",
               jornada_id: Number(jornadaSeleccionada),
-              usuario:
-                usuarioObj?.email ||
-                usuarioObj?.correo ||
-                usuarioObj?.nombre_usuario ||
-                "",
               equipo: equipoSurvivor,
             });
 
@@ -198,6 +210,11 @@ export default function CorregirPronosticos() {
       }
 
       alert("Pronósticos y Survivor actualizados correctamente");
+
+      await cargarPronosticos(
+        usuarioSeleccionado,
+        jornadaSeleccionada
+      );
     } catch (error) {
       console.error(error);
       alert(error.message);
@@ -222,7 +239,10 @@ export default function CorregirPronosticos() {
             setUsuarioSeleccionado(usuario);
 
             if (jornadaSeleccionada) {
-              cargarPronosticos(usuario, jornadaSeleccionada);
+              cargarPronosticos(
+                usuario,
+                jornadaSeleccionada
+              );
             }
           }}
         >
@@ -234,7 +254,8 @@ export default function CorregirPronosticos() {
             <option key={usuario.id} value={usuario.id}>
               {usuario.nombre_usuario ||
                 usuario.nombre ||
-                usuario.nombre_completo}
+                usuario.nombre_completo ||
+                usuario.email}
             </option>
           ))}
         </select>
@@ -260,12 +281,24 @@ export default function CorregirPronosticos() {
           </option>
 
           {jornadas.map((jornada) => (
-            <option key={jornada.id} value={jornada.id}>
+            <option
+              key={jornada.id}
+              value={jornada.id}
+            >
               {jornada.nombre}
             </option>
           ))}
         </select>
       </div>
+
+      {usuarioSeleccionado &&
+        jornadaSeleccionada &&
+        pronosticos.every((p) => !p.id) && (
+          <div className="bg-yellow-100 border border-yellow-300 rounded p-4 mb-4">
+            Este usuario no tiene quiniela registrada para esta jornada.
+            Puedes capturarla manualmente y guardarla.
+          </div>
+        )}
 
       {pronosticos.length > 0 && (
         <>
@@ -328,7 +361,8 @@ export default function CorregirPronosticos() {
             </h2>
 
             <div className="mb-3 text-green-700 font-semibold">
-              Survivor actual: {equipoSurvivor || "Sin selección"}
+              Survivor actual:{" "}
+              {equipoSurvivor || "Sin selección"}
             </div>
 
             <select
@@ -343,7 +377,10 @@ export default function CorregirPronosticos() {
               </option>
 
               {equiposDisponibles.map((equipo) => (
-                <option key={equipo} value={equipo}>
+                <option
+                  key={equipo}
+                  value={equipo}
+                >
                   {equipo}
                 </option>
               ))}
@@ -361,14 +398,6 @@ export default function CorregirPronosticos() {
           </button>
         </>
       )}
-
-      {usuarioSeleccionado &&
-        jornadaSeleccionada &&
-        pronosticos.length === 0 && (
-          <div className="bg-yellow-100 border border-yellow-300 rounded p-4 mt-4">
-            No existen pronósticos registrados para ese usuario en esa jornada.
-          </div>
-        )}
     </div>
   );
 }
