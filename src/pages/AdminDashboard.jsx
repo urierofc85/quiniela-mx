@@ -535,10 +535,9 @@ export default function AdminDashboard() {
         ) {
 
           data.cell.styles.textColor = [
-            220,
-            38,
-            38
-          ];
+            22,
+            163,
+            74];
 
           data.cell.styles.fontStyle =
             "bold";
