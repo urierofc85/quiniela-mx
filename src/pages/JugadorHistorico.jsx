@@ -84,7 +84,7 @@ export default function JugadorHistorico() {
     const datosGrafica =
       data.map((item) => ({
         jornada:
-          `J${item.jornada_id}`,
+          `${item.temporada} - ${item.jornada}`,
         aciertos:
           item.aciertos,
       }));
@@ -93,20 +93,17 @@ export default function JugadorHistorico() {
 
     const primeros =
       posiciones?.filter(
-        (p) =>
-          p.posicion === 1
+        (p) => p.posicion === 1
       ).length || 0;
 
     const segundos =
       posiciones?.filter(
-        (p) =>
-          p.posicion === 2
+        (p) => p.posicion === 2
       ).length || 0;
 
     const terceros =
       posiciones?.filter(
-        (p) =>
-          p.posicion === 3
+        (p) => p.posicion === 3
       ).length || 0;
 
     setPalmares({
@@ -122,8 +119,7 @@ export default function JugadorHistorico() {
     const total =
       data.reduce(
         (acc, item) =>
-          acc +
-          item.aciertos,
+          acc + item.aciertos,
         0
       );
 
@@ -136,23 +132,20 @@ export default function JugadorHistorico() {
     const mejor =
       Math.max(
         ...data.map(
-          (x) =>
-            x.aciertos
+          (x) => x.aciertos
         )
       );
 
     const peor =
       Math.min(
         ...data.map(
-          (x) =>
-            x.aciertos
+          (x) => x.aciertos
         )
       );
 
     setJugador({
       nombre:
-        data[0]
-          .nombre_usuario,
+        data[0].nombre_usuario,
       participaciones:
         data.length,
       aciertosTotales:
@@ -164,11 +157,13 @@ export default function JugadorHistorico() {
   };
 
   if (!jugador) {
+
     return (
       <div className="p-6">
         Cargando...
       </div>
     );
+
   }
 
   return (
@@ -258,7 +253,6 @@ export default function JugadorHistorico() {
         <div className="grid md:grid-cols-4 gap-4">
 
           <div className="bg-yellow-100 p-4 rounded">
-
             <p className="text-sm">
               🥇 Jornadas Ganadas
             </p>
@@ -266,11 +260,9 @@ export default function JugadorHistorico() {
             <p className="text-4xl font-bold">
               {palmares.primeros}
             </p>
-
           </div>
 
           <div className="bg-gray-100 p-4 rounded">
-
             <p className="text-sm">
               🥈 Segundos Lugares
             </p>
@@ -278,11 +270,9 @@ export default function JugadorHistorico() {
             <p className="text-4xl font-bold">
               {palmares.segundos}
             </p>
-
           </div>
 
           <div className="bg-orange-100 p-4 rounded">
-
             <p className="text-sm">
               🥉 Terceros Lugares
             </p>
@@ -290,11 +280,9 @@ export default function JugadorHistorico() {
             <p className="text-4xl font-bold">
               {palmares.terceros}
             </p>
-
           </div>
 
           <div className="bg-green-100 p-4 rounded">
-
             <p className="text-sm">
               🏆 Podios Totales
             </p>
@@ -302,7 +290,6 @@ export default function JugadorHistorico() {
             <p className="text-4xl font-bold">
               {palmares.podios}
             </p>
-
           </div>
 
         </div>
@@ -323,9 +310,7 @@ export default function JugadorHistorico() {
             height="100%"
           >
 
-            <LineChart
-              data={grafica}
-            >
+            <LineChart data={grafica}>
 
               <CartesianGrid
                 strokeDasharray="3 3"
@@ -370,6 +355,10 @@ export default function JugadorHistorico() {
               <tr className="bg-gray-100">
 
                 <th className="border p-2">
+                  Temporada
+                </th>
+
+                <th className="border p-2">
                   Jornada
                 </th>
 
@@ -387,11 +376,15 @@ export default function JugadorHistorico() {
                 (item) => (
 
                   <tr
-                    key={`${item.nombre_usuario}-${item.jornada_id}`}
+                    key={`${item.temporada_id}-${item.jornada_id}-${item.nombre_usuario}`}
                   >
 
                     <td className="border p-2">
-                      Jornada {item.jornada_id}
+                      {item.temporada}
+                    </td>
+
+                    <td className="border p-2">
+                      {item.jornada}
                     </td>
 
                     <td className="border p-2 text-center font-semibold">

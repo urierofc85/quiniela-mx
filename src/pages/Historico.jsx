@@ -15,7 +15,13 @@ export default function Historico() {
     const { data, error } =
       await supabase
         .from("ranking_historico")
-        .select("*");
+        .select("*")
+        .order(
+          "aciertos_totales",
+          {
+            ascending: false,
+          }
+        );
 
     if (error) {
       console.error(error);
@@ -37,32 +43,37 @@ export default function Historico() {
           🏆 Ranking Histórico
         </h1>
 
-        <Link
-          to="/quiniela"
-          className="
-            bg-blue-600
-            text-white
-            px-4
-            py-2
-            rounded
-            hover:bg-blue-700
-          "
-        >
-          Regresar
-        </Link>
+        <div className="flex gap-3">
 
-        <Link
-  to="/comparador"
-  className="
-    bg-green-600
-    text-white
-    px-4
-    py-2
-    rounded
-  "
->
-  ⚔️ Comparador
-</Link>
+          <Link
+            to="/quiniela"
+            className="
+              bg-blue-600
+              text-white
+              px-4
+              py-2
+              rounded
+              hover:bg-blue-700
+            "
+          >
+            Regresar
+          </Link>
+
+          <Link
+            to="/comparador"
+            className="
+              bg-green-600
+              text-white
+              px-4
+              py-2
+              rounded
+              hover:bg-green-700
+            "
+          >
+            ⚔️ Comparador
+          </Link>
+
+        </div>
 
       </div>
 
@@ -78,6 +89,7 @@ export default function Historico() {
             mb-6
           "
         >
+
           <h2 className="font-bold text-xl">
             🥇 Líder Histórico
           </h2>
@@ -152,18 +164,28 @@ export default function Historico() {
                     className={color}
                   >
 
-                    <td className="border p-2 text-center">
-                      {index + 1}
+                    <td className="border p-2 text-center font-bold">
+
+                      {index === 0 && "🥇"}
+                      {index === 1 && "🥈"}
+                      {index === 2 && "🥉"}
+                      {index > 2 && index + 1}
+
                     </td>
 
                     <td className="border p-2 font-semibold">
 
-                    <Link
-                      to={`/historico/${encodeURIComponent(
-                        jugador.nombre_usuario
-                      )}`}
-                    >
-                     {jugador.nombre_usuario}
+                      <Link
+                        to={`/historico/${encodeURIComponent(
+                          jugador.nombre_usuario
+                        )}`}
+                        className="
+                          text-blue-600
+                          hover:text-blue-800
+                          hover:underline
+                        "
+                      >
+                        {jugador.nombre_usuario}
                       </Link>
 
                     </td>
