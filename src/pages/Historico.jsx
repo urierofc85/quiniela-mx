@@ -51,6 +51,19 @@ export default function Historico() {
           Regresar
         </Link>
 
+        <Link
+  to="/comparador"
+  className="
+    bg-green-600
+    text-white
+    px-4
+    py-2
+    rounded
+  "
+>
+  ⚔️ Comparador
+</Link>
+
       </div>
 
       {campeon && (

@@ -23,7 +23,7 @@ import RankingSurvivor from "./pages/RankingSurvivor"; // 👈 1. Importar el co
 import CorregirPronosticos from "./pages/CorregirPronosticos";
 import Historico from "./pages/Historico";
 import JugadorHistorico from "./pages/JugadorHistorico";
-
+import JugadorVsJugador from "./pages/JugadorVsJugador";
 
 function App() {
   return (
@@ -119,6 +119,11 @@ function App() {
         path="/historico/:id"
         element={<JugadorHistorico />}
       />
+
+      <Route
+  path="/comparador"
+  element={<JugadorVsJugador />}
+/>
 
       </Routes>
     </BrowserRouter>
