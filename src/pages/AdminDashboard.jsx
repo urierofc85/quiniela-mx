@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+} from "react-router-dom";
 import { supabase } from "../services/supabase";
 
 import {
@@ -12,6 +15,8 @@ import {
 } from "recharts";
 
 export default function AdminDashboard() {
+
+  const navigate = useNavigate();
 
   const [jornada, setJornada] = useState(null);
 
@@ -33,6 +38,37 @@ export default function AdminDashboard() {
     cargarDashboard();
 
   }, []);
+
+  const cerrarSesion = async () => {
+
+  const { error } =
+    await supabase.auth.signOut();
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  window.location.replace("/");
+};
+useEffect(() => {
+
+  const validarSesion = async () => {
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      navigate("/");
+    }
+
+  };
+
+  validarSesion();
+
+}, [navigate]);
+
 
   //---------------------------------------
   // DASHBOARD
@@ -628,12 +664,26 @@ export default function AdminDashboard() {
           Ranking
         </Link>
 
-        <Link
-          to="/admin-survivor"
-          className="bg-pink-600 text-white px-4 py-2 rounded"
-        >
-          🏆 Survivor
-        </Link>
+       <Link
+  to="/admin-survivor"
+  className="bg-pink-600 text-white px-4 py-2 rounded"
+>
+  🏆 Survivor
+</Link>
+
+<button
+  onClick={cerrarSesion}
+  className="
+    bg-red-600
+    text-white
+    px-4
+    py-2
+    rounded
+    hover:bg-red-700
+  "
+>
+  🚪 Cerrar Sesión
+</button>
 
       </div>
 
