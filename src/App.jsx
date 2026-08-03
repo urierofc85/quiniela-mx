@@ -22,6 +22,8 @@ import AdminSurvivor from "./pages/AdminSurvivor";
 import RankingSurvivor from "./pages/RankingSurvivor"; // 👈 1. Importar el componente
 import CorregirPronosticos from "./pages/CorregirPronosticos";
 import Historico from "./pages/Historico";
+import JugadorHistorico from "./pages/JugadorHistorico";
+
 
 function App() {
   return (
@@ -109,9 +111,14 @@ function App() {
         element={<CorregirPronosticos />}
       />
       <Route
-  path="/historico"
-  element={<Historico />}
-/>
+      path="/historico"
+      element={<Historico />}
+       />
+
+      <Route
+        path="/historico/:id"
+        element={<JugadorHistorico />}
+      />
 
       </Routes>
     </BrowserRouter>

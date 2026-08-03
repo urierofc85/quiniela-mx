@@ -143,8 +143,19 @@ export default function Historico() {
                     </td>
 
                     <td className="border p-2 font-semibold">
-                      {jugador.nombre_usuario}
-                    </td>
+
+  <Link
+    to={`/historico/${jugador.usuario_id}`}
+    className="
+      text-blue-600
+      hover:underline
+    "
+  >
+    {jugador.nombre_usuario}
+  </Link>
+
+</td>
+``
 
                     <td className="border p-2 text-center">
                       {jugador.aciertos_totales}
