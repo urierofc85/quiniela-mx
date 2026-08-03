@@ -24,6 +24,7 @@ import CorregirPronosticos from "./pages/CorregirPronosticos";
 import Historico from "./pages/Historico";
 import JugadorHistorico from "./pages/JugadorHistorico";
 import JugadorVsJugador from "./pages/JugadorVsJugador";
+import Temporadas from "./pages/Temporadas";
 
 function App() {
   return (
@@ -123,6 +124,11 @@ function App() {
       <Route
   path="/comparador"
   element={<JugadorVsJugador />}
+/>
+
+<Route
+  path="/temporadas"
+  element={<Temporadas />}
 />
 
       </Routes>

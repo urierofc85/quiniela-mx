@@ -578,6 +578,19 @@ export default function Admin() {
                 Eliminar
               </button>
 
+              <Link
+  to="/temporadas"
+  className="
+    bg-indigo-600
+    text-white
+    px-4
+    py-2
+    rounded
+  "
+>
+  🏆 Temporadas
+</Link>
+
             </div>
 
           </div>
