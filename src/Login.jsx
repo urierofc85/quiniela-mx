@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "./services/supabase";
 import { Link, useNavigate } from "react-router-dom";
 
 export default function Login() {
+
   const navigate = useNavigate();
 
   // LOGIN
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // MODAL REGISTRO
+  // REGISTRO
   const [mostrarRegistro, setMostrarRegistro] =
     useState(false);
 
@@ -22,7 +23,90 @@ export default function Login() {
   const [registroPassword, setRegistroPassword] =
     useState("");
 
+  useEffect(() => {
+    verificarSesionOAuth();
+  }, []);
+
+  const verificarSesionOAuth = async () => {
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      return;
+    }
+
+    const user = session.user;
+
+    let { data: perfil } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    // Usuario nuevo Google
+    if (!perfil) {
+
+      const nombreGoogle =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        user.email?.split("@")[0] ||
+        "Usuario";
+
+      const nombreUsuarioGoogle =
+        nombreGoogle.replace(/\s+/g, "");
+
+      const { error } = await supabase
+        .from("profiles")
+        .insert([
+          {
+            id: user.id,
+            email: user.email,
+            rol: "usuario",
+            activo: true,
+            nombre_usuario:
+              nombreUsuarioGoogle,
+          },
+        ]);
+
+      if (error) {
+        console.error(error);
+        alert(error.message);
+        return;
+      }
+
+      const {
+        data: nuevoPerfil,
+      } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      perfil = nuevoPerfil;
+    }
+
+    if (perfil.activo === false) {
+
+      await supabase.auth.signOut();
+
+      alert(
+        "Tu cuenta se encuentra desactivada."
+      );
+
+      return;
+    }
+
+    if (perfil.rol === "admin") {
+      navigate("/admin/dashboard");
+    } else {
+      navigate("/quiniela");
+    }
+  };
+
   const login = async () => {
+
     if (!email.trim() || !password.trim()) {
       alert(
         "Debes capturar correo y contraseña"
@@ -62,6 +146,7 @@ export default function Login() {
       .single();
 
     if (perfilError || !perfil) {
+
       await supabase.auth.signOut();
 
       alert(
@@ -72,6 +157,7 @@ export default function Login() {
     }
 
     if (perfil.activo === false) {
+
       await supabase.auth.signOut();
 
       alert(
@@ -87,8 +173,8 @@ export default function Login() {
       navigate("/quiniela");
     }
   };
+    const registrar = async () => {
 
-  const registrar = async () => {
     if (
       !registroUsuario.trim() ||
       !registroEmail.trim() ||
@@ -96,6 +182,13 @@ export default function Login() {
     ) {
       alert(
         "Debes capturar usuario, correo y contraseña"
+      );
+      return;
+    }
+
+    if (registroPassword.length < 6) {
+      alert(
+        "La contraseña debe tener al menos 6 caracteres"
       );
       return;
     }
@@ -110,9 +203,11 @@ export default function Login() {
         );
 
     if (existente?.length > 0) {
+
       alert(
         "Ese nombre de usuario ya está registrado"
       );
+
       return;
     }
 
@@ -168,12 +263,13 @@ export default function Login() {
   };
 
   const loginGoogle = async () => {
+
     const { error } =
       await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo:
-            window.location.origin,
+            `${window.location.origin}/login`,
         },
       });
 
@@ -337,8 +433,8 @@ export default function Login() {
             </Link>
           </div>
 
-        </div>
-        {mostrarRegistro && (
+        </div> 
+                {mostrarRegistro && (
           <div
             className="
               fixed
@@ -381,6 +477,9 @@ export default function Login() {
                     border
                     p-3
                     rounded-xl
+                    focus:outline-none
+                    focus:ring-2
+                    focus:ring-green-500
                   "
                 />
 
@@ -398,6 +497,9 @@ export default function Login() {
                     border
                     p-3
                     rounded-xl
+                    focus:outline-none
+                    focus:ring-2
+                    focus:ring-green-500
                   "
                 />
 
@@ -415,6 +517,9 @@ export default function Login() {
                     border
                     p-3
                     rounded-xl
+                    focus:outline-none
+                    focus:ring-2
+                    focus:ring-green-500
                   "
                 />
 
