@@ -504,6 +504,19 @@ export default function Admin() {
           Activar Jornada
         </button>
 
+             <Link
+  to="/temporadas"
+  className="
+    bg-indigo-600
+    text-white
+    px-4
+    py-2
+    rounded
+  "
+>
+  🏆 Temporadas
+</Link>
+
       </div>
 
       <h2 className="text-2xl font-bold mb-4">
@@ -578,20 +591,7 @@ export default function Admin() {
                 Eliminar
               </button>
 
-              <Link
-  to="/temporadas"
-  className="
-    bg-indigo-600
-    text-white
-    px-4
-    py-2
-    rounded
-  "
->
-  🏆 Temporadas
-</Link>
-
-            </div>
+                     </div>
 
           </div>
 
