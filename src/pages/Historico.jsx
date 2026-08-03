@@ -28,6 +28,7 @@ export default function Historico() {
   const campeon = ranking[0];
 
   return (
+
     <div className="max-w-6xl mx-auto p-6">
 
       <div className="flex justify-between items-center mb-6">
@@ -44,6 +45,7 @@ export default function Historico() {
             px-4
             py-2
             rounded
+            hover:bg-blue-700
           "
         >
           Regresar
@@ -67,13 +69,12 @@ export default function Historico() {
             🥇 Líder Histórico
           </h2>
 
-          <p className="mt-2">
+          <p className="mt-2 text-lg font-semibold">
             {campeon.nombre_usuario}
           </p>
 
           <p>
-            {campeon.aciertos_totales}
-            {" "}aciertos
+            {campeon.aciertos_totales} aciertos
           </p>
 
         </div>
@@ -144,18 +145,18 @@ export default function Historico() {
 
                     <td className="border p-2 font-semibold">
 
-  <Link
-    to={`/historico/${jugador.usuario_id}`}
-    className="
-      text-blue-600
-      hover:underline
-    "
-  >
-    {jugador.nombre_usuario}
-  </Link>
+                      <Link
+                        to={`/historico/${jugador.usuario_id}`}
+                        className="
+                          text-blue-600
+                          hover:text-blue-800
+                          hover:underline
+                        "
+                      >
+                        {jugador.nombre_usuario}
+                      </Link>
 
-</td>
-``
+                    </td>
 
                     <td className="border p-2 text-center">
                       {jugador.aciertos_totales}
@@ -171,4 +172,18 @@ export default function Historico() {
 
                   </tr>
 
-        
+                );
+
+              }
+            )}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+
+  );
+}
