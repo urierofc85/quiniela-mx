@@ -16,6 +16,9 @@ export default function JugadorHistorico() {
 
   const { id } = useParams();
 
+  const nombreUsuario =
+    decodeURIComponent(id);
+
   const [jugador, setJugador] =
     useState(null);
 
@@ -25,78 +28,102 @@ export default function JugadorHistorico() {
   const [grafica, setGrafica] =
     useState([]);
 
-    const [palmares, setPalmares] =
-  useState({
-    primeros: 0,
-    segundos: 0,
-    terceros: 0,
-    podios: 0,
-  });
+  const [palmares, setPalmares] =
+    useState({
+      primeros: 0,
+      segundos: 0,
+      terceros: 0,
+      podios: 0,
+    });
 
   useEffect(() => {
     cargarJugador();
-  }, []);
+  }, [nombreUsuario]);
 
   const cargarJugador = async () => {
 
-    const { data: posiciones } =
-  await supabase
-    .from("ranking_jornada_historico")
-    .select("*")
-    .eq("usuario_id", id);
+    const {
+      data: posiciones,
+      error: posicionesError,
+    } = await supabase
+      .from("ranking_jornada_historico")
+      .select("*")
+      .eq(
+        "nombre_usuario",
+        nombreUsuario
+      );
 
-    const { data, error } =
-      await supabase
-        .from("historico_jugador")
-        .select("*")
-        .eq("usuario_id", id);
+    if (posicionesError) {
+      console.error(
+        posicionesError
+      );
+    }
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("historico_jugador")
+      .select("*")
+      .eq(
+        "nombre_usuario",
+        nombreUsuario
+      );
 
     if (error) {
       console.error(error);
       return;
     }
 
-    if (!data?.length) return;
+    if (!data?.length) {
+      return;
+    }
 
     setHistorial(data);
 
     const datosGrafica =
       data.map((item) => ({
-        jornada: `J${item.jornada_id}`,
-        aciertos: item.aciertos,
+        jornada:
+          `J${item.jornada_id}`,
+        aciertos:
+          item.aciertos,
       }));
 
     setGrafica(datosGrafica);
 
     const primeros =
-  posiciones?.filter(
-    p => p.posicion === 1
-  ).length || 0;
+      posiciones?.filter(
+        (p) =>
+          p.posicion === 1
+      ).length || 0;
 
-const segundos =
-  posiciones?.filter(
-    p => p.posicion === 2
-  ).length || 0;
+    const segundos =
+      posiciones?.filter(
+        (p) =>
+          p.posicion === 2
+      ).length || 0;
 
-const terceros =
-  posiciones?.filter(
-    p => p.posicion === 3
-  ).length || 0;
+    const terceros =
+      posiciones?.filter(
+        (p) =>
+          p.posicion === 3
+      ).length || 0;
 
-setPalmares({
-  primeros,
-  segundos,
-  terceros,
-  podios:
-    primeros +
-    segundos +
-    terceros,
-});
+    setPalmares({
+      primeros,
+      segundos,
+      terceros,
+      podios:
+        primeros +
+        segundos +
+        terceros,
+    });
 
     const total =
       data.reduce(
         (acc, item) =>
-          acc + item.aciertos,
+          acc +
+          item.aciertos,
         0
       );
 
@@ -109,20 +136,23 @@ setPalmares({
     const mejor =
       Math.max(
         ...data.map(
-          (x) => x.aciertos
+          (x) =>
+            x.aciertos
         )
       );
 
     const peor =
       Math.min(
         ...data.map(
-          (x) => x.aciertos
+          (x) =>
+            x.aciertos
         )
       );
 
     setJugador({
       nombre:
-        data[0].nombre_usuario,
+        data[0]
+          .nombre_usuario,
       participaciones:
         data.length,
       aciertosTotales:
@@ -218,101 +248,111 @@ setPalmares({
 
       </div>
 
-     {/* Palmarés */}
-<div className="bg-white shadow rounded p-4 mb-6">
+      {/* Palmarés */}
+      <div className="bg-white shadow rounded p-4 mb-6">
 
-  <h2 className="text-xl font-bold mb-4">
-    🏆 Palmarés Histórico
-  </h2>
+        <h2 className="text-xl font-bold mb-4">
+          🏆 Palmarés Histórico
+        </h2>
 
-  <div className="grid md:grid-cols-4 gap-4">
+        <div className="grid md:grid-cols-4 gap-4">
 
-    <div className="bg-yellow-100 p-4 rounded">
-      <p className="text-sm">
-        🥇 Jornadas Ganadas
-      </p>
+          <div className="bg-yellow-100 p-4 rounded">
 
-      <p className="text-4xl font-bold">
-        {palmares.primeros}
-      </p>
-    </div>
+            <p className="text-sm">
+              🥇 Jornadas Ganadas
+            </p>
 
-    <div className="bg-gray-100 p-4 rounded">
-      <p className="text-sm">
-        🥈 Segundos Lugares
-      </p>
+            <p className="text-4xl font-bold">
+              {palmares.primeros}
+            </p>
 
-      <p className="text-4xl font-bold">
-        {palmares.segundos}
-      </p>
-    </div>
+          </div>
 
-    <div className="bg-orange-100 p-4 rounded">
-      <p className="text-sm">
-        🥉 Terceros Lugares
-      </p>
+          <div className="bg-gray-100 p-4 rounded">
 
-      <p className="text-4xl font-bold">
-        {palmares.terceros}
-      </p>
-    </div>
+            <p className="text-sm">
+              🥈 Segundos Lugares
+            </p>
 
-    <div className="bg-green-100 p-4 rounded">
-      <p className="text-sm">
-        🏆 Podios Totales
-      </p>
+            <p className="text-4xl font-bold">
+              {palmares.segundos}
+            </p>
 
-      <p className="text-4xl font-bold">
-        {palmares.podios}
-      </p>
-    </div>
+          </div>
 
-  </div>
+          <div className="bg-orange-100 p-4 rounded">
 
-</div>
+            <p className="text-sm">
+              🥉 Terceros Lugares
+            </p>
 
-{/* Gráfica */}
-<div className="bg-white shadow rounded p-4 mb-6">
+            <p className="text-4xl font-bold">
+              {palmares.terceros}
+            </p>
 
-  <h2 className="text-xl font-bold mb-4">
-    📈 Evolución por Jornada
-  </h2>
+          </div>
 
-  <div className="h-[350px]">
+          <div className="bg-green-100 p-4 rounded">
 
-    <ResponsiveContainer
-      width="100%"
-      height="100%"
-    >
+            <p className="text-sm">
+              🏆 Podios Totales
+            </p>
 
-      <LineChart data={grafica}>
+            <p className="text-4xl font-bold">
+              {palmares.podios}
+            </p>
 
-        <CartesianGrid
-          strokeDasharray="3 3"
-        />
+          </div>
 
-        <XAxis
-          dataKey="jornada"
-        />
+        </div>
 
-        <YAxis />
+      </div>
 
-        <Tooltip />
+      {/* Gráfica */}
+      <div className="bg-white shadow rounded p-4 mb-6">
 
-        <Line
-          type="monotone"
-          dataKey="aciertos"
-          stroke="#16a34a"
-          strokeWidth={3}
-        />
+        <h2 className="text-xl font-bold mb-4">
+          📈 Evolución por Jornada
+        </h2>
 
-      </LineChart>
+        <div className="h-[350px]">
 
-    </ResponsiveContainer>
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+          >
 
-  </div>
+            <LineChart
+              data={grafica}
+            >
 
-</div>
+              <CartesianGrid
+                strokeDasharray="3 3"
+              />
+
+              <XAxis
+                dataKey="jornada"
+              />
+
+              <YAxis />
+
+              <Tooltip />
+
+              <Line
+                type="monotone"
+                dataKey="aciertos"
+                stroke="#16a34a"
+                strokeWidth={3}
+              />
+
+            </LineChart>
+
+          </ResponsiveContainer>
+
+        </div>
+
+      </div>
 
       {/* Historial */}
       <div className="bg-white shadow rounded p-4">
@@ -343,25 +383,25 @@ setPalmares({
 
             <tbody>
 
-              {historial.map((item) => (
+              {historial.map(
+                (item) => (
 
-                <tr
-                  key={`${item.usuario_id}-${item.jornada_id}`}
-                >
+                  <tr
+                    key={`${item.nombre_usuario}-${item.jornada_id}`}
+                  >
 
-                  <td className="border p-2">
-                    Jornada {item.jornada_id}
-                  </td>
+                    <td className="border p-2">
+                      Jornada {item.jornada_id}
+                    </td>
 
-                  <td className="border p-2 text-center font-semibold">
+                    <td className="border p-2 text-center font-semibold">
+                      {item.aciertos}
+                    </td>
 
-                    {item.aciertos}
+                  </tr>
 
-                  </td>
-
-                </tr>
-
-              ))}
+                )
+              )}
 
             </tbody>
 

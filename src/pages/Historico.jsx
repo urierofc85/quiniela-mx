@@ -158,15 +158,12 @@ export default function Historico() {
 
                     <td className="border p-2 font-semibold">
 
-                      <Link
-                        to={`/historico/${jugador.usuario_id}`}
-                        className="
-                          text-blue-600
-                          hover:text-blue-800
-                          hover:underline
-                        "
-                      >
-                        {jugador.nombre_usuario}
+                    <Link
+                      to={`/historico/${encodeURIComponent(
+                        jugador.nombre_usuario
+                      )}`}
+                    >
+                     {jugador.nombre_usuario}
                       </Link>
 
                     </td>
