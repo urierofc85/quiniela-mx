@@ -21,6 +21,7 @@ import Survivor from "./pages/Survivor";
 import AdminSurvivor from "./pages/AdminSurvivor";
 import RankingSurvivor from "./pages/RankingSurvivor"; // 👈 1. Importar el componente
 import CorregirPronosticos from "./pages/CorregirPronosticos";
+import Historico from "./pages/Historico";
 
 function App() {
   return (
@@ -107,6 +108,10 @@ function App() {
         path="/corregir-pronosticos"
         element={<CorregirPronosticos />}
       />
+      <Route
+  path="/historico"
+  element={<Historico />}
+/>
 
       </Routes>
     </BrowserRouter>

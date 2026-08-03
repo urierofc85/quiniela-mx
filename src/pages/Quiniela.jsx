@@ -367,6 +367,19 @@ const cerrarSesion = async () => {
   </Link>
 
   <Link
+  to="/historico"
+  className="
+    bg-yellow-600
+    text-white
+    px-4
+    py-2
+    rounded
+  "
+>
+  🏆 Histórico
+</Link>
+
+  <Link
     to="/perfil"
     className="bg-blue-600 text-white px-4 py-2 rounded"
   >
