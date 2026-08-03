@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
-import { Link } from "react-router-dom";
+import { Link, useNavigate,} from "react-router-dom";
 import { obtenerHoraMexico } from "../services/horario";
 
 export default function Quiniela() {
+  const navigate = useNavigate();
   const [partidos, setPartidos] = useState([]);
   const [pronosticos, setPronosticos] = useState({});
   const [jornadaActiva, setJornadaActiva] = useState(null);
@@ -18,6 +19,23 @@ export default function Quiniela() {
   useEffect(() => {
     cargarDatosIniciales();
   }, []);
+  useEffect(() => {
+
+  const validarSesion = async () => {
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      navigate("/");
+    }
+
+  };
+
+  validarSesion();
+
+}, [navigate]);
 
   const cargarDatosIniciales = async () => {
     const ahora = await obtenerHoraMexico();
@@ -115,7 +133,18 @@ export default function Quiniela() {
     });
     setPronosticos(nuevosPronosticos);
   };
+const cerrarSesion = async () => {
 
+  const { error } =
+    await supabase.auth.signOut();
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  navigate("/");
+};
   const actualizarPronostico = (partidoId, valor) => {
     setPronosticos({
       ...pronosticos,
@@ -329,16 +358,45 @@ export default function Quiniela() {
       <h1 className="text-3xl font-bold mb-6">Captura tu Quiniela</h1>
 
       <div className="flex flex-wrap gap-3 mb-6 items-center">
-        <Link to="/posiciones" className="bg-orange-600 text-white px-4 py-2 rounded">
-          Ranking General
-        </Link>
-        <Link to="/perfil" className="bg-blue-600 text-white px-4 py-2 rounded">
-          Mi Perfil
-        </Link>
-        <Link to="/survivor" className="bg-purple-600 text-white px-4 py-2 rounded">
-          Survivor
-        </Link>
-      </div>
+
+  <Link
+    to="/posiciones"
+    className="bg-orange-600 text-white px-4 py-2 rounded"
+  >
+    Ranking General
+  </Link>
+
+  <Link
+    to="/perfil"
+    className="bg-blue-600 text-white px-4 py-2 rounded"
+  >
+    Mi Perfil
+  </Link>
+
+  <Link
+    to="/survivor"
+    className="bg-purple-600 text-white px-4 py-2 rounded"
+  >
+    Survivor
+  </Link>
+
+  <button
+    onClick={cerrarSesion}
+    className="
+      bg-red-600
+      text-white
+      px-4
+      py-2
+      rounded
+      hover:bg-red-700
+      transition
+    "
+  >
+    Cerrar Sesión
+  </button>
+
+</div>
+
 
       {/* SECCIÓN DE DESCARGA DE QUINIELA GENERAL */}
       <div className="bg-gray-50 border p-4 rounded-lg mb-6 flex flex-wrap items-center gap-3">
