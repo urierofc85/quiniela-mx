@@ -25,234 +25,247 @@ export default function JugadorVsJugador() {
 
   const cargarJugadores = async () => {
 
-    const { data } =
+    const { data, error } =
       await supabase
         .from("comparativa_jugadores")
         .select("*")
         .order(
-       *  "nombre_usuario"
+          "nombre_usuario"
         );
 
-   *setJugadores(
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setJugadores(
       data || []
-   *);
+    );
   };
 
-  const comparar = () => *
+  const comparar = () => {
 
     const j1 =
-      jugadores.f*nd(
-        j =>
-          String(*            j.usuario_id
-         *) ===
-          String(
-          * jugador1
-          )
-      );
-
-  * const j2 =
       jugadores.find(
-*       j =>
+        (j) =>
           String(
-    *       j.usuario_id
-          ) ==*
+            j.usuario_id
+          ) ===
           String(
-            jug*dor2
+            jugador1
           )
       );
 
-    set*atos1(j1);
+    const j2 =
+      jugadores.find(
+        (j) =>
+          String(
+            j.usuario_id
+          ) ===
+          String(
+            jugador2
+          )
+      );
+
+    setDatos1(j1);
     setDatos2(j2);
-  };*
+  };
+
   return (
 
-    <div className="m*x-w-5xl mx-auto p-6">
+    <div className="max-w-5xl mx-auto p-6">
 
-      <div *lassName="flex justify-between mb-*">
+      <div className="flex justify-between mb-6">
 
-        <h1 className="text-3x* font-bold">
-          ⚔️ Comparad*r de Jugadores
+        <h1 className="text-3xl font-bold">
+          ⚔️ Comparador de Jugadores
         </h1>
 
-    *   <Link
-          to="/historico"*          className="
-            *g-blue-600
+        <Link
+          to="/historico"
+          className="
+            bg-blue-600
             text-white
-*           px-4
+            px-4
             py-2
- *          rounded
+            rounded
           "
-    *   >
+        >
           Regresar
-        </*ink>
+        </Link>
 
       </div>
 
-      <div cla*sName="grid md:grid-cols-2 gap-4 m*-4">
+      <div className="grid md:grid-cols-2 gap-4 mb-4">
 
         <select
-          va*ue={jugador1}
-          onChange={*e) =>
-            setJugador1(
-   *          e.target.value
-         *  )
-          }
-          classNam*="
-            border
-            *ounded
-            p-2
-          "*        >
-
-          <option value*"">
-            Jugador 1
-        * </option>
-
-          {jugadores.m*p(
-            (j) => (
-
-         *    <option
-                key={j*usuario_id}
-                value=*j.usuario_id}
-              >
-    *           {j.nombre_usuario}
-    *         </option>
-
-            )
-*         )}
-
-        </select>
-
-  *     <select
-          value={juga*or2}
+          value={jugador1}
           onChange={(e) =>
-  *         setJugador2(
-            * e.target.value
+            setJugador1(
+              e.target.value
             )
-    *     }
+          }
           className="
-     *      border
+            border
             rounded
- *          p-2
+            p-2
           "
-        *
+        >
 
           <option value="">
-    *       Jugador 2
-          </optio*>
+            Jugador 1
+          </option>
 
           {jugadores.map(
-     *      (j) => (
+            (j) => (
 
-              <opt*on
-                key={j.usuario_*d}
-                value={j.usuari*_id}
+              <option
+                key={j.usuario_id}
+                value={j.usuario_id}
               >
-             *  {j.nombre_usuario}
-             *</option>
+                {j.nombre_usuario}
+              </option>
 
             )
-         *)}
+          )}
 
         </select>
 
-      </div*
+        <select
+          value={jugador2}
+          onChange={(e) =>
+            setJugador2(
+              e.target.value
+            )
+          }
+          className="
+            border
+            rounded
+            p-2
+          "
+        >
+
+          <option value="">
+            Jugador 2
+          </option>
+
+          {jugadores.map(
+            (j) => (
+
+              <option
+                key={j.usuario_id}
+                value={j.usuario_id}
+              >
+                {j.nombre_usuario}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+      </div>
 
       <button
-        onClick={c*mparar}
+        onClick={comparar}
         className="
-      *   bg-green-600
-          text-whi*e
+          bg-green-600
+          text-white
           px-4
           py-2
-  *       rounded
+          rounded
           mb-6
-    *   "
+        "
       >
         Comparar
-    * </button>
+      </button>
 
-      {datos1 && datos* && (
+      {datos1 && datos2 && (
 
-        <div className="
-  *       bg-white
-          shadow
- *        rounded
-          p-6
-    *   ">
+        <div
+          className="
+            bg-white
+            shadow
+            rounded
+            p-6
+          "
+        >
 
-          <table className=*w-full">
+          <table className="w-full">
 
             <thead>
 
-   *          <tr>
+              <tr>
 
-                <t*></th>
+                <th></th>
 
                 <th>
-     *            {datos1.nombre_usuario*
+                  {datos1.nombre_usuario}
                 </th>
 
-          *     <th>
-                  {datos*.nombre_usuario}
-                <*th>
+                <th>
+                  {datos2.nombre_usuario}
+                </th>
 
               </tr>
 
-        *   </thead>
+            </thead>
 
             <tbody>
 
-*             <tr>
+              <tr>
 
-               *<td>
-                  🏆 Aciertos*                </td>
-
-           *    <td>
-                  {datos1*aciertos_totales}
-                */td>
-
-                <td>
-       *          {datos2.aciertos_totales*
+                <td className="p-2 font-semibold">
+                  🏆 Aciertos
                 </td>
 
-          *   </tr>
+                <td className="p-2 text-center">
+                  {datos1.aciertos_totales}
+                </td>
+
+                <td className="p-2 text-center">
+                  {datos2.aciertos_totales}
+                </td>
+
+              </tr>
 
               <tr>
 
-    *           <td>
-                  *� Jornadas
+                <td className="p-2 font-semibold">
+                  📅 Jornadas
                 </td>
 
-*               <td>
-              *   {datos1.jornadas_jugadas}
-     *          </td>
-
-                <*d>
-                  {datos2.jorna*as_jugadas}
-                </td>
-*              </tr>
-
-             *<tr>
-
-                <td>
-       *          🎯 Promedio
-            *   </td>
-
-                <td>
-   *              {datos1.promedio}
-  *             </td>
-
-              * <td>
-                  {datos2.pr*medio}
+                <td className="p-2 text-center">
+                  {datos1.jornadas_jugadas}
                 </td>
 
-    *         </tr>
+                <td className="p-2 text-center">
+                  {datos2.jornadas_jugadas}
+                </td>
 
-            </tbod*>
+              </tr>
+
+              <tr>
+
+                <td className="p-2 font-semibold">
+                  🎯 Promedio
+                </td>
+
+                <td className="p-2 text-center">
+                  {datos1.promedio}
+                </td>
+
+                <td className="p-2 text-center">
+                  {datos2.promedio}
+                </td>
+
+              </tr>
+
+            </tbody>
 
           </table>
 
-        </d*v>
+        </div>
 
       )}
 
@@ -260,4 +273,3 @@ export default function JugadorVsJugador() {
 
   );
 }
-`*
