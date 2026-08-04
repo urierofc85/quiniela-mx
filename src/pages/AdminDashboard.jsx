@@ -671,6 +671,20 @@ useEffect(() => {
   🏆 Survivor
 </Link>
 
+<Link
+  to="/acceso-pronosticos"
+  className="
+    bg-cyan-600
+    text-white
+    px-4
+    py-2
+    rounded
+    hover:bg-cyan-700
+  "
+>
+  🔒 Pronósticos Privados
+</Link>
+
 <button
   onClick={cerrarSesion}
   className="

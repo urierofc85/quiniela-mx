@@ -25,6 +25,8 @@ import Historico from "./pages/Historico";
 import JugadorHistorico from "./pages/JugadorHistorico";
 import JugadorVsJugador from "./pages/JugadorVsJugador";
 import Temporadas from "./pages/Temporadas";
+import AccesoPronosticos from "./pages/AccesoPronosticos";
+import Pronosticos from "./pages/Pronosticos";
 
 function App() {
   return (
@@ -129,6 +131,16 @@ function App() {
 <Route
   path="/temporadas"
   element={<Temporadas />}
+/>
+
+<Route
+  path="/acceso-pronosticos"
+  element={<AccesoPronosticos />}
+/>
+
+<Route
+  path="/pronosticos"
+  element={<Pronosticos />}
 />
 
       </Routes>
