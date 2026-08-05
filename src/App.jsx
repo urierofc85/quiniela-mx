@@ -19,20 +19,19 @@ import Participantes from "./pages/Participantes";
 import Dashboard from "./pages/Dashboard";
 import Survivor from "./pages/Survivor";
 import AdminSurvivor from "./pages/AdminSurvivor";
-import RankingSurvivor from "./pages/RankingSurvivor"; // 👈 1. Importar el componente
+import RankingSurvivor from "./pages/RankingSurvivor";
 import CorregirPronosticos from "./pages/CorregirPronosticos";
 import Historico from "./pages/Historico";
 import JugadorHistorico from "./pages/JugadorHistorico";
 import JugadorVsJugador from "./pages/JugadorVsJugador";
 import Temporadas from "./pages/Temporadas";
+
 import AccesoPronosticos from "./pages/AccesoPronosticos";
 import Pronosticos from "./pages/Pronosticos";
 import AdminPronosticosEquipos from "./pages/AdminPronosticosEquipos";
 import AdminPronosticosPartidos from "./pages/AdminPronosticosPartidos";
 import AdminActualizarEstadisticas from "./pages/AdminActualizarEstadisticas";
 import AdminImportarLigaMX from "./pages/AdminImportarLigaMX";
-
-
 
 function App() {
   return (
@@ -109,67 +108,71 @@ function App() {
           element={<AdminSurvivor />}
         />
 
-        {/* 👇 2. Agregar la ruta para RankingSurvivor */}
         <Route
           path="/ranking-survivor"
           element={<RankingSurvivor />}
         />
 
         <Route
-        path="/corregir-pronosticos"
-        element={<CorregirPronosticos />}
-      />
-      <Route
-      path="/historico"
-      element={<Historico />}
-       />
+          path="/corregir-pronosticos"
+          element={<CorregirPronosticos />}
+        />
 
-      <Route
-        path="/historico/:id"
-        element={<JugadorHistorico />}
-      />
+        <Route
+          path="/historico"
+          element={<Historico />}
+        />
 
-      <Route
-  path="/comparador"
-  element={<JugadorVsJugador />}
-/>
+        <Route
+          path="/historico/:id"
+          element={<JugadorHistorico />}
+        />
 
-<Route
-  path="/temporadas"
-  element={<Temporadas />}
-/>
+        <Route
+          path="/comparador"
+          element={<JugadorVsJugador />}
+        />
 
-<Route
-  path="/acceso-pronosticos"
-  element={<AccesoPronosticos />}
-/>
+        <Route
+          path="/temporadas"
+          element={<Temporadas />}
+        />
 
-<Route
-  path="/pronosticos"
-  element={<Pronosticos />}
-/>
+        {/* ========================= */}
+        {/* PRONÓSTICOS PRIVADOS */}
+        {/* ========================= */}
 
-<Route
-  path="/admin-pronosticos-equipos"
-  element={<AdminPronosticosEquipos />}
-/>
+        <Route
+          path="/acceso-pronosticos"
+          element={<AccesoPronosticos />}
+        />
+
+        <Route
+          path="/pronosticos"
+          element={<Pronosticos />}
+        />
+
+        <Route
+          path="/admin-pronosticos-equipos"
+          element={<AdminPronosticosEquipos />}
+        />
+
+        <Route
+          path="/admin-pronosticos-partidos"
+          element={<AdminPronosticosPartidos />}
+        />
+
+        <Route
+          path="/admin-actualizar-estadisticas"
+          element={<AdminActualizarEstadisticas />}
+        />
+
+        <Route
+          path="/admin-importar-ligamx"
+          element={<AdminImportarLigaMX />}
+        />
 
       </Routes>
-
-      <Route
-  path="/admin-actualizar-estadisticas"
-  element={<AdminActualizarEstadisticas />}
-/>
-
-      <Route
-  path="/admin-pronosticos-partidos"
-  element={<AdminPronosticosPartidos />}
-/>
-
-<Route
-  path="/admin-importar-ligamx"
-  element={<AdminImportarLigaMX />}
-/>
     </BrowserRouter>
   );
 }
