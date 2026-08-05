@@ -1,8 +1,19 @@
 import { useState } from "react";
+import { supabase } from "../services/supabase";
 
 export default function AdminImportarSofaScore() {
   const [texto, setTexto] = useState("");
   const [equipos, setEquipos] = useState([]);
+  const [importando, setImportando] =
+    useState(false);
+
+  const normalizar = (texto) => {
+    return texto
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  };
 
   const procesar = () => {
     const datos = texto
@@ -22,13 +33,21 @@ export default function AdminImportarSofaScore() {
         continue;
       }
 
-      const nombreLargo = datos[i + 1];
-      const equipo = datos[i + 2];
+      const nombreLargo =
+        datos[i + 1];
 
-      const partidos = Number(datos[i + 3]);
+      const equipo =
+        datos[i + 2];
+
+      const partidos = Number(
+        datos[i + 3]
+      );
 
       const diferencia = Number(
-        String(datos[i + 7]).replace("+", "")
+        String(datos[i + 7]).replace(
+          "+",
+          ""
+        )
       );
 
       const marcador =
@@ -65,25 +84,142 @@ export default function AdminImportarSofaScore() {
     setEquipos(resultado);
   };
 
+  const importarPronosticos =
+    async () => {
+      try {
+        setImportando(true);
+
+        const {
+          data: aliases,
+          error,
+        } = await supabase
+          .from(
+            "pronosticos_alias_equipos"
+          )
+          .select("*");
+
+        if (error) {
+          alert(error.message);
+          return;
+        }
+
+        let actualizados = 0;
+
+        const noEncontrados =
+          [];
+
+        for (const equipo of equipos) {
+          const alias =
+            aliases.find(
+              (a) =>
+                normalizar(
+                  a.alias
+                ) ===
+                normalizar(
+                  equipo.equipo
+                )
+            );
+
+          if (!alias) {
+            noEncontrados.push(
+              equipo.equipo
+            );
+            continue;
+          }
+
+          const {
+            error: updateError,
+          } = await supabase
+            .from(
+              "pronosticos_equipos"
+            )
+            .update({
+              posicion:
+                equipo.posicion,
+
+              partidos:
+                equipo.partidos,
+
+              goles_favor:
+                equipo.goles_favor,
+
+              goles_contra:
+                equipo.goles_contra,
+
+              diferencia_goles:
+                equipo.diferencia_goles,
+
+              puntos:
+                equipo.puntos,
+            })
+            .eq(
+              "equipo",
+              alias.equipo_oficial
+            );
+
+          if (updateError) {
+            console.error(
+              updateError
+            );
+
+            noEncontrados.push(
+              equipo.equipo
+            );
+
+            continue;
+          }
+
+          actualizados++;
+        }
+
+        if (
+          noEncontrados.length > 0
+        ) {
+          alert(
+            `Importación completada
+
+Equipos actualizados: ${actualizados}
+
+Equipos no encontrados:
+
+${noEncontrados.join(
+  "\n"
+)}`
+          );
+        } else {
+          alert(
+            `Importación completada
+
+Equipos actualizados: ${actualizados}`
+          );
+        }
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+      } finally {
+        setImportando(false);
+      }
+    };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
-
       <h1 className="text-3xl font-bold mb-6">
         📊 Importar SofaScore
       </h1>
 
       <div className="bg-white p-6 rounded shadow">
-
         <p className="mb-4">
-          Copia y pega la tabla completa de
-          SofaScore.
+          Copia y pega la tabla
+          completa de SofaScore.
         </p>
 
         <textarea
           rows={15}
           value={texto}
           onChange={(e) =>
-            setTexto(e.target.value)
+            setTexto(
+              e.target.value
+            )
           }
           className="
             w-full
@@ -107,19 +243,15 @@ export default function AdminImportarSofaScore() {
         >
           Analizar SofaScore
         </button>
-
       </div>
 
       {equipos.length > 0 && (
-
         <div className="mt-6 bg-white p-6 rounded shadow">
-
           <h2 className="text-xl font-bold mb-4">
             Vista Previa
           </h2>
 
           <table className="w-full border">
-
             <thead>
               <tr className="bg-gray-100">
                 <th className="border p-2">
@@ -153,51 +285,81 @@ export default function AdminImportarSofaScore() {
             </thead>
 
             <tbody>
+              {equipos.map(
+                (equipo) => (
+                  <tr
+                    key={
+                      equipo.equipo
+                    }
+                  >
+                    <td className="border p-2">
+                      {
+                        equipo.posicion
+                      }
+                    </td>
 
-              {equipos.map((equipo) => (
+                    <td className="border p-2">
+                      {
+                        equipo.equipo
+                      }
+                    </td>
 
-                <tr key={equipo.equipo}>
+                    <td className="border p-2">
+                      {
+                        equipo.partidos
+                      }
+                    </td>
 
-                  <td className="border p-2">
-                    {equipo.posicion}
-                  </td>
+                    <td className="border p-2">
+                      {
+                        equipo.goles_favor
+                      }
+                    </td>
 
-                  <td className="border p-2">
-                    {equipo.equipo}
-                  </td>
+                    <td className="border p-2">
+                      {
+                        equipo.goles_contra
+                      }
+                    </td>
 
-                  <td className="border p-2">
-                    {equipo.partidos}
-                  </td>
+                    <td className="border p-2">
+                      {
+                        equipo.diferencia_goles
+                      }
+                    </td>
 
-                  <td className="border p-2">
-                    {equipo.goles_favor}
-                  </td>
-
-                  <td className="border p-2">
-                    {equipo.goles_contra}
-                  </td>
-
-                  <td className="border p-2">
-                    {equipo.diferencia_goles}
-                  </td>
-
-                  <td className="border p-2">
-                    {equipo.puntos}
-                  </td>
-
-                </tr>
-
-              ))}
-
+                    <td className="border p-2">
+                      {
+                        equipo.puntos
+                      }
+                    </td>
+                  </tr>
+                )
+              )}
             </tbody>
-
           </table>
 
+          <button
+            onClick={
+              importarPronosticos
+            }
+            disabled={importando}
+            className="
+              mt-6
+              bg-green-600
+              text-white
+              px-6
+              py-3
+              rounded
+              hover:bg-green-700
+            "
+          >
+            {importando
+              ? "Importando..."
+              : "✅ Importar a Pronósticos"}
+          </button>
         </div>
-
       )}
-
     </div>
   );
 }
