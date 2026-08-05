@@ -33,6 +33,7 @@ import AdminPronosticosPartidos from "./pages/AdminPronosticosPartidos";
 import AdminActualizarEstadisticas from "./pages/AdminActualizarEstadisticas";
 import AdminImportarLigaMX from "./pages/AdminImportarLigaMX";
 import AdminPronosticos from "./pages/AdminPronosticos";
+import AdminImportarSofaScore from "./pages/AdminImportarSofaScore";
 
 function App() {
   return (
@@ -177,6 +178,11 @@ function App() {
           path="/admin-importar-ligamx"
           element={<AdminImportarLigaMX />}
         />
+
+        <Route
+  path="/admin-importar-sofascore"
+  element={<AdminImportarSofaScore />}
+/>
 
       </Routes>
     </BrowserRouter>

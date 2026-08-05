@@ -130,6 +130,26 @@ export default function AdminPronosticos() {
           </div>
         </Link>
 
+        <Link
+  to="/admin-importar-sofascore"
+  className="
+    bg-emerald-600
+    text-white
+    p-5
+    rounded-lg
+    shadow
+    hover:bg-emerald-700
+  "
+>
+  <div className="text-xl font-bold">
+    📊 Importar SofaScore
+  </div>
+
+  <div className="text-sm mt-2">
+    Analizar tabla de SofaScore
+  </div>
+</Link>
+
       </div>
 
     </div>
