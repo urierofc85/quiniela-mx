@@ -2,25 +2,72 @@ import { useState } from "react";
 
 export default function AdminImportarSofaScore() {
   const [texto, setTexto] = useState("");
-  const [lineas, setLineas] = useState([]);
+  const [equipos, setEquipos] = useState([]);
 
   const procesar = () => {
-    const resultado = texto
+    const datos = texto
       .split("\n")
-      .map((linea) => linea.trim())
+      .map((v) => v.trim())
       .filter(Boolean);
 
-    console.log("TEXTO CRUDO:");
-    console.log(texto);
+    const resultado = [];
 
-    console.log("LINEAS:");
-    console.log(resultado);
+    let i = 0;
 
-    setLineas(resultado);
+    while (i < datos.length) {
+      const posicion = Number(datos[i]);
+
+      if (isNaN(posicion)) {
+        i++;
+        continue;
+      }
+
+      const nombreLargo = datos[i + 1];
+      const equipo = datos[i + 2];
+
+      const partidos = Number(datos[i + 3]);
+
+      const diferencia = Number(
+        String(datos[i + 7]).replace("+", "")
+      );
+
+      const marcador =
+        datos[i + 8] || "0:0";
+
+      const [gf, gc] =
+        marcador.split(":");
+
+      const puntos =
+        Number(datos[i + 12]);
+
+      resultado.push({
+        posicion,
+        nombreLargo,
+        equipo,
+        partidos,
+        goles_favor:
+          Number(gf),
+        goles_contra:
+          Number(gc),
+        diferencia_goles:
+          diferencia,
+        puntos,
+      });
+
+      i += 13;
+    }
+
+    console.log(
+      "EQUIPOS DETECTADOS",
+      resultado
+    );
+
+    setEquipos(resultado);
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto">
+
       <h1 className="text-3xl font-bold mb-6">
         📊 Importar SofaScore
       </h1>
@@ -28,7 +75,8 @@ export default function AdminImportarSofaScore() {
       <div className="bg-white p-6 rounded shadow">
 
         <p className="mb-4">
-          Copia y pega directamente desde SofaScore.
+          Copia y pega la tabla completa de
+          SofaScore.
         </p>
 
         <textarea
@@ -57,12 +105,12 @@ export default function AdminImportarSofaScore() {
             hover:bg-blue-700
           "
         >
-          Analizar Pegar
+          Analizar SofaScore
         </button>
 
       </div>
 
-      {lineas.length > 0 && (
+      {equipos.length > 0 && (
 
         <div className="mt-6 bg-white p-6 rounded shadow">
 
@@ -70,28 +118,86 @@ export default function AdminImportarSofaScore() {
             Vista Previa
           </h2>
 
-          <div className="space-y-2">
+          <table className="w-full border">
 
-            {lineas.map(
-              (linea, index) => (
-                <div
-                  key={index}
-                  className="
-                    border-b
-                    py-2
-                    text-sm
-                  "
-                >
-                  {index + 1}. {linea}
-                </div>
-              )
-            )}
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border p-2">
+                  Pos
+                </th>
 
-          </div>
+                <th className="border p-2">
+                  Equipo
+                </th>
+
+                <th className="border p-2">
+                  PJ
+                </th>
+
+                <th className="border p-2">
+                  GF
+                </th>
+
+                <th className="border p-2">
+                  GC
+                </th>
+
+                <th className="border p-2">
+                  DIF
+                </th>
+
+                <th className="border p-2">
+                  PTS
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+
+              {equipos.map((equipo) => (
+
+                <tr key={equipo.equipo}>
+
+                  <td className="border p-2">
+                    {equipo.posicion}
+                  </td>
+
+                  <td className="border p-2">
+                    {equipo.equipo}
+                  </td>
+
+                  <td className="border p-2">
+                    {equipo.partidos}
+                  </td>
+
+                  <td className="border p-2">
+                    {equipo.goles_favor}
+                  </td>
+
+                  <td className="border p-2">
+                    {equipo.goles_contra}
+                  </td>
+
+                  <td className="border p-2">
+                    {equipo.diferencia_goles}
+                  </td>
+
+                  <td className="border p-2">
+                    {equipo.puntos}
+                  </td>
+
+                </tr>
+
+              ))}
+
+            </tbody>
+
+          </table>
 
         </div>
 
       )}
+
     </div>
   );
-}   
+}
