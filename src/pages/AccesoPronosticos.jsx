@@ -2,45 +2,37 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function AccesoPronosticos() {
-
   const navigate = useNavigate();
 
   const [password, setPassword] =
     useState("");
 
   const validarAcceso = () => {
-
     if (password === "Pronosticos2026") {
-
       sessionStorage.setItem(
         "pronosticos_autorizado",
         "true"
       );
 
       navigate(
-        "/pronosticos"
+        "/admin-pronosticos"
       );
 
       return;
-
     }
 
     alert(
       "Contraseña incorrecta"
     );
-
   };
 
   return (
-
     <div className="max-w-md mx-auto p-6">
-
       <h1 className="text-3xl font-bold mb-6">
         🔒 Acceso Privado
       </h1>
 
       <div className="bg-white shadow rounded p-6">
-
         <input
           type="password"
           placeholder="Contraseña"
@@ -64,6 +56,7 @@ export default function AccesoPronosticos() {
           className="
             w-full
             bg-blue-600
+            hover:bg-blue-700
             text-white
             py-3
             rounded
@@ -71,11 +64,7 @@ export default function AccesoPronosticos() {
         >
           Ingresar
         </button>
-
       </div>
-
     </div>
-
   );
-
 }

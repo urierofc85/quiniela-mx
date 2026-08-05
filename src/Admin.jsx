@@ -379,20 +379,7 @@ export default function Admin() {
           Corregir Pronósticos
         </Link>
 
-        <Link
-  to="/admin-pronosticos"
-  className="
-    bg-cyan-600
-    text-white
-    px-4
-    py-2
-    rounded
-    hover:bg-cyan-700
-  "
->
-  🔒 Pronósticos Privados
-</Link>
-        
+              
       </div>
 
       <h2 className="text-2xl font-bold mb-4">
