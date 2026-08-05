@@ -32,6 +32,7 @@ import AdminPronosticosEquipos from "./pages/AdminPronosticosEquipos";
 import AdminPronosticosPartidos from "./pages/AdminPronosticosPartidos";
 import AdminActualizarEstadisticas from "./pages/AdminActualizarEstadisticas";
 import AdminImportarLigaMX from "./pages/AdminImportarLigaMX";
+import AdminPronosticos from "./pages/AdminPronosticos";
 
 function App() {
   return (
@@ -165,6 +166,11 @@ function App() {
         <Route
           path="/admin-actualizar-estadisticas"
           element={<AdminActualizarEstadisticas />}
+        />
+
+        <Route
+        path="/admin-pronosticos"
+        element={<AdminPronosticos />}
         />
 
         <Route
