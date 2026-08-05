@@ -4,11 +4,32 @@ import { supabase } from "../services/supabase";
 export default function AdminImportarLigaMX() {
   const [texto, setTexto] = useState("");
 
+  const normalizar = (texto) => {
+    return texto
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  };
+
   const importarDatos = async () => {
     try {
       const lineas = texto
         .trim()
         .split("\n");
+
+      const { data: aliases, error: aliasError } =
+        await supabase
+          .from("pronosticos_alias_equipos")
+          .select("*");
+
+      if (aliasError) {
+        alert(aliasError.message);
+        return;
+      }
+
+      let actualizados = 0;
+      const noEncontrados = [];
 
       for (const linea of lineas) {
         const datos = linea
@@ -16,46 +37,101 @@ export default function AdminImportarLigaMX() {
           .map((v) => v.trim());
 
         if (datos.length < 7) {
+          console.log(
+            "Línea ignorada:",
+            linea
+          );
           continue;
         }
 
         const [
-          equipo,
+          equipoImportado,
           posicion,
           pj,
           gf,
           gc,
           puntos,
-          diferencia
+          diferencia,
         ] = datos;
 
-        await supabase
-          .from("pronosticos_equipos")
-          .update({
-            posicion:
-              Number(posicion),
+        const aliasEncontrado =
+          aliases.find(
+            (a) =>
+              normalizar(a.alias) ===
+              normalizar(equipoImportado)
+          );
 
-            partidos:
-              Number(pj),
+        if (!aliasEncontrado) {
+          noEncontrados.push(
+            equipoImportado
+          );
+          continue;
+        }
 
-            goles_favor:
-              Number(gf),
+        const equipoOficial =
+          aliasEncontrado.equipo_oficial;
 
-            goles_contra:
-              Number(gc),
+        const { error: updateError } =
+          await supabase
+            .from("pronosticos_equipos")
+            .update({
+              posicion:
+                Number(posicion),
 
-            puntos:
-              Number(puntos),
+              partidos:
+                Number(pj),
 
-            diferencia_goles:
-              Number(diferencia),
-          })
-          .eq("equipo", equipo);
+              goles_favor:
+                Number(gf),
+
+              goles_contra:
+                Number(gc),
+
+              puntos:
+                Number(puntos),
+
+              diferencia_goles:
+                Number(diferencia),
+            })
+            .eq(
+              "equipo",
+              equipoOficial
+            );
+
+        if (updateError) {
+          console.error(
+            updateError
+          );
+
+          noEncontrados.push(
+            equipoImportado
+          );
+
+          continue;
+        }
+
+        actualizados++;
       }
 
-      alert(
-        "Datos importados correctamente"
-      );
+      if (
+        noEncontrados.length > 0
+      ) {
+        alert(
+          `Importación terminada
+
+Equipos actualizados: ${actualizados}
+
+Alias no encontrados:
+
+${noEncontrados.join("\n")}`
+        );
+      } else {
+        alert(
+          `Importación exitosa
+
+Equipos actualizados: ${actualizados}`
+        );
+      }
     } catch (error) {
       console.error(error);
       alert(error.message);
@@ -72,20 +148,31 @@ export default function AdminImportarLigaMX() {
       <div className="bg-white p-6 rounded shadow">
 
         <p className="mb-4">
-          Pega los datos con formato:
+          Formato esperado:
         </p>
 
         <pre className="bg-gray-100 p-4 rounded mb-4">
-{`America | 1 | 3 | 7 | 2 | 9 | 5
-Toluca | 2 | 3 | 6 | 3 | 7 | 3
-Monterrey | 3 | 3 | 5 | 3 | 7 | 2`}
+{`America|1|3|7|2|9|5
+Toluca|2|3|6|3|7|3
+Monterrey|3|3|5|3|7|2`}
         </pre>
+
+        <p className="text-sm text-gray-600 mb-4">
+          El sistema buscará automáticamente
+          equivalencias usando la tabla:
+          <strong>
+            {" "}
+            pronosticos_alias_equipos
+          </strong>
+        </p>
 
         <textarea
           rows={12}
           value={texto}
           onChange={(e) =>
-            setTexto(e.target.value)
+            setTexto(
+              e.target.value
+            )
           }
           className="
             w-full
@@ -111,6 +198,7 @@ Monterrey | 3 | 3 | 5 | 3 | 7 | 2`}
         </button>
 
       </div>
+
     </div>
   );
 }
