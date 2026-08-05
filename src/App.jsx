@@ -27,6 +27,12 @@ import JugadorVsJugador from "./pages/JugadorVsJugador";
 import Temporadas from "./pages/Temporadas";
 import AccesoPronosticos from "./pages/AccesoPronosticos";
 import Pronosticos from "./pages/Pronosticos";
+import AdminPronosticosEquipos from "./pages/AdminPronosticosEquipos";
+import AdminPronosticosPartidos from "./pages/AdminPronosticosPartidos";
+import AdminActualizarEstadisticas from "./pages/AdminActualizarEstadisticas";
+import AdminImportarLigaMX from "./pages/AdminImportarLigaMX";
+
+
 
 function App() {
   return (
@@ -143,7 +149,27 @@ function App() {
   element={<Pronosticos />}
 />
 
+<Route
+  path="/admin-pronosticos-equipos"
+  element={<AdminPronosticosEquipos />}
+/>
+
       </Routes>
+
+      <Route
+  path="/admin-actualizar-estadisticas"
+  element={<AdminActualizarEstadisticas />}
+/>
+
+      <Route
+  path="/admin-pronosticos-partidos"
+  element={<AdminPronosticosPartidos />}
+/>
+
+<Route
+  path="/admin-importar-ligamx"
+  element={<AdminImportarLigaMX />}
+/>
     </BrowserRouter>
   );
 }

@@ -379,6 +379,62 @@ export default function Admin() {
           Corregir Pronósticos
         </Link>
 
+        <Link
+  to="/admin-pronosticos-partidos"
+  className="
+    bg-teal-600
+    text-white
+    px-4
+    py-2
+    rounded
+    hover:bg-teal-700
+  "
+>
+  ⚽ Partidos Pronósticos
+</Link>
+
+<Link
+  to="/admin-actualizar-estadisticas"
+  className="
+    bg-amber-600
+    text-white
+    px-4
+    py-2
+    rounded
+    hover:bg-amber-700
+  "
+>
+  📊 Actualizar Datos
+</Link>
+
+        <Link
+  to="/admin-pronosticos-equipos"
+  className="
+    bg-indigo-600
+    text-white
+    px-4
+    py-2
+    rounded
+    hover:bg-indigo-700
+  "
+>
+  ⚙️ Equipos Pronósticos
+</Link>
+
+<Link
+  to="/admin-importar-ligamx"
+  className="
+    bg-sky-600
+    text-white
+    px-4
+    py-2
+    rounded
+    hover:bg-sky-700
+  "
+>
+  📥 Importar Liga MX
+</Link>
+
       </div>
 
       <h2 className="text-2xl font-bold mb-4">
