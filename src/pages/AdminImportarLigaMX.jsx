@@ -14,14 +14,55 @@ export default function AdminImportarLigaMX() {
 
   const importarDatos = async () => {
     try {
+      console.log("==== INICIO IMPORTACION ====");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      console.log("SESSION:", session);
+
+      const pruebaAlias = await supabase
+        .from("pronosticos_alias_equipos")
+        .select("*")
+        .limit(3);
+
+      console.log(
+        "PRUEBA ALIAS:",
+        pruebaAlias
+      );
+
+      const pruebaEquipos =
+        await supabase
+          .from("pronosticos_equipos")
+          .select("*")
+          .limit(3);
+
+      console.log(
+        "PRUEBA EQUIPOS:",
+        pruebaEquipos
+      );
+
       const lineas = texto
         .trim()
         .split("\n");
 
-      const { data: aliases, error: aliasError } =
-        await supabase
-          .from("pronosticos_alias_equipos")
-          .select("*");
+      const {
+        data: aliases,
+        error: aliasError,
+      } = await supabase
+        .from("pronosticos_alias_equipos")
+        .select("*");
+
+      console.log(
+        "ALIASES:",
+        aliases
+      );
+
+      console.log(
+        "ALIAS ERROR:",
+        aliasError
+      );
 
       if (aliasError) {
         alert(aliasError.message);
@@ -35,6 +76,16 @@ export default function AdminImportarLigaMX() {
         const datos = linea
           .split("|")
           .map((v) => v.trim());
+
+        console.log(
+          "LINEA:",
+          linea
+        );
+
+        console.log(
+          "DATOS:",
+          datos
+        );
 
         if (datos.length < 7) {
           console.log(
@@ -54,26 +105,46 @@ export default function AdminImportarLigaMX() {
           diferencia,
         ] = datos;
 
+        console.log(
+          "Equipo importado:",
+          equipoImportado
+        );
+
         const aliasEncontrado =
           aliases.find(
             (a) =>
               normalizar(a.alias) ===
-              normalizar(equipoImportado)
+              normalizar(
+                equipoImportado
+              )
           );
+
+        console.log(
+          "Alias encontrado:",
+          aliasEncontrado
+        );
 
         if (!aliasEncontrado) {
           noEncontrados.push(
             equipoImportado
           );
+
           continue;
         }
 
         const equipoOficial =
           aliasEncontrado.equipo_oficial;
 
-        const { error: updateError } =
+        console.log(
+          "Equipo oficial:",
+          equipoOficial
+        );
+
+        const respuesta =
           await supabase
-            .from("pronosticos_equipos")
+            .from(
+              "pronosticos_equipos"
+            )
             .update({
               posicion:
                 Number(posicion),
@@ -96,11 +167,18 @@ export default function AdminImportarLigaMX() {
             .eq(
               "equipo",
               equipoOficial
-            );
+            )
+            .select();
 
-        if (updateError) {
+        console.log(
+          "RESPUESTA UPDATE:",
+          respuesta
+        );
+
+        if (respuesta.error) {
           console.error(
-            updateError
+            "ERROR UPDATE:",
+            respuesta.error
           );
 
           noEncontrados.push(
@@ -112,6 +190,16 @@ export default function AdminImportarLigaMX() {
 
         actualizados++;
       }
+
+      console.log(
+        "ACTUALIZADOS:",
+        actualizados
+      );
+
+      console.log(
+        "NO ENCONTRADOS:",
+        noEncontrados
+      );
 
       if (
         noEncontrados.length > 0
@@ -133,20 +221,22 @@ Equipos actualizados: ${actualizados}`
         );
       }
     } catch (error) {
-      console.error(error);
+      console.error(
+        "ERROR GENERAL:",
+        error
+      );
+
       alert(error.message);
     }
   };
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-
       <h1 className="text-3xl font-bold mb-6">
         📥 Importar Liga MX
       </h1>
 
       <div className="bg-white p-6 rounded shadow">
-
         <p className="mb-4">
           Formato esperado:
         </p>
@@ -156,15 +246,6 @@ Equipos actualizados: ${actualizados}`
 Toluca|2|3|6|3|7|3
 Monterrey|3|3|5|3|7|2`}
         </pre>
-
-        <p className="text-sm text-gray-600 mb-4">
-          El sistema buscará automáticamente
-          equivalencias usando la tabla:
-          <strong>
-            {" "}
-            pronosticos_alias_equipos
-          </strong>
-        </p>
 
         <textarea
           rows={12}
@@ -196,9 +277,7 @@ Monterrey|3|3|5|3|7|2`}
         >
           Importar
         </button>
-
       </div>
-
     </div>
   );
 }
