@@ -21,90 +21,33 @@ const procesar = () => {
     .map((v) => v.trim())
     .filter(Boolean);
 
-  const resultado = [];
+  const equipos = [];
 
-  let i = 0;
-
-  while (i + 8 < datos.length) {
-    const posicion = Number(datos[i]);
+  for (let i = 0; i < datos.length; i++) {
+    const actual = datos[i];
+    const siguiente = datos[i + 1];
+    const siguiente2 = datos[i + 2];
 
     if (
-      isNaN(posicion) ||
-      posicion < 1 ||
-      posicion > 18
+      !isNaN(Number(actual)) &&
+      isNaN(Number(siguiente)) &&
+      !isNaN(Number(siguiente2))
     ) {
-      i++;
-      continue;
+      equipos.push({
+        posicion: actual,
+        equipo: siguiente,
+      });
     }
-
-    const equipo = datos[i + 1];
-
-  const partidos =
-  Number(datos[i + 2]);
-
-const ganados =
-  Number(datos[i + 3]);
-
-const empatados =
-  Number(datos[i + 4]);
-
-const perdidos =
-  Number(datos[i + 5]);
-
-const diferencia =
-  Number(
-    String(datos[i + 6]).replace("+", "")
-  );
-
-const marcador =
-  datos[i + 7];
-
-const [gf, gc] =
-  marcador.split(":");
-
-const puntos =
-  Number(datos[i + 8]);
-
-    resultado.push({
-      posicion,
-      equipo,
-      partidos,
-      ganados,
-      empatados,
-      perdidos,
-      goles_favor:
-        Number(gf),
-      goles_contra:
-        Number(gc),
-      diferencia_goles:
-        diferencia,
-      puntos,
-    });
-
-    i += 9;
   }
 
   alert(
-  resultado
-    .slice(0, 5)
-    .map(
-      (e) =>
-        `
-Pos:${e.posicion}
-Equipo:${e.equipo}
-PJ:${e.partidos}
-W:${e.ganados}
-D:${e.empatados}
-L:${e.perdidos}
-GF:${e.goles_favor}
-GC:${e.goles_contra}
-PTS:${e.puntos}
-`
-    )
-    .join("\n----------------\n")
-);
-
-setEquipos(resultado);
+    equipos
+      .map(
+        (e) =>
+          `${e.posicion} - ${e.equipo}`
+      )
+      .join("\n")
+  );
 };
 
 const importarPronosticos = async () => {
