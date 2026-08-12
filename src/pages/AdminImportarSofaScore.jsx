@@ -292,6 +292,26 @@ const importarPronosticos = async () => {
                 </th>
 
                 <th className="border p-2">
+                  W
+                </th>
+
+                <th className="border p-2">
+                  D
+                </th>
+
+                <th className="border p-2">
+                  L
+                </th>
+
+                <th className="border p-2">
+  GF
+</th>
+
+<th className="border p-2">
+  GC
+</th>
+                
+                <th className="border p-2">
                   DIF
                 </th>
 
@@ -326,6 +346,26 @@ const importarPronosticos = async () => {
                         equipo.partidos
                       }
                     </td>
+                    
+                    <td className="border p-2">
+                     {equipo.ganados}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.empatados}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.perdidos}
+                    </td>
+
+                    <td className="border p-2">
+  {equipo.goles_favor}
+</td>
+
+<td className="border p-2">
+  {equipo.goles_contra}
+</td>
 
                     <td className="border p-2">
                       {
