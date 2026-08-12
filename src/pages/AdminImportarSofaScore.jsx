@@ -85,22 +85,26 @@ const puntos =
   }
 
   alert(
-    `Equipos detectados: ${resultado.length}`
-  );
-
-  setEquipos(resultado);
-  alert(
   resultado
-    .slice(0, 3)
+    .slice(0, 5)
     .map(
       (e) =>
-        `${e.equipo}
+        `
+Pos:${e.posicion}
+Equipo:${e.equipo}
+PJ:${e.partidos}
 W:${e.ganados}
 D:${e.empatados}
-L:${e.perdidos}`
+L:${e.perdidos}
+GF:${e.goles_favor}
+GC:${e.goles_contra}
+PTS:${e.puntos}
+`
     )
-    .join("\n\n")
+    .join("\n----------------\n")
 );
+
+setEquipos(resultado);
 };
 
 const importarPronosticos = async () => {
