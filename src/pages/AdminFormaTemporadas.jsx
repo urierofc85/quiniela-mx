@@ -8,19 +8,19 @@ export default function AdminFormaTemporadas() {
   const [tipo, setTipo] =
     useState("GENERAL");
 
-  const procesar = () => {
-    const datos = texto
-      .split("\n")
-      .map((v) => v.trim())
-      .filter(Boolean);
+ const procesar = () => {
+  const datos = texto
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
 
-    alert(
-      datos
-        .slice(0, 150)
-        .map((v, i) => `${i}: ${v}`)
-        .join("\n")
-    );
-  };
+  alert(
+    datos
+      .slice(0, 150)
+      .map((v, i) => `${i}: ${v}`)
+      .join("\n")
+  );
+};
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
