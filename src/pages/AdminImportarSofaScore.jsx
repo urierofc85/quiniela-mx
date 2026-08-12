@@ -86,16 +86,9 @@ const procesar = () => {
 
   puntos,
 });
+}
 
-alert(
-`${equipo}
 
-W:${ganados}
-D:${empatados}
-L:${perdidos}`
-);
-
- 
   const equiposUnicos =
     resultado.filter(
       (equipo, index, self) =>
