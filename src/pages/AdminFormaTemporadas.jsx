@@ -13,110 +13,19 @@ export default function AdminFormaTemporadas() {
     useState("GENERAL");
 
   const procesar = () => {
-    const datos = texto
-      .replace(/<[^>]*>/g, "")
-      .split("\n")
-      .map((v) => v.trim())
-      .filter(Boolean);
+  const datos = texto
+    .replace(/<[^>]*>/g, "")
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
 
-    const resultado = [];
-
-    for (let i = 0; i < datos.length - 8; i++) {
-      const posicion = Number(datos[i]);
-
-      if (
-        isNaN(posicion) ||
-        posicion < 1 ||
-        posicion > 18
-      ) {
-        continue;
-      }
-
-      const equipo = datos[i + 1];
-
-      const partidos =
-        Number(datos[i + 2]);
-
-      const victorias =
-        Number(datos[i + 3]);
-
-      const empates =
-        Number(datos[i + 4]);
-
-      const derrotas =
-        Number(datos[i + 5]);
-
-      const diferenciaTexto =
-        datos[i + 6];
-
-      const marcador =
-        datos[i + 7];
-
-      const puntos = Number(
-        datos[i + 8]
-      );
-
-      if (
-        !marcador.includes(":")
-      ) {
-        continue;
-      }
-
-      const diferencia =
-        Number(
-          diferenciaTexto.replace(
-            "+",
-            ""
-          )
-        );
-
-      const [gf, gc] =
-        marcador.split(":");
-
-      resultado.push({
-        posicion,
-        equipo,
-
-        partidos,
-
-        victorias,
-        empates,
-        derrotas,
-
-        goles_favor:
-          Number(gf),
-
-        goles_contra:
-          Number(gc),
-
-        diferencia_goles:
-          diferencia,
-
-        puntos,
-      });
-    }
-
-    const equiposUnicos =
-      resultado.filter(
-        (
-          equipo,
-          index,
-          self
-        ) =>
-          index ===
-          self.findIndex(
-            (e) =>
-              e.posicion ===
-              equipo.posicion
-          )
-      );
-
-    setEquipos(equiposUnicos);
-
-    alert(
-      `Equipos detectados: ${equiposUnicos.length}`
-    );
-  };
+  alert(
+    datos
+      .slice(0, 60)
+      .map((v, i) => `${i}: ${v}`)
+      .join("\n")
+  );
+};
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
