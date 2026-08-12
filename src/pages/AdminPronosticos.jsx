@@ -170,6 +170,26 @@ export default function AdminPronosticos() {
   </div>
 </Link>
 
+<Link
+  to="/admin-importar-calendario-score"
+  className="
+    bg-orange-600
+    text-white
+    p-5
+    rounded-lg
+    shadow
+    hover:bg-orange-700
+  "
+>
+  <div className="text-xl font-bold">
+    📅 Calendario SofaScore
+  </div>
+
+  <div className="text-sm mt-2">
+    Importar partidos de Liga MX
+  </div>
+</Link>
+
       </div>
 
     </div>
