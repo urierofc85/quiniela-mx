@@ -2,112 +2,125 @@ import { useState } from "react";
 
 export default function AdminFormaTemporadas() {
   const [texto, setTexto] = useState("");
+
+  const [equipos, setEquipos] =
+    useState([]);
+
   const [temporada, setTemporada] =
-    useState("Apertura 2025");
+    useState("Apertura 2025-2026");
 
   const [tipo, setTipo] =
     useState("GENERAL");
 
- const procesar = () => {
-  const datos = texto
-    .replace(/<[^>]*>/g, "")
-    .split("\n")
-    .map((v) => v.trim())
-    .filter(Boolean);
+  const procesar = () => {
+    const datos = texto
+      .replace(/<[^>]*>/g, "")
+      .split("\n")
+      .map((v) => v.trim())
+      .filter(Boolean);
 
-  const resultado = [];
+    const resultado = [];
 
-  for (let i = 0; i < datos.length - 8; i++) {
-    const posicion = Number(datos[i]);
+    for (let i = 0; i < datos.length - 8; i++) {
+      const posicion = Number(datos[i]);
 
-    if (
-      isNaN(posicion) ||
-      posicion < 1 ||
-      posicion > 18
-    ) {
-      continue;
-    }
+      if (
+        isNaN(posicion) ||
+        posicion < 1 ||
+        posicion > 18
+      ) {
+        continue;
+      }
 
-    const equipo = datos[i + 1];
+      const equipo = datos[i + 1];
 
-    const partidos = Number(datos[i + 2]);
+      const partidos =
+        Number(datos[i + 2]);
 
-    const victorias = Number(datos[i + 3]);
+      const victorias =
+        Number(datos[i + 3]);
 
-    const empates = Number(datos[i + 4]);
+      const empates =
+        Number(datos[i + 4]);
 
-    const derrotas = Number(datos[i + 5]);
+      const derrotas =
+        Number(datos[i + 5]);
 
-    const diferenciaTexto =
-      datos[i + 6];
+      const diferenciaTexto =
+        datos[i + 6];
 
-    const marcador =
-      datos[i + 7];
+      const marcador =
+        datos[i + 7];
 
-    const puntos = Number(
-      datos[i + 8]
-    );
-
-    if (
-      !marcador.includes(":")
-    ) {
-      continue;
-    }
-
-    const diferencia =
-      Number(
-        diferenciaTexto.replace(
-          "+",
-          ""
-        )
+      const puntos = Number(
+        datos[i + 8]
       );
 
-    const [gf, gc] =
-      marcador.split(":");
+      if (
+        !marcador.includes(":")
+      ) {
+        continue;
+      }
 
-    resultado.push({
-      posicion,
-      equipo,
+      const diferencia =
+        Number(
+          diferenciaTexto.replace(
+            "+",
+            ""
+          )
+        );
 
-      partidos,
+      const [gf, gc] =
+        marcador.split(":");
 
-      victorias,
-      empates,
-      derrotas,
+      resultado.push({
+        posicion,
+        equipo,
 
-      goles_favor:
-        Number(gf),
+        partidos,
 
-      goles_contra:
-        Number(gc),
+        victorias,
+        empates,
+        derrotas,
 
-      diferencia_goles:
-        diferencia,
+        goles_favor:
+          Number(gf),
 
-      puntos,
-    });
-  }
+        goles_contra:
+          Number(gc),
 
-  const equiposUnicos =
-    resultado.filter(
-      (equipo, index, self) =>
-        index ===
-        self.findIndex(
-          (e) =>
-            e.posicion ===
-            equipo.posicion
-        )
+        diferencia_goles:
+          diferencia,
+
+        puntos,
+      });
+    }
+
+    const equiposUnicos =
+      resultado.filter(
+        (
+          equipo,
+          index,
+          self
+        ) =>
+          index ===
+          self.findIndex(
+            (e) =>
+              e.posicion ===
+              equipo.posicion
+          )
+      );
+
+    setEquipos(equiposUnicos);
+
+    alert(
+      `Equipos detectados: ${equiposUnicos.length}`
     );
-
-  setEquipos(equiposUnicos);
-
-  alert(
-    `Equipos detectados: ${equiposUnicos.length}`
-  );
-};
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+
       <h1 className="text-3xl font-bold mb-6">
         📊 Importar Temporadas
       </h1>
@@ -122,37 +135,34 @@ export default function AdminFormaTemporadas() {
           <select
             value={temporada}
             onChange={(e) =>
-              setTemporada(e.target.value)
+              setTemporada(
+                e.target.value
+              )
             }
-            className="
-              border
-              rounded
-              p-2
-              w-full
-            "
+            className="border rounded p-2 w-full"
           >
-            <option value="Apertura 2025">
-              Apertura 2025
+            <option value="Apertura 2025-2026">
+              Apertura 2025-2026
             </option>
 
-             <option value="Clausura 2025">
-              Clausura 2025
+            <option value="Clausura 2025-2026">
+              Clausura 2025-2026
             </option>
 
-            <option value="Apertura 2026">
-              Apertura 2026
+            <option value="Apertura 2026-2027">
+              Apertura 2026-2027
             </option>
 
-            <option value="Clausura 2027">
-              Clausura 2027
+            <option value="Clausura 2026-2027">
+              Clausura 2026-2027
             </option>
 
-            <option value="Apertura 2027">
-              Apertura 2027
+            <option value="Apertura 2027-2028">
+              Apertura 2027-2028
             </option>
 
-            <option value="Clausura 2028">
-              Clausura 2028
+            <option value="Clausura 2027-2028">
+              Clausura 2027-2028
             </option>
           </select>
         </div>
@@ -165,14 +175,11 @@ export default function AdminFormaTemporadas() {
           <select
             value={tipo}
             onChange={(e) =>
-              setTipo(e.target.value)
+              setTipo(
+                e.target.value
+              )
             }
-            className="
-              border
-              rounded
-              p-2
-              w-full
-            "
+            className="border rounded p-2 w-full"
           >
             <option value="GENERAL">
               GENERAL
@@ -188,16 +195,13 @@ export default function AdminFormaTemporadas() {
           </select>
         </div>
 
-        <p className="mb-4">
-          Copia y pega la tabla completa
-          de SofaScore.
-        </p>
-
         <textarea
           rows={15}
           value={texto}
           onChange={(e) =>
-            setTexto(e.target.value)
+            setTexto(
+              e.target.value
+            )
           }
           className="
             w-full
@@ -208,11 +212,6 @@ export default function AdminFormaTemporadas() {
           "
         />
 
-        <div className="mb-4 p-3 bg-yellow-100 rounded">
-          Caracteres capturados:{" "}
-          {texto.length}
-        </div>
-
         <button
           onClick={procesar}
           className="
@@ -221,13 +220,123 @@ export default function AdminFormaTemporadas() {
             px-4
             py-2
             rounded
-            hover:bg-blue-700
           "
         >
           Analizar Temporada
         </button>
 
       </div>
+
+      {equipos.length > 0 && (
+        <div className="mt-6 bg-white p-6 rounded shadow">
+
+          <h2 className="text-xl font-bold mb-4">
+            Vista Previa
+          </h2>
+
+          <table className="w-full border">
+
+            <thead>
+              <tr className="bg-gray-100">
+
+                <th className="border p-2">
+                  Pos
+                </th>
+
+                <th className="border p-2">
+                  Equipo
+                </th>
+
+                <th className="border p-2">
+                  PJ
+                </th>
+
+                <th className="border p-2">
+                  W
+                </th>
+
+                <th className="border p-2">
+                  D
+                </th>
+
+                <th className="border p-2">
+                  L
+                </th>
+
+                <th className="border p-2">
+                  GF
+                </th>
+
+                <th className="border p-2">
+                  GC
+                </th>
+
+                <th className="border p-2">
+                  DIF
+                </th>
+
+                <th className="border p-2">
+                  PTS
+                </th>
+
+              </tr>
+            </thead>
+
+            <tbody>
+              {equipos.map(
+                (equipo) => (
+                  <tr
+                    key={`${equipo.posicion}-${equipo.equipo}`}
+                  >
+                    <td className="border p-2">
+                      {equipo.posicion}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.equipo}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.partidos}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.victorias}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.empates}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.derrotas}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.goles_favor}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.goles_contra}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.diferencia_goles}
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.puntos}
+                    </td>
+
+                  </tr>
+                )
+              )}
+            </tbody>
+
+          </table>
+
+        </div>
+      )}
     </div>
   );
 }
