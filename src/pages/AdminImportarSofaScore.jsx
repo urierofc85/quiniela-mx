@@ -83,9 +83,14 @@ export default function AdminImportarSofaScore() {
         )
     );
 
-  alert(
-    `Equipos Detectados: ${equiposUnicos.length}`
-  );
+ alert(
+  equiposUnicos
+    .map(
+      (e) =>
+        `${e.posicion} - ${e.equipo}`
+    )
+    .join("\n")
+);
 
   setEquipos(equiposUnicos);
 };
