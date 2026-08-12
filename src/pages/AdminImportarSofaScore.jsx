@@ -15,120 +15,22 @@ export default function AdminImportarSofaScore() {
       .trim();
   };
 
-  const procesar = () => {
-    const datos = texto
-      .split("\n")
-      .map((v) => v.trim())
-      .filter(Boolean);
+ const procesar = () => {
+  const datos = texto
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
 
-    console.log("TOTAL DATOS:", datos.length);
+  alert(
+    `Líneas encontradas: ${datos.length}
 
-    const resultado = [];
+Primeras 30 líneas:
 
-    let i = 0;
+${datos.slice(0, 30).join("\n")}`
+  );
 
-    while (i < datos.length) {
-      const posicion = Number(datos[i]);
-
-      if (
-        isNaN(posicion) ||
-        posicion < 1 ||
-        posicion > 18
-      ) {
-        i++;
-        continue;
-      }
-
-      const nombreLargo = datos[i + 1];
-      const equipo = datos[i + 2];
-
-      if (!nombreLargo || !equipo) {
-        i++;
-        continue;
-      }
-
-      const partidos = Number(
-        datos[i + 3]
-      );
-
-      const diferencia = Number(
-        String(
-          datos[i + 7] || "0"
-        ).replace("+", "")
-      );
-
-      const marcador =
-        datos[i + 8] || "0:0";
-
-      if (!marcador.includes(":")) {
-        i++;
-        continue;
-      }
-
-      const [gf, gc] =
-        marcador.split(":");
-
-      const resultado1 =
-        datos[i + 9] || "";
-
-      const resultado2 =
-        datos[i + 10] || "";
-
-      const resultado3 =
-        datos[i + 11] || "";
-
-      const resultadosRecientes = [
-        resultado1,
-        resultado2,
-        resultado3,
-      ];
-
-      let puntosUltimos5 = 0;
-
-      resultadosRecientes.forEach(
-        (r) => {
-          if (r === "W") {
-            puntosUltimos5 += 3;
-          }
-
-          if (r === "D") {
-            puntosUltimos5 += 1;
-          }
-        }
-      );
-
-      const puntos = Number(
-        datos[i + 12]
-      );
-
-      resultado.push({
-        posicion,
-        nombreLargo,
-        equipo,
-        partidos,
-        goles_favor:
-          Number(gf),
-        goles_contra:
-          Number(gc),
-        diferencia_goles:
-          diferencia,
-        puntos,
-        puntos_ultimos5:
-          puntosUltimos5,
-        resultadosRecientes,
-      });
-
-      i += 13;
-    }
-
-    console.table(resultado);
-
-    alert(
-      `Equipos detectados: ${resultado.length}`
-    );
-
-    setEquipos(resultado);
-  };
+  setEquipos([]);
+};
 
   const importarPronosticos =
     async () => {
