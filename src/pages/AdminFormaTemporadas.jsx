@@ -12,19 +12,8 @@ export default function AdminFormaTemporadas() {
   const [tipo, setTipo] =
     useState("GENERAL");
 
-  const procesar = () => {
-  const datos = texto
-    .replace(/<[^>]*>/g, "")
-    .split("\n")
-    .map((v) => v.trim())
-    .filter(Boolean);
-
-  alert(
-    datos
-      .slice(0, 60)
-      .map((v, i) => `${i}: ${v}`)
-      .join("\n")
-  );
+ const procesar = () => {
+  alert(texto);
 };
 
   return (
