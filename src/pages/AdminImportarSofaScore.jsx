@@ -187,7 +187,7 @@ export default function AdminImportarSofaScore() {
     <div className="p-6 max-w-7xl mx-auto">
 
       <h1 className="text-3xl font-bold mb-6">
-        📊 Importar SofaScore
+        📊 Importar SofaScore Prueba
       </h1>
 
       <div className="bg-white p-6 rounded shadow">
