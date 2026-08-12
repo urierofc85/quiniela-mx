@@ -15,66 +15,80 @@ export default function AdminImportarSofaScore() {
       .trim();
   };
 
-  const procesar = () => {
-    const datos = texto
-      .split("\n")
-      .map((v) => v.trim())
-      .filter(Boolean);
+ const procesar = () => {
+  const datos = texto
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
 
-    const resultado = [];
+  const resultado = [];
 
-    let i = 0;
+  let i = 0;
 
-    while (i < datos.length) {
-      const posicion = Number(datos[i]);
+  while (i < datos.length) {
+    const posicion = Number(datos[i]);
 
-      if (
-        isNaN(posicion) ||
-        posicion < 1 ||
-        posicion > 18
-      ) {
-        i++;
-        continue;
-      }
+    const nombreLargo =
+      datos[i + 1];
 
-      const nombreLargo =
-        datos[i + 1];
+    const equipo =
+      datos[i + 2];
 
-      const equipo =
-        datos[i + 2];
-
-      const partidos =
-        Number(datos[i + 3]);
-
-      const diferencia =
-        Number(
-          String(
-            datos[i + 4]
-          ).replace("+", "")
-        );
-
-      const puntos =
-        Number(datos[i + 5]);
-
-      resultado.push({
-        posicion,
-        nombreLargo,
-        equipo,
-        partidos,
-        diferencia_goles:
-          diferencia,
-        puntos,
-      });
-
-      i += 6;
+    if (
+      isNaN(posicion) ||
+      posicion < 1 ||
+      posicion > 18 ||
+      !nombreLargo ||
+      !equipo ||
+      !isNaN(Number(nombreLargo))
+    ) {
+      i++;
+      continue;
     }
 
-    alert(
-      `Equipos detectados: ${resultado.length}`
+    const partidos =
+      Number(datos[i + 3]);
+
+    const diferencia =
+      Number(
+        String(
+          datos[i + 4]
+        ).replace("+", "")
+      );
+
+    const puntos =
+      Number(datos[i + 5]);
+
+    resultado.push({
+      posicion,
+      nombreLargo,
+      equipo,
+      partidos,
+      diferencia_goles:
+        diferencia,
+      puntos,
+    });
+
+    i += 6;
+  }
+
+  const equiposUnicos =
+    resultado.filter(
+      (equipo, index, self) =>
+        index ===
+        self.findIndex(
+          (e) =>
+            e.posicion ===
+            equipo.posicion
+        )
     );
 
-    setEquipos(resultado);
-  };
+  alert(
+    `Equipos detectados: ${equiposUnicos.length}`
+  );
+
+  setEquipos(equiposUnicos);
+};
 
   const importarPronosticos =
     async () => {
