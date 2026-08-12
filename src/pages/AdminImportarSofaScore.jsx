@@ -23,6 +23,13 @@ const procesar = () => {
 
   const resultado = [];
 
+  alert(
+JSON.stringify(
+  equipos[0],
+  null,
+  2
+)
+);
   for (let i = 0; i < datos.length - 8; i++) {
     const posicion = Number(datos[i]);
 
