@@ -70,27 +70,32 @@ const procesar = () => {
       marcador.split(":");
 
     resultado.push({
-      posicion,
-      equipo,
+  posicion,
+  equipo,
 
-      partidos,
+  partidos,
 
-      ganados,
-      empatados,
-      perdidos,
+  ganados,
+  empatados,
+  perdidos,
 
-      goles_favor:
-        Number(gf),
+  goles_favor: Number(gf),
+  goles_contra: Number(gc),
 
-      goles_contra:
-        Number(gc),
+  diferencia_goles: diferencia,
 
-      diferencia_goles:
-        diferencia,
+  puntos,
+});
 
-      puntos,
-    });
-  }
+alert(
+`${equipo}
+
+W:${ganados}
+D:${empatados}
+L:${perdidos}`
+);
+
+ 
 
   const equiposUnicos =
     resultado.filter(
