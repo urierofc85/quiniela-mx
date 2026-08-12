@@ -167,9 +167,9 @@ JSON.stringify(
           partidos:
             equipo.partidos,
 
-            victorias: 99,
-  empates: 88,
-  derrotas: 77,
+            victorias: equipos.ganados,
+  empates: equipos.empatados,
+  derrotas: equipos.perdidos,
 
           goles_favor:
             equipo.goles_favor,
