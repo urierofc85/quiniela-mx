@@ -21,15 +21,19 @@ const procesar = () => {
     .map((v) => v.trim())
     .filter(Boolean);
 
- alert(
-  datos
-    .slice(0, 120)
-    .map(
-      (v, i) =>
-        `${i}: ${v}`
-    )
-    .join("\n")
-);
+  alert(
+    datos
+      .slice(0, 120)
+      .map(
+        (v, i) =>
+          `${i}: ${v}`
+      )
+      .join("\n")
+  );
+};
+
+const importarPronosticos =
+  async () => {
   const importarPronosticos =
     async () => {
       try {
