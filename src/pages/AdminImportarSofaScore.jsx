@@ -21,15 +21,70 @@ const procesar = () => {
     .map((v) => v.trim())
     .filter(Boolean);
 
+  const resultado = [];
+
+  let i = 0;
+
+  while (i + 8 < datos.length) {
+    const posicion = Number(datos[i]);
+
+    if (
+      isNaN(posicion) ||
+      posicion < 1 ||
+      posicion > 18
+    ) {
+      i++;
+      continue;
+    }
+
+    const equipo = datos[i + 1];
+
+    const partidos = Number(datos[i + 2]);
+
+    const ganados = Number(datos[i + 3]);
+
+    const empatados = Number(datos[i + 4]);
+
+    const perdidos = Number(datos[i + 5]);
+
+    const diferencia = Number(
+      String(datos[i + 6]).replace("+", "")
+    );
+
+    const marcador =
+      datos[i + 7];
+
+    const [gf, gc] =
+      marcador.split(":");
+
+    const puntos = Number(
+      datos[i + 8]
+    );
+
+    resultado.push({
+      posicion,
+      equipo,
+      partidos,
+      ganados,
+      empatados,
+      perdidos,
+      goles_favor:
+        Number(gf),
+      goles_contra:
+        Number(gc),
+      diferencia_goles:
+        diferencia,
+      puntos,
+    });
+
+    i += 9;
+  }
+
   alert(
-    datos
-      .slice(0, 120)
-      .map(
-        (v, i) =>
-          `${i}: ${v}`
-      )
-      .join("\n")
+    `Equipos detectados: ${resultado.length}`
   );
+
+  setEquipos(resultado);
 };
 
 const importarPronosticos =
