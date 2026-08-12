@@ -15,7 +15,7 @@ export default function AdminImportarSofaScore() {
       .trim();
   };
 
- const procesar = () => {
+const procesar = () => {
   const datos = texto
     .split("\n")
     .map((v) => v.trim())
@@ -31,10 +31,6 @@ export default function AdminImportarSofaScore() {
       .join("\n")
   );
 };
-
-  setEquipos(equiposUnicos);
-};
-
   const importarPronosticos =
     async () => {
       try {
@@ -112,13 +108,8 @@ export default function AdminImportarSofaScore() {
           actualizados++;
         }
 
-       alert(
-  equiposUnicos
-    .map(
-      (e) =>
-        `${e.posicion} - ${e.equipo}`
-    )
-    .join("\n")
+     alert(
+  `Equipos actualizados: ${actualizados}`
 );
       } catch (error) {
         console.error(error);
