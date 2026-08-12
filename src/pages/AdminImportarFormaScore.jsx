@@ -70,8 +70,7 @@ export default function AdminImportarFormaScore() {
           r3,
         ],
 
-        puntos_ultimos5:
-          puntosUltimos5,
+        puntos_ultimos5:99,
       });
 
       i += 6;
