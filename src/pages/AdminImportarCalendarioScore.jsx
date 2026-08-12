@@ -31,31 +31,35 @@ export default function AdminImportarCalendarioScore() {
     }
 
     for (let i = 0; i < datos.length - 5; i++) {
-      const fecha = datos[i];
+     const fecha = datos[i];
 
-      const esFecha =
-        /^\d{1,2}\/\d{1,2}\/\d{2}$/.test(
-          fecha
-        );
+const esFecha =
+  /^\d{1,2}\/\d{1,2}\/\d{2}$/.test(
+    fecha
+  );
 
-      if (!esFecha) {
-        continue;
-      }
+if (!esFecha) {
+  continue;
+}
 
-      resultado.push({
-        jornada,
+const [dia, mes, anio] =
+  fecha.split("/");
 
-        fecha_partido:
-          datos[i],
+const fechaSQL =
+  `20${anio}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
 
-        local:
-          datos[i + 3],
+resultado.push({
+  jornada,
 
-        visita:
-          datos[i + 5],
-      });
-    }
+  fecha_partido:
+    fechaSQL,
 
+  local:
+    datos[i + 3],
+
+  visita:
+    datos[i + 5],
+});
     alert(
       `Partidos detectados: ${resultado.length}`
     );
