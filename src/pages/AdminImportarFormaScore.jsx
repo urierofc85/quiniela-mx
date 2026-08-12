@@ -1,8 +1,17 @@
 import { useState } from "react";
+import { supabase } from "../services/supabase";
 
 export default function AdminImportarFormaScore() {
   const [texto, setTexto] = useState("");
   const [equipos, setEquipos] = useState([]);
+  const [importando, setImportando] = useState(false);
+
+  const normalizar = (texto) =>
+    texto
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
 
   const procesar = () => {
     const datos = texto
@@ -26,51 +35,31 @@ export default function AdminImportarFormaScore() {
         continue;
       }
 
-      const nombreLargo =
-        datos[i + 1];
+      const nombreLargo = datos[i + 1];
+      const equipo = datos[i + 2];
 
-      const equipo =
-        datos[i + 2];
-
-      const r1 =
-        datos[i + 3];
-
-      const r2 =
-        datos[i + 4];
-
-      const r3 =
-        datos[i + 5];
+      const r1 = datos[i + 3];
+      const r2 = datos[i + 4];
+      const r3 = datos[i + 5];
 
       let puntosUltimos5 = 0;
 
-      [r1, r2, r3].forEach(
-        (resultadoPartido) => {
-          if (
-            resultadoPartido === "W"
-          ) {
-            puntosUltimos5 += 3;
-          }
-
-          if (
-            resultadoPartido === "D"
-          ) {
-            puntosUltimos5 += 1;
-          }
+      [r1, r2, r3].forEach((resultadoPartido) => {
+        if (resultadoPartido === "W") {
+          puntosUltimos5 += 3;
         }
-      );
+
+        if (resultadoPartido === "D") {
+          puntosUltimos5 += 1;
+        }
+      });
 
       resultado.push({
         posicion,
         nombreLargo,
         equipo,
-
-        forma: [
-          r1,
-          r2,
-          r3,
-        ],
-
-        puntos_ultimos5:99,
+        forma: [r1, r2, r3],
+        puntos_ultimos5: puntosUltimos5,
       });
 
       i += 6;
@@ -83,13 +72,97 @@ export default function AdminImportarFormaScore() {
     setEquipos(resultado);
   };
 
+  const importarForma = async () => {
+    try {
+      setImportando(true);
+
+      const {
+        data: aliases,
+        error,
+      } = await supabase
+        .from("pronosticos_alias_equipos")
+        .select("*");
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      let actualizados = 0;
+
+      const noEncontrados = [];
+
+      for (const equipo of equipos) {
+        const alias = aliases.find(
+          (a) =>
+            normalizar(a.alias) ===
+            normalizar(equipo.equipo)
+        );
+
+        if (!alias) {
+          noEncontrados.push(
+            equipo.equipo
+          );
+          continue;
+        }
+
+        const { error: updateError } =
+          await supabase
+            .from("pronosticos_equipos")
+            .update({
+              puntos_ultimos5:
+                equipo.puntos_ultimos5,
+            })
+            .eq(
+              "equipo",
+              alias.equipo_oficial
+            );
+
+        if (updateError) {
+          console.error(updateError);
+
+          noEncontrados.push(
+            equipo.equipo
+          );
+
+          continue;
+        }
+
+        actualizados++;
+      }
+
+      if (noEncontrados.length > 0) {
+        alert(
+          `Importación completada
+
+Equipos actualizados: ${actualizados}
+
+No encontrados:
+
+${noEncontrados.join("\n")}`
+        );
+      } else {
+        alert(
+          `Equipos actualizados: ${actualizados}`
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      alert(error.message);
+    } finally {
+      setImportando(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
+
       <h1 className="text-3xl font-bold mb-6">
         📈 Importar Forma SofaScore
       </h1>
 
       <div className="bg-white p-6 rounded shadow">
+
         <p className="mb-4">
           Copia y pega la vista Forma
           de SofaScore.
@@ -99,9 +172,7 @@ export default function AdminImportarFormaScore() {
           rows={15}
           value={texto}
           onChange={(e) =>
-            setTexto(
-              e.target.value
-            )
+            setTexto(e.target.value)
           }
           className="
             w-full
@@ -113,8 +184,7 @@ export default function AdminImportarFormaScore() {
         />
 
         <div className="mb-4 p-3 bg-yellow-100 rounded">
-          Caracteres capturados:{" "}
-          {texto.length}
+          Caracteres capturados: {texto.length}
         </div>
 
         <button
@@ -130,15 +200,18 @@ export default function AdminImportarFormaScore() {
         >
           Analizar Forma
         </button>
+
       </div>
 
       {equipos.length > 0 && (
         <div className="mt-6 bg-white p-6 rounded shadow">
+
           <h2 className="text-xl font-bold mb-4">
-            Vista previa
+            Vista Previa
           </h2>
 
           <table className="w-full border">
+
             <thead>
               <tr className="bg-gray-100">
 
@@ -162,40 +235,49 @@ export default function AdminImportarFormaScore() {
             </thead>
 
             <tbody>
-              {equipos.map(
-                (equipo) => (
-                  <tr
-                    key={`${equipo.posicion}-${equipo.equipo}`}
-                  >
-                    <td className="border p-2">
-                      {
-                        equipo.posicion
-                      }
-                    </td>
+              {equipos.map((equipo) => (
+                <tr
+                  key={`${equipo.posicion}-${equipo.equipo}`}
+                >
+                  <td className="border p-2">
+                    {equipo.posicion}
+                  </td>
 
-                    <td className="border p-2">
-                      {
-                        equipo.equipo
-                      }
-                    </td>
+                  <td className="border p-2">
+                    {equipo.equipo}
+                  </td>
 
-                    <td className="border p-2">
-                      {equipo.forma.join(
-                        " "
-                      )}
-                    </td>
+                  <td className="border p-2">
+                    {equipo.forma.join(" ")}
+                  </td>
 
-                    <td className="border p-2">
-                      {
-                        equipo.puntos_ultimos5
-                      }
-                    </td>
-
-                  </tr>
-                )
-              )}
+                  <td className="border p-2">
+                    {equipo.puntos_ultimos5}
+                  </td>
+                </tr>
+              ))}
             </tbody>
+
           </table>
+
+          <button
+            onClick={importarForma}
+            disabled={importando}
+            className="
+              mt-6
+              bg-green-600
+              text-white
+              px-6
+              py-3
+              rounded
+              hover:bg-green-700
+            "
+          >
+            {importando
+              ? "Importando..."
+              : "✅ Importar Forma"}
+          </button>
+
         </div>
       )}
     </div>
