@@ -21,6 +21,96 @@ export default function AdminImportarSofaScore() {
     .map((v) => v.trim())
     .filter(Boolean);
 
+  const resultado = [];
+
+  let i = 0;
+
+  while (i < datos.length) {
+    const posicion = Number(datos[i]);
+
+    if (
+      isNaN(posicion) ||
+      posicion < 1 ||
+      posicion > 18
+    ) {
+      i++;
+      continue;
+    }
+
+    const equipo =
+      datos[i + 1];
+
+    const partidos =
+      Number(datos[i + 2]);
+
+    const ganados =
+      Number(datos[i + 3]);
+
+    const empatados =
+      Number(datos[i + 4]);
+
+    const perdidos =
+      Number(datos[i + 5]);
+
+    const diferencia =
+      Number(
+        String(datos[i + 6]).replace("+", "")
+      );
+
+    const marcador =
+      datos[i + 7] || "0:0";
+
+    const [gf, gc] =
+      marcador.split(":");
+
+    const puntos =
+      Number(datos[i + 8]);
+
+    const puntosUltimos5 =
+      ganados * 3 +
+      empatados;
+
+    resultado.push({
+      posicion,
+      equipo,
+
+      partidos,
+
+      ganados,
+
+      empatados,
+
+      perdidos,
+
+      goles_favor:
+        Number(gf),
+
+      goles_contra:
+        Number(gc),
+
+      diferencia_goles:
+        diferencia,
+
+      puntos,
+
+      puntos_ultimos5:
+        puntosUltimos5,
+    });
+
+    i += 9;
+  }
+
+  alert(
+    `Equipos detectados: ${resultado.length}`
+  );
+
+  setEquipos(resultado);
+};
+  const datos = texto
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
   alert(
     `Líneas encontradas: ${datos.length}
 
@@ -82,27 +172,27 @@ ${datos.slice(0, 30).join("\n")}`
               "pronosticos_equipos"
             )
             .update({
-              posicion:
-                equipo.posicion,
+  posicion:
+    equipo.posicion,
 
-              partidos:
-                equipo.partidos,
+  partidos:
+    equipo.partidos,
 
-              goles_favor:
-                equipo.goles_favor,
+  goles_favor:
+    equipo.goles_favor,
 
-              goles_contra:
-                equipo.goles_contra,
+  goles_contra:
+    equipo.goles_contra,
 
-              diferencia_goles:
-                equipo.diferencia_goles,
+  diferencia_goles:
+    equipo.diferencia_goles,
 
-              puntos:
-                equipo.puntos,
+  puntos:
+    equipo.puntos,
 
-              puntos_ultimos5:
-                equipo.puntos_ultimos5,
-            })
+  puntos_ultimos5:
+    equipo.puntos_ultimos5,
+})
             .eq(
               "equipo",
               alias.equipo_oficial
@@ -206,93 +296,107 @@ Equipos actualizados: ${actualizados}`
           </h2>
 
           <table className="w-full border">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-2">
-                  Pos
-                </th>
+           
+<thead>
+  <tr className="bg-gray-100">
+    <th className="border p-2">
+      Pos
+    </th>
 
-                <th className="border p-2">
-                  Equipo
-                </th>
+    <th className="border p-2">
+      Equipo
+    </th>
 
-                <th className="border p-2">
-                  PJ
-                </th>
+    <th className="border p-2">
+      PJ
+    </th>
 
-                <th className="border p-2">
-                  GF
-                </th>
+    <th className="border p-2">
+      W
+    </th>
 
-                <th className="border p-2">
-                  GC
-                </th>
+    <th className="border p-2">
+      D
+    </th>
 
-                <th className="border p-2">
-                  DIF
-                </th>
+    <th className="border p-2">
+      L
+    </th>
 
-                <th className="border p-2">
-                  PTS
-                </th>
+    <th className="border p-2">
+      GF
+    </th>
 
-                <th className="border p-2">
-                  Forma
-                </th>
+    <th className="border p-2">
+      GC
+    </th>
 
-                <th className="border p-2">
-                  Últimos 5
-                </th>
-              </tr>
-            </thead>
+    <th className="border p-2">
+      DIF
+    </th>
 
-            <tbody>
-              {equipos.map(
-                (equipo) => (
-                  <tr
-                    key={`${equipo.posicion}-${equipo.equipo}`}
-                  >
-                    <td className="border p-2">
-                      {equipo.posicion}
-                    </td>
+    <th className="border p-2">
+      PTS
+    </th>
 
-                    <td className="border p-2">
-                      {equipo.equipo}
-                    </td>
+    <th className="border p-2">
+      Forma
+    </th>
+  </tr>
+</thead>
 
-                    <td className="border p-2">
-                      {equipo.partidos}
-                    </td>
+<tbody>
 
-                    <td className="border p-2">
-                      {equipo.goles_favor}
-                    </td>
+  {equipos.map((equipo) => (
+    <tr
+      key={`${equipo.posicion}-${equipo.equipo}`}
+    >
+      <td className="border p-2">
+        {equipo.posicion}
+      </td>
 
-                    <td className="border p-2">
-                      {equipo.goles_contra}
-                    </td>
+      <td className="border p-2">
+        {equipo.equipo}
+      </td>
 
-                    <td className="border p-2">
-                      {equipo.diferencia_goles}
-                    </td>
+      <td className="border p-2">
+        {equipo.partidos}
+      </td>
 
-                    <td className="border p-2">
-                      {equipo.puntos}
-                    </td>
+      <td className="border p-2">
+        {equipo.ganados}
+      </td>
 
-                    <td className="border p-2">
-                      {equipo.resultadosRecientes.join(
-                        " "
-                      )}
-                    </td>
+      <td className="border p-2">
+        {equipo.empatados}
+      </td>
 
-                    <td className="border p-2">
-                      {equipo.puntos_ultimos5}
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
+      <td className="border p-2">
+        {equipo.perdidos}
+      </td>
+
+      <td className="border p-2">
+        {equipo.goles_favor}
+      </td>
+
+      <td className="border p-2">
+        {equipo.goles_contra}
+      </td>
+
+      <td className="border p-2">
+        {equipo.diferencia_goles}
+      </td>
+
+      <td className="border p-2">
+        {equipo.puntos}
+      </td>
+
+      <td className="border p-2">
+        {equipo.puntos_ultimos5}
+      </td>
+    </tr>
+  ))}
+</tbody>
           </table>
 
           <button
