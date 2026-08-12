@@ -4,7 +4,8 @@ import { supabase } from "../services/supabase";
 export default function AdminImportarCalendarioScore() {
   const [texto, setTexto] = useState("");
   const [partidos, setPartidos] = useState([]);
-  const [importando, setImportando] = useState(false);
+  const [importando, setImportando] =
+    useState(false);
 
   const procesar = () => {
     const datos = texto
@@ -38,9 +39,7 @@ export default function AdminImportarCalendarioScore() {
           fecha
         );
 
-      if (!esFecha) {
-        continue;
-      }
+      if (!esFecha) continue;
 
       const [dia, mes, anio] =
         fecha.split("/");
@@ -49,7 +48,10 @@ export default function AdminImportarCalendarioScore() {
         `20${anio}-${mes.padStart(
           2,
           "0"
-        )}-${dia.padStart(2, "0")}`;
+        )}-${dia.padStart(
+          2,
+          "0"
+        )} 00:00:00`;
 
       resultado.push({
         jornada,
@@ -89,7 +91,9 @@ export default function AdminImportarCalendarioScore() {
         const jornada =
           partidos[0].jornada;
 
-        await supabase
+        const {
+          error: deleteError,
+        } = await supabase
           .from(
             "pronosticos_partidos"
           )
@@ -99,30 +103,43 @@ export default function AdminImportarCalendarioScore() {
             jornada
           );
 
+        if (deleteError) {
+          alert(
+            deleteError.message
+          );
+          return;
+        }
+
         let importados = 0;
 
         for (const partido of partidos) {
-          const { error } =
-            await supabase
-              .from(
-                "pronosticos_partidos"
-              )
-              .insert({
-                jornada:
-                  partido.jornada,
+          const {
+            error: insertError,
+          } = await supabase
+            .from(
+              "pronosticos_partidos"
+            )
+            .insert({
+              jornada:
+                partido.jornada,
 
-                fecha_partido:
-                  partido.fecha_partido,
+              fecha_partido:
+                partido.fecha_partido,
 
-                local:
-                  partido.local,
+              local:
+                partido.local,
 
-                visita:
-                  partido.visita,
-              });
+              visita:
+                partido.visita,
+            });
 
-          if (error) {
-            console.error(error);
+          if (insertError) {
+            alert(
+              `Error insertando:
+
+${insertError.message}`
+            );
+
             continue;
           }
 
@@ -132,31 +149,34 @@ export default function AdminImportarCalendarioScore() {
         alert(
           `Partidos importados: ${importados}`
         );
-
       } catch (error) {
         console.error(error);
         alert(error.message);
-
       } finally {
         setImportando(false);
       }
     };
-      return (
+
+  return (
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">
-        📅 Importar Calendario SofaScore
+        📅 Importar Calendario
+        SofaScore
       </h1>
 
       <div className="bg-white p-6 rounded shadow">
         <p className="mb-4">
-          Copia y pega los partidos desde SofaScore.
+          Copia y pega el calendario
+          de SofaScore.
         </p>
 
         <textarea
           rows={15}
           value={texto}
           onChange={(e) =>
-            setTexto(e.target.value)
+            setTexto(
+              e.target.value
+            )
           }
           className="
             w-full
@@ -180,7 +200,6 @@ export default function AdminImportarCalendarioScore() {
             px-4
             py-2
             rounded
-            hover:bg-blue-700
           "
         >
           Analizar Calendario
@@ -189,7 +208,6 @@ export default function AdminImportarCalendarioScore() {
 
       {partidos.length > 0 && (
         <div className="mt-6 bg-white p-6 rounded shadow">
-
           <h2 className="text-xl font-bold mb-4">
             Vista Previa
           </h2>
@@ -217,10 +235,15 @@ export default function AdminImportarCalendarioScore() {
 
             <tbody>
               {partidos.map(
-                (partido, index) => (
+                (
+                  partido,
+                  index
+                ) => (
                   <tr key={index}>
                     <td className="border p-2">
-                      {partido.jornada}
+                      {
+                        partido.jornada
+                      }
                     </td>
 
                     <td className="border p-2">
@@ -230,11 +253,15 @@ export default function AdminImportarCalendarioScore() {
                     </td>
 
                     <td className="border p-2">
-                      {partido.local}
+                      {
+                        partido.local
+                      }
                     </td>
 
                     <td className="border p-2">
-                      {partido.visita}
+                      {
+                        partido.visita
+                      }
                     </td>
                   </tr>
                 )
@@ -254,14 +281,12 @@ export default function AdminImportarCalendarioScore() {
               px-6
               py-3
               rounded
-              hover:bg-green-700
             "
           >
             {importando
               ? "Importando..."
               : "✅ Importar Calendario"}
           </button>
-
         </div>
       )}
     </div>
