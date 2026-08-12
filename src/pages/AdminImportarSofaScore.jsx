@@ -163,13 +163,13 @@ const importarPronosticos = async () => {
             equipo.partidos,
 
           victorias:
-            equipo.ganados,
+            equipo.victorias,
 
           empates:
-            equipo.empatados,
+            equipo.empates,
 
           derrotas:
-            equipo.perdidos,
+            equipo.derrotas,
 
           goles_favor:
             equipo.goles_favor,
