@@ -167,9 +167,14 @@ export default function AdminImportarSofaScore() {
           actualizados++;
         }
 
-        alert(
-          `Equipos actualizados: ${actualizados}`
-        );
+       alert(
+  equiposUnicos
+    .map(
+      (e) =>
+        `${e.posicion} - ${e.equipo}`
+    )
+    .join("\n")
+);
       } catch (error) {
         console.error(error);
         alert(error.message);
