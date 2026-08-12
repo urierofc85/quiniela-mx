@@ -170,6 +170,26 @@ export default function AdminPronosticos() {
   </div>
 </Link>
 
+  <Link
+  to="/admin-forma-temporadas"
+  className="
+    bg-indigo-600
+    text-white
+    p-5
+    rounded-lg
+    shadow
+    hover:bg-indigo-700
+  "
+>
+  <div className="text-xl font-bold">
+    📊 Temporadas
+  </div>
+
+  <div className="text-sm mt-2">
+    General / Local / Visitante
+  </div>
+</Link>
+
 <Link
   to="/admin-importar-calendario-score"
   className="

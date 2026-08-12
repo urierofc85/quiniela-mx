@@ -36,6 +36,7 @@ import AdminPronosticos from "./pages/AdminPronosticos";
 import AdminImportarSofaScore from "./pages/AdminImportarSofaScore";
 import AdminImportarFormaScore from "./pages/AdminImportarFormaScore";
 import AdminImportarCalendarioScore from "./pages/AdminImportarCalendarioScore";
+import AdminFormaTemporadas from "./pages/AdminFormaTemporadas";
 
 function App() {
   return (
@@ -194,6 +195,10 @@ function App() {
 <Route
   path="/admin-importar-calendario-score"
   element={<AdminImportarCalendarioScore />}
+/>
+<Route
+  path="/admin-forma-temporadas"
+  element={<AdminFormaTemporadas />}
 />
 
       </Routes>
