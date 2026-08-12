@@ -142,7 +142,7 @@ export default function AdminPronosticos() {
   "
 >
   <div className="text-xl font-bold">
-    📊 Importar SofaScore
+    📊 SofaScore
   </div>
 
   <div className="text-sm mt-2">

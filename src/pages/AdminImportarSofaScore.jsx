@@ -21,6 +21,8 @@ export default function AdminImportarSofaScore() {
       .map((v) => v.trim())
       .filter(Boolean);
 
+    console.log("TOTAL DATOS:", datos.length);
+
     const resultado = [];
 
     let i = 0;
@@ -28,30 +30,40 @@ export default function AdminImportarSofaScore() {
     while (i < datos.length) {
       const posicion = Number(datos[i]);
 
-      if (isNaN(posicion)) {
+      if (
+        isNaN(posicion) ||
+        posicion < 1 ||
+        posicion > 18
+      ) {
         i++;
         continue;
       }
 
-      const nombreLargo =
-        datos[i + 1];
+      const nombreLargo = datos[i + 1];
+      const equipo = datos[i + 2];
 
-      const equipo =
-        datos[i + 2];
+      if (!nombreLargo || !equipo) {
+        i++;
+        continue;
+      }
 
       const partidos = Number(
         datos[i + 3]
       );
 
       const diferencia = Number(
-        String(datos[i + 7]).replace(
-          "+",
-          ""
-        )
+        String(
+          datos[i + 7] || "0"
+        ).replace("+", "")
       );
 
       const marcador =
         datos[i + 8] || "0:0";
+
+      if (!marcador.includes(":")) {
+        i++;
+        continue;
+      }
 
       const [gf, gc] =
         marcador.split(":");
@@ -74,50 +86,45 @@ export default function AdminImportarSofaScore() {
       let puntosUltimos5 = 0;
 
       resultadosRecientes.forEach(
-        (resultado) => {
-          if (resultado === "W") {
+        (r) => {
+          if (r === "W") {
             puntosUltimos5 += 3;
           }
 
-          if (resultado === "D") {
+          if (r === "D") {
             puntosUltimos5 += 1;
           }
         }
       );
 
-      const puntos =
-        Number(datos[i + 12]);
+      const puntos = Number(
+        datos[i + 12]
+      );
 
       resultado.push({
         posicion,
         nombreLargo,
         equipo,
-
         partidos,
-
         goles_favor:
           Number(gf),
-
         goles_contra:
           Number(gc),
-
         diferencia_goles:
           diferencia,
-
         puntos,
-
         puntos_ultimos5:
           puntosUltimos5,
-
         resultadosRecientes,
       });
 
       i += 13;
     }
 
-    console.log(
-      "EQUIPOS DETECTADOS",
-      resultado
+    console.table(resultado);
+
+    alert(
+      `Equipos detectados: ${resultado.length}`
     );
 
     setEquipos(resultado);
@@ -251,8 +258,8 @@ Equipos actualizados: ${actualizados}`
 
       <div className="bg-white p-6 rounded shadow">
         <p className="mb-4">
-          Copia y pega la tabla completa
-          de SofaScore.
+          Copia y pega la tabla completa de
+          SofaScore.
         </p>
 
         <textarea
@@ -338,50 +345,34 @@ Equipos actualizados: ${actualizados}`
               {equipos.map(
                 (equipo) => (
                   <tr
-                    key={
-                      equipo.equipo
-                    }
+                    key={`${equipo.posicion}-${equipo.equipo}`}
                   >
                     <td className="border p-2">
-                      {
-                        equipo.posicion
-                      }
+                      {equipo.posicion}
                     </td>
 
                     <td className="border p-2">
-                      {
-                        equipo.equipo
-                      }
+                      {equipo.equipo}
                     </td>
 
                     <td className="border p-2">
-                      {
-                        equipo.partidos
-                      }
+                      {equipo.partidos}
                     </td>
 
                     <td className="border p-2">
-                      {
-                        equipo.goles_favor
-                      }
+                      {equipo.goles_favor}
                     </td>
 
                     <td className="border p-2">
-                      {
-                        equipo.goles_contra
-                      }
+                      {equipo.goles_contra}
                     </td>
 
                     <td className="border p-2">
-                      {
-                        equipo.diferencia_goles
-                      }
+                      {equipo.diferencia_goles}
                     </td>
 
                     <td className="border p-2">
-                      {
-                        equipo.puntos
-                      }
+                      {equipo.puntos}
                     </td>
 
                     <td className="border p-2">
@@ -391,9 +382,7 @@ Equipos actualizados: ${actualizados}`
                     </td>
 
                     <td className="border p-2">
-                      {
-                        equipo.puntos_ultimos5
-                      }
+                      {equipo.puntos_ultimos5}
                     </td>
                   </tr>
                 )
