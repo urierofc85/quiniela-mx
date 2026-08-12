@@ -39,27 +39,31 @@ const procesar = () => {
 
     const equipo = datos[i + 1];
 
-    const partidos = Number(datos[i + 2]);
+  const partidos =
+  Number(datos[i + 2]);
 
-    const ganados = Number(datos[i + 3]);
+const ganados =
+  Number(datos[i + 3]);
 
-    const empatados = Number(datos[i + 4]);
+const empatados =
+  Number(datos[i + 4]);
 
-    const perdidos = Number(datos[i + 5]);
+const perdidos =
+  Number(datos[i + 5]);
 
-    const diferencia = Number(
-      String(datos[i + 6]).replace("+", "")
-    );
+const diferencia =
+  Number(
+    String(datos[i + 6]).replace("+", "")
+  );
 
-    const marcador =
-      datos[i + 7];
+const marcador =
+  datos[i + 7];
 
-    const [gf, gc] =
-      marcador.split(":");
+const [gf, gc] =
+  marcador.split(":");
 
-    const puntos = Number(
-      datos[i + 8]
-    );
+const puntos =
+  Number(datos[i + 8]);
 
     resultado.push({
       posicion,
