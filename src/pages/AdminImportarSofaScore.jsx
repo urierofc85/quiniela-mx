@@ -84,7 +84,7 @@ export default function AdminImportarSofaScore() {
     );
 
   alert(
-    `Equipos detectados: ${equiposUnicos.length}`
+    `Equipos Detectados: ${equiposUnicos.length}`
   );
 
   setEquipos(equiposUnicos);
