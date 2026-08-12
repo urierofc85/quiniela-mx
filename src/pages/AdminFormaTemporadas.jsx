@@ -3,9 +3,8 @@ import { supabase } from "../services/supabase";
 
 export default function AdminFormaTemporadas() {
   const [texto, setTexto] = useState("");
-
-  const [equipos, setEquipos] =
-    useState([]);
+  const [equipos, setEquipos] = useState([]);
+  const [importando, setImportando] = useState(false);
 
   const [temporada, setTemporada] =
     useState("Apertura 2025-2026");
@@ -13,176 +12,183 @@ export default function AdminFormaTemporadas() {
   const [tipo, setTipo] =
     useState("GENERAL");
 
- const procesar = () => {
-  const datos = texto
-    .replace(/<[^>]*>/g, "")
-    .split("\n")
-    .map((v) => v.trim())
-    .filter(Boolean);
+  const procesar = () => {
+    const datos = texto
+      .replace(/<[^>]*>/g, "")
+      .split("\n")
+      .map((v) => v.trim())
+      .filter(Boolean);
 
-  const resultado = [];
+    const resultado = [];
 
-  for (let i = 0; i < datos.length - 8; i++) {
-    const posicion = Number(datos[i]);
+    for (let i = 0; i < datos.length - 8; i++) {
+      const posicion = Number(datos[i]);
 
-    if (
-      isNaN(posicion) ||
-      posicion < 1 ||
-      posicion > 18
-    ) {
-      continue;
-    }
-
-    const equipo = datos[i + 1];
-
-    const partidos =
-      Number(datos[i + 2]);
-
-    const victorias =
-      Number(datos[i + 3]);
-
-    const empates =
-      Number(datos[i + 4]);
-
-    const derrotas =
-      Number(datos[i + 5]);
-
-    const diferenciaTexto =
-      datos[i + 6];
-
-    const marcador =
-      datos[i + 7];
-
-    const puntos = Number(
-      datos[i + 8]
-    );
-
-    if (
-      !marcador.includes(":")
-    ) {
-      continue;
-    }
-
-    const diferencia =
-      Number(
-        diferenciaTexto.replace(
-          "+",
-          ""
-        )
-      );
-
-    const [gf, gc] =
-      marcador.split(":");
-
-    resultado.push({
-      posicion,
-      equipo,
-
-      partidos,
-
-      victorias,
-      empates,
-      derrotas,
-
-      goles_favor:
-        Number(gf),
-
-      goles_contra:
-        Number(gc),
-
-      diferencia_goles:
-        diferencia,
-
-      puntos,
-    });
-  }
-
-  const equiposUnicos =
-    resultado.filter(
-      (equipo, index, self) =>
-        index ===
-        self.findIndex(
-          (e) =>
-            e.posicion ===
-            equipo.posicion
-        )
-    );
-
-  setEquipos(equiposUnicos);
-
-  alert(
-    `Equipos detectados: ${equiposUnicos.length}`
-  );
-};
-
-const importarTemporada = async () => {
-  try {
-    setImportando(true);
-
-    let importados = 0;
-
-    for (const equipo of equipos) {
-      const { error } =
-        await supabase
-          .from(
-            "pronosticos_temporadas_equipos"
-          )
-          .upsert(
-            {
-              temporada,
-              tipo,
-
-              equipo:
-                equipo.equipo,
-
-              partidos:
-                equipo.partidos,
-
-              victorias:
-                equipo.victorias,
-
-              empates:
-                equipo.empates,
-
-              derrotas:
-                equipo.derrotas,
-
-              goles_favor:
-                equipo.goles_favor,
-
-              goles_contra:
-                equipo.goles_contra,
-
-              diferencia_goles:
-                equipo.diferencia_goles,
-
-              puntos:
-                equipo.puntos,
-            },
-            {
-              onConflict:
-                "temporada,tipo,equipo",
-            }
-          );
-
-      if (error) {
-        console.error(error);
+      if (
+        isNaN(posicion) ||
+        posicion < 1 ||
+        posicion > 18
+      ) {
         continue;
       }
 
-      importados++;
+      const equipo = datos[i + 1];
+
+      const partidos =
+        Number(datos[i + 2]);
+
+      const victorias =
+        Number(datos[i + 3]);
+
+      const empates =
+        Number(datos[i + 4]);
+
+      const derrotas =
+        Number(datos[i + 5]);
+
+      const diferenciaTexto =
+        datos[i + 6];
+
+      const marcador =
+        datos[i + 7];
+
+      const puntos = Number(
+        datos[i + 8]
+      );
+
+      if (
+        !marcador.includes(":")
+      ) {
+        continue;
+      }
+
+      const diferencia =
+        Number(
+          diferenciaTexto.replace(
+            "+",
+            ""
+          )
+        );
+
+      const [gf, gc] =
+        marcador.split(":");
+
+      resultado.push({
+        posicion,
+        equipo,
+
+        partidos,
+
+        victorias,
+        empates,
+        derrotas,
+
+        goles_favor:
+          Number(gf),
+
+        goles_contra:
+          Number(gc),
+
+        diferencia_goles:
+          diferencia,
+
+        puntos,
+      });
     }
 
+    const equiposUnicos =
+      resultado.filter(
+        (equipo, index, self) =>
+          index ===
+          self.findIndex(
+            (e) =>
+              e.posicion ===
+              equipo.posicion
+          )
+      );
+
+    setEquipos(equiposUnicos);
+
     alert(
-      `Equipos importados: ${importados}`
+      `Equipos detectados: ${equiposUnicos.length}`
     );
-  } catch (error) {
-    console.error(error);
-    alert(error.message);
-  } finally {
-    setImportando(false);
-  }
-};
+  };
+
+  const importarTemporada =
+    async () => {
+      try {
+        setImportando(true);
+
+        let importados = 0;
+
+        for (const equipo of equipos) {
+          const { error } =
+            await supabase
+              .from(
+                "pronosticos_temporadas_equipos"
+              )
+              .upsert(
+                {
+                  temporada,
+                  tipo,
+
+                  equipo:
+                    equipo.equipo,
+
+                  partidos:
+                    equipo.partidos,
+
+                  victorias:
+                    equipo.victorias,
+
+                  empates:
+                    equipo.empates,
+
+                  derrotas:
+                    equipo.derrotas,
+
+                  goles_favor:
+                    equipo.goles_favor,
+
+                  goles_contra:
+                    equipo.goles_contra,
+
+                  diferencia_goles:
+                    equipo.diferencia_goles,
+
+                  puntos:
+                    equipo.puntos,
+                },
+                {
+                  onConflict:
+                    "temporada,tipo,equipo",
+                }
+              );
+
+          if (error) {
+            alert(
+              `Error:
+
+${error.message}`
+            );
+
+            console.error(error);
+            continue;
+          }
+
+          importados++;
+        }
+
+        alert(
+          `Equipos importados: ${importados}`
+        );
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+      } finally {
+        setImportando(false);
+      }
+    };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -205,7 +211,12 @@ const importarTemporada = async () => {
                 e.target.value
               )
             }
-            className="border rounded p-2 w-full"
+            className="
+              border
+              rounded
+              p-2
+              w-full
+            "
           >
             <option value="Apertura 2025-2026">
               Apertura 2025-2026
@@ -245,7 +256,12 @@ const importarTemporada = async () => {
                 e.target.value
               )
             }
-            className="border rounded p-2 w-full"
+            className="
+              border
+              rounded
+              p-2
+              w-full
+            "
           >
             <option value="GENERAL">
               GENERAL
@@ -286,6 +302,7 @@ const importarTemporada = async () => {
             px-4
             py-2
             rounded
+            hover:bg-blue-700
           "
         >
           Analizar Temporada
@@ -304,47 +321,16 @@ const importarTemporada = async () => {
 
             <thead>
               <tr className="bg-gray-100">
-
-                <th className="border p-2">
-                  Pos
-                </th>
-
-                <th className="border p-2">
-                  Equipo
-                </th>
-
-                <th className="border p-2">
-                  PJ
-                </th>
-
-                <th className="border p-2">
-                  W
-                </th>
-
-                <th className="border p-2">
-                  D
-                </th>
-
-                <th className="border p-2">
-                  L
-                </th>
-
-                <th className="border p-2">
-                  GF
-                </th>
-
-                <th className="border p-2">
-                  GC
-                </th>
-
-                <th className="border p-2">
-                  DIF
-                </th>
-
-                <th className="border p-2">
-                  PTS
-                </th>
-
+                <th className="border p-2">Pos</th>
+                <th className="border p-2">Equipo</th>
+                <th className="border p-2">PJ</th>
+                <th className="border p-2">W</th>
+                <th className="border p-2">D</th>
+                <th className="border p-2">L</th>
+                <th className="border p-2">GF</th>
+                <th className="border p-2">GC</th>
+                <th className="border p-2">DIF</th>
+                <th className="border p-2">PTS</th>
               </tr>
             </thead>
 
@@ -393,7 +379,6 @@ const importarTemporada = async () => {
                     <td className="border p-2">
                       {equipo.puntos}
                     </td>
-
                   </tr>
                 )
               )}
@@ -402,22 +387,24 @@ const importarTemporada = async () => {
           </table>
 
           <button
-  onClick={importarTemporada}
-  disabled={importando}
-  className="
-    mt-6
-    bg-green-600
-    text-white
-    px-6
-    py-3
-    rounded
-    hover:bg-green-700
-  "
->
-  {importando
-    ? "Importando..."
-    : "✅ Importar Temporada"}
-</button>
+            onClick={
+              importarTemporada
+            }
+            disabled={importando}
+            className="
+              mt-6
+              bg-green-600
+              text-white
+              px-6
+              py-3
+              rounded
+              hover:bg-green-700
+            "
+          >
+            {importando
+              ? "Importando..."
+              : "✅ Importar Temporada"}
+          </button>
 
         </div>
       )}
