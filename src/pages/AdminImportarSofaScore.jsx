@@ -21,76 +21,16 @@ export default function AdminImportarSofaScore() {
     .map((v) => v.trim())
     .filter(Boolean);
 
-  const resultado = [];
-
-  let i = 0;
-
-  while (i < datos.length) {
-    const posicion = Number(datos[i]);
-
-    const nombreLargo =
-      datos[i + 1];
-
-    const equipo =
-      datos[i + 2];
-
-    if (
-      isNaN(posicion) ||
-      posicion < 1 ||
-      posicion > 18 ||
-      !nombreLargo ||
-      !equipo ||
-      !isNaN(Number(nombreLargo))
-    ) {
-      i++;
-      continue;
-    }
-
-    const partidos =
-      Number(datos[i + 3]);
-
-    const diferencia =
-      Number(
-        String(
-          datos[i + 4]
-        ).replace("+", "")
-      );
-
-    const puntos =
-      Number(datos[i + 5]);
-
-    resultado.push({
-      posicion,
-      nombreLargo,
-      equipo,
-      partidos,
-      diferencia_goles:
-        diferencia,
-      puntos,
-    });
-
-    i += 6;
-  }
-
-  const equiposUnicos =
-    resultado.filter(
-      (equipo, index, self) =>
-        index ===
-        self.findIndex(
-          (e) =>
-            e.posicion ===
-            equipo.posicion
-        )
-    );
-
- alert(
-  equiposUnicos
-    .map(
-      (e) =>
-        `${e.posicion} - ${e.equipo}`
-    )
-    .join("\n")
-);
+  alert(
+    datos
+      .slice(0, 60)
+      .map(
+        (v, i) =>
+          `${i}: ${v}`
+      )
+      .join("\n")
+  );
+};
 
   setEquipos(equiposUnicos);
 };
