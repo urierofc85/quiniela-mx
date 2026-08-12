@@ -21,33 +21,93 @@ const procesar = () => {
     .map((v) => v.trim())
     .filter(Boolean);
 
-  const equipos = [];
+  const resultado = [];
 
-  for (let i = 0; i < datos.length; i++) {
-    const actual = datos[i];
-    const siguiente = datos[i + 1];
-    const siguiente2 = datos[i + 2];
+  for (let i = 0; i < datos.length - 8; i++) {
+    const posicion = Number(datos[i]);
 
-    if (
-      !isNaN(Number(actual)) &&
-      isNaN(Number(siguiente)) &&
-      !isNaN(Number(siguiente2))
-    ) {
-      equipos.push({
-        posicion: actual,
-        equipo: siguiente,
-      });
+    const equipo = datos[i + 1];
+
+    const partidos = Number(datos[i + 2]);
+
+    const ganados = Number(datos[i + 3]);
+
+    const empatados = Number(datos[i + 4]);
+
+    const perdidos = Number(datos[i + 5]);
+
+    const diferenciaTexto =
+      datos[i + 6];
+
+    const marcador =
+      datos[i + 7];
+
+    const puntos = Number(
+      datos[i + 8]
+    );
+
+    const esBloqueValido =
+      !isNaN(posicion) &&
+      posicion >= 1 &&
+      posicion <= 18 &&
+      isNaN(Number(equipo)) &&
+      !isNaN(partidos) &&
+      !isNaN(ganados) &&
+      !isNaN(empatados) &&
+      !isNaN(perdidos) &&
+      marcador.includes(":") &&
+      !isNaN(puntos);
+
+    if (!esBloqueValido) {
+      continue;
     }
+
+    const diferencia = Number(
+      diferenciaTexto.replace("+", "")
+    );
+
+    const [gf, gc] =
+      marcador.split(":");
+
+    resultado.push({
+      posicion,
+      equipo,
+
+      partidos,
+
+      ganados,
+      empatados,
+      perdidos,
+
+      goles_favor:
+        Number(gf),
+
+      goles_contra:
+        Number(gc),
+
+      diferencia_goles:
+        diferencia,
+
+      puntos,
+    });
   }
 
+  const equiposUnicos =
+    resultado.filter(
+      (equipo, index, self) =>
+        index ===
+        self.findIndex(
+          (e) =>
+            e.posicion ===
+            equipo.posicion
+        )
+    );
+
   alert(
-    equipos
-      .map(
-        (e) =>
-          `${e.posicion} - ${e.equipo}`
-      )
-      .join("\n")
+    `Equipos detectados: ${equiposUnicos.length}`
   );
+
+  setEquipos(equiposUnicos);
 };
 
 const importarPronosticos = async () => {
