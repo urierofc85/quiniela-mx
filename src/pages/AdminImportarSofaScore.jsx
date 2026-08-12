@@ -15,112 +15,66 @@ export default function AdminImportarSofaScore() {
       .trim();
   };
 
- const procesar = () => {
-  const datos = texto
-    .split("\n")
-    .map((v) => v.trim())
-    .filter(Boolean);
+  const procesar = () => {
+    const datos = texto
+      .split("\n")
+      .map((v) => v.trim())
+      .filter(Boolean);
 
-  const resultado = [];
+    const resultado = [];
 
-  let i = 0;
+    let i = 0;
 
-  while (i < datos.length) {
-    const posicion = Number(datos[i]);
+    while (i < datos.length) {
+      const posicion = Number(datos[i]);
 
-    if (
-      isNaN(posicion) ||
-      posicion < 1 ||
-      posicion > 18
-    ) {
-      i++;
-      continue;
+      if (
+        isNaN(posicion) ||
+        posicion < 1 ||
+        posicion > 18
+      ) {
+        i++;
+        continue;
+      }
+
+      const nombreLargo =
+        datos[i + 1];
+
+      const equipo =
+        datos[i + 2];
+
+      const partidos =
+        Number(datos[i + 3]);
+
+      const diferencia =
+        Number(
+          String(
+            datos[i + 4]
+          ).replace("+", "")
+        );
+
+      const puntos =
+        Number(datos[i + 5]);
+
+      resultado.push({
+        posicion,
+        nombreLargo,
+        equipo,
+        partidos,
+        diferencia_goles:
+          diferencia,
+        puntos,
+      });
+
+      i += 6;
     }
 
-    const equipo =
-      datos[i + 1];
+    alert(
+      `Equipos detectados: ${resultado.length}`
+    );
 
-    const partidos =
-      Number(datos[i + 2]);
-
-    const ganados =
-      Number(datos[i + 3]);
-
-    const empatados =
-      Number(datos[i + 4]);
-
-    const perdidos =
-      Number(datos[i + 5]);
-
-    const diferencia =
-      Number(
-        String(datos[i + 6]).replace("+", "")
-      );
-
-    const marcador =
-      datos[i + 7] || "0:0";
-
-    const [gf, gc] =
-      marcador.split(":");
-
-    const puntos =
-      Number(datos[i + 8]);
-
-    const puntosUltimos5 =
-      ganados * 3 +
-      empatados;
-
-    resultado.push({
-      posicion,
-      equipo,
-
-      partidos,
-
-      ganados,
-
-      empatados,
-
-      perdidos,
-
-      goles_favor:
-        Number(gf),
-
-      goles_contra:
-        Number(gc),
-
-      diferencia_goles:
-        diferencia,
-
-      puntos,
-
-      puntos_ultimos5:
-        puntosUltimos5,
-    });
-
-    i += 9;
-  }
-
-  alert(
-    `Equipos detectados: ${resultado.length}`
-  );
-
-  setEquipos(resultado);
-};
-  const datos = texto
-    .split("\n")
-    .map((v) => v.trim())
-    .filter(Boolean);
-
-  alert(
-    `Líneas encontradas: ${datos.length}
-
-Primeras 30 líneas:
-
-${datos.slice(0, 30).join("\n")}`
-  );
-
-  setEquipos([]);
-};
+    setEquipos(resultado);
+  };
 
   const importarPronosticos =
     async () => {
@@ -172,27 +126,18 @@ ${datos.slice(0, 30).join("\n")}`
               "pronosticos_equipos"
             )
             .update({
-  posicion:
-    equipo.posicion,
+              posicion:
+                equipo.posicion,
 
-  partidos:
-    equipo.partidos,
+              partidos:
+                equipo.partidos,
 
-  goles_favor:
-    equipo.goles_favor,
+              diferencia_goles:
+                equipo.diferencia_goles,
 
-  goles_contra:
-    equipo.goles_contra,
-
-  diferencia_goles:
-    equipo.diferencia_goles,
-
-  puntos:
-    equipo.puntos,
-
-  puntos_ultimos5:
-    equipo.puntos_ultimos5,
-})
+              puntos:
+                equipo.puntos,
+            })
             .eq(
               "equipo",
               alias.equipo_oficial
@@ -202,38 +147,15 @@ ${datos.slice(0, 30).join("\n")}`
             console.error(
               updateError
             );
-
-            noEncontrados.push(
-              equipo.equipo
-            );
-
             continue;
           }
 
           actualizados++;
         }
 
-        if (
-          noEncontrados.length > 0
-        ) {
-          alert(
-            `Importación completada
-
-Equipos actualizados: ${actualizados}
-
-Equipos no encontrados:
-
-${noEncontrados.join(
-  "\n"
-)}`
-          );
-        } else {
-          alert(
-            `Importación completada
-
-Equipos actualizados: ${actualizados}`
-          );
-        }
+        alert(
+          `Equipos actualizados: ${actualizados}`
+        );
       } catch (error) {
         console.error(error);
         alert(error.message);
@@ -244,14 +166,16 @@ Equipos actualizados: ${actualizados}`
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+
       <h1 className="text-3xl font-bold mb-6">
         📊 Importar SofaScore
       </h1>
 
       <div className="bg-white p-6 rounded shadow">
+
         <p className="mb-4">
-          Copia y pega la tabla completa de
-          SofaScore.
+          Copia y pega la tabla
+          completa de SofaScore.
         </p>
 
         <textarea
@@ -270,9 +194,12 @@ Equipos actualizados: ${actualizados}`
             mb-4
           "
         />
-        <div className="mt-4 p-4 bg-yellow-100">
-  Caracteres: {texto.length}
-</div>
+
+        <div className="mt-2 mb-4 p-3 bg-yellow-100 rounded">
+          Caracteres capturados:
+          {" "}
+          {texto.length}
+        </div>
 
         <button
           onClick={procesar}
@@ -287,116 +214,86 @@ Equipos actualizados: ${actualizados}`
         >
           Analizar SofaScore
         </button>
+
       </div>
 
       {equipos.length > 0 && (
         <div className="mt-6 bg-white p-6 rounded shadow">
+
           <h2 className="text-xl font-bold mb-4">
             Vista Previa
           </h2>
 
           <table className="w-full border">
-           
-<thead>
-  <tr className="bg-gray-100">
-    <th className="border p-2">
-      Pos
-    </th>
 
-    <th className="border p-2">
-      Equipo
-    </th>
+            <thead>
+              <tr className="bg-gray-100">
 
-    <th className="border p-2">
-      PJ
-    </th>
+                <th className="border p-2">
+                  Pos
+                </th>
 
-    <th className="border p-2">
-      W
-    </th>
+                <th className="border p-2">
+                  Equipo
+                </th>
 
-    <th className="border p-2">
-      D
-    </th>
+                <th className="border p-2">
+                  PJ
+                </th>
 
-    <th className="border p-2">
-      L
-    </th>
+                <th className="border p-2">
+                  DIF
+                </th>
 
-    <th className="border p-2">
-      GF
-    </th>
+                <th className="border p-2">
+                  PTS
+                </th>
 
-    <th className="border p-2">
-      GC
-    </th>
+              </tr>
+            </thead>
 
-    <th className="border p-2">
-      DIF
-    </th>
+            <tbody>
 
-    <th className="border p-2">
-      PTS
-    </th>
+              {equipos.map(
+                (equipo) => (
+                  <tr
+                    key={`${equipo.posicion}-${equipo.equipo}`}
+                  >
+                    <td className="border p-2">
+                      {
+                        equipo.posicion
+                      }
+                    </td>
 
-    <th className="border p-2">
-      Forma
-    </th>
-  </tr>
-</thead>
+                    <td className="border p-2">
+                      {
+                        equipo.equipo
+                      }
+                    </td>
 
-<tbody>
+                    <td className="border p-2">
+                      {
+                        equipo.partidos
+                      }
+                    </td>
 
-  {equipos.map((equipo) => (
-    <tr
-      key={`${equipo.posicion}-${equipo.equipo}`}
-    >
-      <td className="border p-2">
-        {equipo.posicion}
-      </td>
+                    <td className="border p-2">
+                      {
+                        equipo.diferencia_goles
+                      }
+                    </td>
 
-      <td className="border p-2">
-        {equipo.equipo}
-      </td>
+                    <td className="border p-2">
+                      {
+                        equipo.puntos
+                      }
+                    </td>
+                  </tr>
+                )
+              )}
 
-      <td className="border p-2">
-        {equipo.partidos}
-      </td>
+            </tbody>
 
-      <td className="border p-2">
-        {equipo.ganados}
-      </td>
-
-      <td className="border p-2">
-        {equipo.empatados}
-      </td>
-
-      <td className="border p-2">
-        {equipo.perdidos}
-      </td>
-
-      <td className="border p-2">
-        {equipo.goles_favor}
-      </td>
-
-      <td className="border p-2">
-        {equipo.goles_contra}
-      </td>
-
-      <td className="border p-2">
-        {equipo.diferencia_goles}
-      </td>
-
-      <td className="border p-2">
-        {equipo.puntos}
-      </td>
-
-      <td className="border p-2">
-        {equipo.puntos_ultimos5}
-      </td>
-    </tr>
-  ))}
-</tbody>
           </table>
 
           <button
@@ -418,8 +315,10 @@ Equipos actualizados: ${actualizados}`
               ? "Importando..."
               : "✅ Importar a Pronósticos"}
           </button>
+
         </div>
       )}
+
     </div>
   );
 }
