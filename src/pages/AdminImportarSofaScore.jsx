@@ -85,6 +85,18 @@ const procesar = () => {
   );
 
   setEquipos(resultado);
+  alert(
+  resultado
+    .slice(0, 3)
+    .map(
+      (e) =>
+        `${e.equipo}
+W:${e.ganados}
+D:${e.empatados}
+L:${e.perdidos}`
+    )
+    .join("\n\n")
+);
 };
 
 const importarPronosticos = async () => {
