@@ -147,72 +147,41 @@ const importarPronosticos = async () => {
         continue;
       }
 
-      alert(
-JSON.stringify(
-  equipos[0],
-  null,
-  2
-)
+      const respuesta = await supabase
+  .from("pronosticos_equipos")
+  .update({
+    posicion: equipo.posicion,
+
+    partidos: equipo.partidos,
+
+    victorias: equipo.ganados,
+
+    empates: equipo.empatados,
+
+    derrotas: equipo.perdidos,
+
+    goles_favor: equipo.goles_favor,
+
+    goles_contra: equipo.goles_contra,
+
+    diferencia_goles:
+      equipo.diferencia_goles,
+
+    puntos: equipo.puntos,
+  })
+  .eq(
+    "equipo",
+    alias.equipo_oficial
+  )
+  .select();
+
+alert(
+  JSON.stringify(
+    respuesta,
+    null,
+    2
+  )
 );
-      const {
-        error: updateError,
-      } = await supabase
-        .from(
-          "pronosticos_equipos"
-        )
-        .update({
-          posicion:
-            equipo.posicion,
-
-          partidos:
-            equipo.partidos,
-
-            victorias: equipos.ganados,
-  empates: equipos.empatados,
-  derrotas: equipos.perdidos,
-
-          goles_favor:
-            equipo.goles_favor,
-
-          goles_contra:
-            equipo.goles_contra,
-
-          diferencia_goles:
-            equipo.diferencia_goles,
-
-          puntos:
-            equipo.puntos,
-        })
-        .eq(
-          "equipo",
-          alias.equipo_oficial
-        );
-
-      if (updateError) {
-        console.error(
-          updateError
-        );
-
-        noEncontrados.push(
-          equipo.equipo
-        );
-
-        continue;
-      }
-
-      actualizados++;
-    }
-
-    alert(
-      `Equipos actualizados: ${actualizados}`
-    );
-  } catch (error) {
-    console.error(error);
-    alert(error.message);
-  } finally {
-    setImportando(false);
-  }
-};
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
