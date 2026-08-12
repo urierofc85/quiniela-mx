@@ -150,6 +150,26 @@ export default function AdminPronosticos() {
   </div>
 </Link>
 
+<Link
+  to="/admin-importar-formascore"
+  className="
+    bg-purple-600
+    text-white
+    p-5
+    rounded-lg
+    shadow
+    hover:bg-purple-700
+  "
+>
+  <div className="text-xl font-bold">
+    📈 Forma SofaScore
+  </div>
+
+  <div className="text-sm mt-2">
+    Importar forma reciente de los equipos
+  </div>
+</Link>
+
       </div>
 
     </div>
