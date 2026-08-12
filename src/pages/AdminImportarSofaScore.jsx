@@ -96,7 +96,6 @@ L:${perdidos}`
 );
 
  
-
   const equiposUnicos =
     resultado.filter(
       (equipo, index, self) =>
