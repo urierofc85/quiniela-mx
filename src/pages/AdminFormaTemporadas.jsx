@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../services/supabase";
 
 export default function AdminFormaTemporadas() {
   const [texto, setTexto] = useState("");
@@ -112,6 +113,75 @@ export default function AdminFormaTemporadas() {
   alert(
     `Equipos detectados: ${equiposUnicos.length}`
   );
+};
+
+const importarTemporada = async () => {
+  try {
+    setImportando(true);
+
+    let importados = 0;
+
+    for (const equipo of equipos) {
+      const { error } =
+        await supabase
+          .from(
+            "pronosticos_temporadas_equipos"
+          )
+          .upsert(
+            {
+              temporada,
+              tipo,
+
+              equipo:
+                equipo.equipo,
+
+              partidos:
+                equipo.partidos,
+
+              victorias:
+                equipo.victorias,
+
+              empates:
+                equipo.empates,
+
+              derrotas:
+                equipo.derrotas,
+
+              goles_favor:
+                equipo.goles_favor,
+
+              goles_contra:
+                equipo.goles_contra,
+
+              diferencia_goles:
+                equipo.diferencia_goles,
+
+              puntos:
+                equipo.puntos,
+            },
+            {
+              onConflict:
+                "temporada,tipo,equipo",
+            }
+          );
+
+      if (error) {
+        console.error(error);
+        continue;
+      }
+
+      importados++;
+    }
+
+    alert(
+      `Equipos importados: ${importados}`
+    );
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+  } finally {
+    setImportando(false);
+  }
 };
 
   return (
@@ -330,6 +400,24 @@ export default function AdminFormaTemporadas() {
             </tbody>
 
           </table>
+
+          <button
+  onClick={importarTemporada}
+  disabled={importando}
+  className="
+    mt-6
+    bg-green-600
+    text-white
+    px-6
+    py-3
+    rounded
+    hover:bg-green-700
+  "
+>
+  {importando
+    ? "Importando..."
+    : "✅ Importar Temporada"}
+</button>
 
         </div>
       )}
