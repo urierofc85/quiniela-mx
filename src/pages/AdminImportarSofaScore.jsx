@@ -56,6 +56,35 @@ export default function AdminImportarSofaScore() {
       const [gf, gc] =
         marcador.split(":");
 
+      const resultado1 =
+        datos[i + 9] || "";
+
+      const resultado2 =
+        datos[i + 10] || "";
+
+      const resultado3 =
+        datos[i + 11] || "";
+
+      const resultadosRecientes = [
+        resultado1,
+        resultado2,
+        resultado3,
+      ];
+
+      let puntosUltimos5 = 0;
+
+      resultadosRecientes.forEach(
+        (resultado) => {
+          if (resultado === "W") {
+            puntosUltimos5 += 3;
+          }
+
+          if (resultado === "D") {
+            puntosUltimos5 += 1;
+          }
+        }
+      );
+
       const puntos =
         Number(datos[i + 12]);
 
@@ -63,14 +92,24 @@ export default function AdminImportarSofaScore() {
         posicion,
         nombreLargo,
         equipo,
+
         partidos,
+
         goles_favor:
           Number(gf),
+
         goles_contra:
           Number(gc),
+
         diferencia_goles:
           diferencia,
+
         puntos,
+
+        puntos_ultimos5:
+          puntosUltimos5,
+
+        resultadosRecientes,
       });
 
       i += 13;
@@ -151,6 +190,9 @@ export default function AdminImportarSofaScore() {
 
               puntos:
                 equipo.puntos,
+
+              puntos_ultimos5:
+                equipo.puntos_ultimos5,
             })
             .eq(
               "equipo",
@@ -209,8 +251,8 @@ Equipos actualizados: ${actualizados}`
 
       <div className="bg-white p-6 rounded shadow">
         <p className="mb-4">
-          Copia y pega la tabla
-          completa de SofaScore.
+          Copia y pega la tabla completa
+          de SofaScore.
         </p>
 
         <textarea
@@ -281,6 +323,14 @@ Equipos actualizados: ${actualizados}`
                 <th className="border p-2">
                   PTS
                 </th>
+
+                <th className="border p-2">
+                  Forma
+                </th>
+
+                <th className="border p-2">
+                  Últimos 5
+                </th>
               </tr>
             </thead>
 
@@ -331,6 +381,18 @@ Equipos actualizados: ${actualizados}`
                     <td className="border p-2">
                       {
                         equipo.puntos
+                      }
+                    </td>
+
+                    <td className="border p-2">
+                      {equipo.resultadosRecientes.join(
+                        " "
+                      )}
+                    </td>
+
+                    <td className="border p-2">
+                      {
+                        equipo.puntos_ultimos5
                       }
                     </td>
                   </tr>
