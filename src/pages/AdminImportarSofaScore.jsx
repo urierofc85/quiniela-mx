@@ -23,13 +23,7 @@ const procesar = () => {
 
   const resultado = [];
 
-  alert(
-JSON.stringify(
-  equipos[0],
-  null,
-  2
-)
-);
+  
   for (let i = 0; i < datos.length - 8; i++) {
     const posicion = Number(datos[i]);
 
@@ -153,6 +147,13 @@ const importarPronosticos = async () => {
         continue;
       }
 
+      alert(
+JSON.stringify(
+  equipos[0],
+  null,
+  2
+)
+);
       const {
         error: updateError,
       } = await supabase
