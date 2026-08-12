@@ -6,6 +6,9 @@ export default function AdminImportarFormaScore() {
   const [equipos, setEquipos] = useState([]);
   const [importando, setImportando] = useState(false);
 
+  const [temporada, setTemporada] =
+    useState("2026-2027");
+
   const normalizar = (texto) =>
     texto
       .normalize("NFD")
@@ -35,31 +38,52 @@ export default function AdminImportarFormaScore() {
         continue;
       }
 
-      const nombreLargo = datos[i + 1];
-      const equipo = datos[i + 2];
+      const nombreLargo =
+        datos[i + 1];
 
-      const r1 = datos[i + 3];
-      const r2 = datos[i + 4];
-      const r3 = datos[i + 5];
+      const equipo =
+        datos[i + 2];
+
+      const r1 =
+        datos[i + 3];
+
+      const r2 =
+        datos[i + 4];
+
+      const r3 =
+        datos[i + 5];
 
       let puntosUltimos5 = 0;
 
-      [r1, r2, r3].forEach((resultadoPartido) => {
-        if (resultadoPartido === "W") {
-          puntosUltimos5 += 3;
-        }
+      [r1, r2, r3].forEach(
+        (resultadoPartido) => {
+          if (
+            resultadoPartido === "W"
+          ) {
+            puntosUltimos5 += 3;
+          }
 
-        if (resultadoPartido === "D") {
-          puntosUltimos5 += 1;
+          if (
+            resultadoPartido === "D"
+          ) {
+            puntosUltimos5 += 1;
+          }
         }
-      });
+      );
 
       resultado.push({
         posicion,
         nombreLargo,
         equipo,
-        forma: [r1, r2, r3],
-        puntos_ultimos5: puntosUltimos5,
+
+        forma: [
+          r1,
+          r2,
+          r3,
+        ],
+
+        puntos_ultimos5:
+          puntosUltimos5,
       });
 
       i += 6;
@@ -96,7 +120,9 @@ export default function AdminImportarFormaScore() {
         const alias = aliases.find(
           (a) =>
             normalizar(a.alias) ===
-            normalizar(equipo.equipo)
+            normalizar(
+              equipo.equipo
+            )
         );
 
         if (!alias) {
@@ -106,27 +132,46 @@ export default function AdminImportarFormaScore() {
           continue;
         }
 
-        const { error: updateError } =
-          await supabase
-            .from("pronosticos_equipos")
-            .update({
-              puntos_ultimos5:
-                equipo.puntos_ultimos5,
-            })
-            .eq(
-              "equipo",
-              alias.equipo_oficial
-            );
+        const {
+          error: updateError,
+        } = await supabase
+          .from("pronosticos_equipos")
+          .update({
+            puntos_ultimos5:
+              equipo.puntos_ultimos5,
+          })
+          .eq(
+            "equipo",
+            alias.equipo_oficial
+          );
 
         if (updateError) {
           console.error(updateError);
-
           noEncontrados.push(
             equipo.equipo
           );
-
           continue;
         }
+
+        await supabase
+          .from(
+            "pronosticos_forma_historica"
+          )
+          .upsert(
+            {
+              temporada,
+
+              equipo:
+                alias.equipo_oficial,
+
+              puntos_ultimos5:
+                equipo.puntos_ultimos5,
+            },
+            {
+              onConflict:
+                "temporada,equipo",
+            }
+          );
 
         actualizados++;
       }
@@ -134,6 +179,8 @@ export default function AdminImportarFormaScore() {
       if (noEncontrados.length > 0) {
         alert(
           `Importación completada
+
+Temporada: ${temporada}
 
 Equipos actualizados: ${actualizados}
 
@@ -143,7 +190,9 @@ ${noEncontrados.join("\n")}`
         );
       } else {
         alert(
-          `Equipos actualizados: ${actualizados}`
+          `Temporada: ${temporada}
+
+Equipos actualizados: ${actualizados}`
         );
       }
     } catch (error) {
@@ -156,7 +205,6 @@ ${noEncontrados.join("\n")}`
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-
       <h1 className="text-3xl font-bold mb-6">
         📈 Importar Forma SofaScore
       </h1>
@@ -168,11 +216,50 @@ ${noEncontrados.join("\n")}`
           de SofaScore.
         </p>
 
+        <div className="mb-4">
+          <label className="block mb-2 font-semibold">
+            Temporada
+          </label>
+
+          <select
+            value={temporada}
+            onChange={(e) =>
+              setTemporada(
+                e.target.value
+              )
+            }
+            className="
+              border
+              rounded
+              p-2
+              w-full
+            "
+          >
+            <option value="2026-2027">
+              2026-2027
+            </option>
+
+            <option value="2025-2026">
+              2025-2026
+            </option>
+
+            <option value="2024-2025">
+              2024-2025
+            </option>
+
+            <option value="2023-2024">
+              2023-2024
+            </option>
+          </select>
+        </div>
+
         <textarea
           rows={15}
           value={texto}
           onChange={(e) =>
-            setTexto(e.target.value)
+            setTexto(
+              e.target.value
+            )
           }
           className="
             w-full
@@ -184,7 +271,9 @@ ${noEncontrados.join("\n")}`
         />
 
         <div className="mb-4 p-3 bg-yellow-100 rounded">
-          Caracteres capturados: {texto.length}
+          Caracteres capturados:
+          {" "}
+          {texto.length}
         </div>
 
         <button
@@ -235,27 +324,31 @@ ${noEncontrados.join("\n")}`
             </thead>
 
             <tbody>
-              {equipos.map((equipo) => (
-                <tr
-                  key={`${equipo.posicion}-${equipo.equipo}`}
-                >
-                  <td className="border p-2">
-                    {equipo.posicion}
-                  </td>
+              {equipos.map(
+                (equipo) => (
+                  <tr
+                    key={`${equipo.posicion}-${equipo.equipo}`}
+                  >
+                    <td className="border p-2">
+                      {equipo.posicion}
+                    </td>
 
-                  <td className="border p-2">
-                    {equipo.equipo}
-                  </td>
+                    <td className="border p-2">
+                      {equipo.equipo}
+                    </td>
 
-                  <td className="border p-2">
-                    {equipo.forma.join(" ")}
-                  </td>
+                    <td className="border p-2">
+                      {equipo.forma.join(
+                        " "
+                      )}
+                    </td>
 
-                  <td className="border p-2">
-                    {equipo.puntos_ultimos5}
-                  </td>
-                </tr>
-              ))}
+                    <td className="border p-2">
+                      {equipo.puntos_ultimos5}
+                    </td>
+                  </tr>
+                )
+              )}
             </tbody>
 
           </table>
