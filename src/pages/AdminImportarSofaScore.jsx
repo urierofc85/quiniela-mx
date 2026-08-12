@@ -33,8 +33,6 @@ const procesar = () => {
 };
 
 const importarPronosticos =
-  async () => {
-  const importarPronosticos =
     async () => {
       try {
         setImportando(true);
