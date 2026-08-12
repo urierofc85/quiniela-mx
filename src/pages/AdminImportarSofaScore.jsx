@@ -180,6 +180,9 @@ Equipos actualizados: ${actualizados}`
             mb-4
           "
         />
+        <div className="mt-4 p-4 bg-yellow-100">
+  Caracteres: {texto.length}
+</div>
 
         <button
           onClick={procesar}
