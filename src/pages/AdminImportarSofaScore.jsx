@@ -23,7 +23,7 @@ const procesar = () => {
 
   alert(
     datos
-      .slice(0, 60)
+      .slice(0, 120)
       .map(
         (v, i) =>
           `${i}: ${v}`
