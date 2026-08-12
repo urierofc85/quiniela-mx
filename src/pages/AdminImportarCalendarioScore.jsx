@@ -44,14 +44,16 @@ export default function AdminImportarCalendarioScore() {
       const [dia, mes, anio] =
         fecha.split("/");
 
-      const fechaSQL =
-        `20${anio}-${mes.padStart(
-          2,
-          "0"
-        )}-${dia.padStart(
-          2,
-          "0"
-        )} 00:00:00`;
+      const hora = datos[i + 1];
+
+const fechaSQL =
+  `20${anio}-${mes.padStart(
+    2,
+    "0"
+  )}-${dia.padStart(
+    2,
+    "0"
+  )} ${hora}:00`;
 
       resultado.push({
         jornada,
