@@ -3,7 +3,7 @@ import { useState } from "react";
 export default function AdminFormaTemporadas() {
   const [texto, setTexto] = useState("");
   const [temporada, setTemporada] =
-    useState("Apertura 2026");
+    useState("Apertura 2025");
 
   const [tipo, setTipo] =
     useState("GENERAL");
@@ -47,6 +47,14 @@ export default function AdminFormaTemporadas() {
               w-full
             "
           >
+            <option value="Apertura 2025">
+              Apertura 2025
+            </option>
+
+             <option value="Clausura 2025">
+              Clausura 2025
+            </option>
+
             <option value="Apertura 2026">
               Apertura 2026
             </option>
