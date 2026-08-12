@@ -87,93 +87,109 @@ const procesar = () => {
   setEquipos(resultado);
 };
 
-const importarPronosticos =
-    async () => {
-      try {
-        setImportando(true);
+const importarPronosticos = async () => {
+  try {
+    setImportando(true);
 
-        const {
-          data: aliases,
-          error,
-        } = await supabase
-          .from(
-            "pronosticos_alias_equipos"
-          )
-          .select("*");
+    const {
+      data: aliases,
+      error,
+    } = await supabase
+      .from(
+        "pronosticos_alias_equipos"
+      )
+      .select("*");
 
-        if (error) {
-          alert(error.message);
-          return;
-        }
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-        let actualizados = 0;
+    let actualizados = 0;
 
-        const noEncontrados =
-          [];
+    const noEncontrados = [];
 
-        for (const equipo of equipos) {
-          const alias =
-            aliases.find(
-              (a) =>
-                normalizar(
-                  a.alias
-                ) ===
-                normalizar(
-                  equipo.equipo
-                )
-            );
-
-          if (!alias) {
-            noEncontrados.push(
+    for (const equipo of equipos) {
+      const alias =
+        aliases.find(
+          (a) =>
+            normalizar(a.alias) ===
+            normalizar(
               equipo.equipo
-            );
-            continue;
-          }
-
-          const {
-            error: updateError,
-          } = await supabase
-            .from(
-              "pronosticos_equipos"
             )
-            .update({
-              posicion:
-                equipo.posicion,
+        );
 
-              partidos:
-                equipo.partidos,
-
-              diferencia_goles:
-                equipo.diferencia_goles,
-
-              puntos:
-                equipo.puntos,
-            })
-            .eq(
-              "equipo",
-              alias.equipo_oficial
-            );
-
-          if (updateError) {
-            console.error(
-              updateError
-            );
-            continue;
-          }
-
-          actualizados++;
-        }
-
-     alert(
-  `Equipos actualizados: ${actualizados}`
-);
-      } catch (error) {
-        console.error(error);
-        alert(error.message);
-      } finally {
-        setImportando(false);
+      if (!alias) {
+        noEncontrados.push(
+          equipo.equipo
+        );
+        continue;
       }
-    };
+
+      const {
+        error: updateError,
+      } = await supabase
+        .from(
+          "pronosticos_equipos"
+        )
+        .update({
+          posicion:
+            equipo.posicion,
+
+          partidos:
+            equipo.partidos,
+
+          victorias:
+            equipo.ganados,
+
+          empates:
+            equipo.empatados,
+
+          derrotas:
+            equipo.perdidos,
+
+          goles_favor:
+            equipo.goles_favor,
+
+          goles_contra:
+            equipo.goles_contra,
+
+          diferencia_goles:
+            equipo.diferencia_goles,
+
+          puntos:
+            equipo.puntos,
+        })
+        .eq(
+          "equipo",
+          alias.equipo_oficial
+        );
+
+      if (updateError) {
+        console.error(
+          updateError
+        );
+
+        noEncontrados.push(
+          equipo.equipo
+        );
+
+        continue;
+      }
+
+      actualizados++;
+    }
+
+    alert(
+      `Equipos actualizados: ${actualizados}`
+    );
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+  } finally {
+    setImportando(false);
+  }
+};
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
