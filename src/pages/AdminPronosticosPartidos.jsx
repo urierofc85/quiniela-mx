@@ -362,9 +362,9 @@ if (updateError) {
         console.error(
           updateError
         );
-      }
-      const {
-  data,
+
+        const {
+  data: filasActualizadas,
   error: updateError,
 } = await supabase
   .from("pronosticos_partidos")
@@ -376,9 +376,14 @@ if (updateError) {
   .select();
 
 alert(
-  JSON.stringify(data)
+  JSON.stringify(
+    filasActualizadas,
+    null,
+    2
+  )
 );
-``
+      }
+      
       
     }
 
