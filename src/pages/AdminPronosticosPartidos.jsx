@@ -331,7 +331,6 @@ const [generando, setGenerando] =
         .from(
           "pronosticos_partidos"
         )
-        
         .update({
           score_local:
             Number(
@@ -395,13 +394,6 @@ ${partido.visita}`
     setGenerando(false);
   }
 };
-
-const {
-  data: partidosActuales,
-  error: partidosError,
-} = await supabase
-  .from("pronosticos_partidos")
-  .select("*");
 
 
   return (
