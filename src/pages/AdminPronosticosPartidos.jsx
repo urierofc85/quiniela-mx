@@ -142,17 +142,7 @@ const [generando, setGenerando] =
         obtenerEquipo(
           partido.visita
         );
-        alert(`
-${partido.local}
-vs
-${partido.visita}
-
-Local:
-${localEquipo?.equipo || "NO"}
-
-Visita:
-${visitaEquipo?.equipo || "NO"}
-`);
+        
 
       if (
         !localEquipo ||
@@ -311,6 +301,25 @@ ${visitaEquipo?.equipo || "NO"}
             ) * 100
           ).toFixed(2)
         );
+
+        alert(`
+${partido.local} vs ${partido.visita}
+
+Score Local:
+${scoreLocal}
+
+Score Visita:
+${scoreVisita}
+
+Prob Local:
+${probLocal}
+
+Prob Empate:
+${probEmpate}
+
+Prob Visita:
+${probVisita}
+`);
 
       let pronostico =
         "EMPATE";
