@@ -12,11 +12,23 @@ export default function AdminRecalcularRatings() {
         setProcesando(true);
 
         const {
-          data,
-          error,
-        } = await supabase
-          .from("pronosticos_equipos")
-          .select("*");
+  data,
+  error,
+} = await supabase
+  .from("pronosticos_equipos")
+  .select("*");
+
+const {
+  data: historicos,
+  error: errorHistoricos,
+} = await supabase
+  .from("pronosticos_temporadas_equipos")
+  .select("*");
+
+if (errorHistoricos) {
+  alert(errorHistoricos.message);
+  return;
+}
 
         if (error) {
           alert(error.message);
@@ -117,6 +129,43 @@ export default function AdminRecalcularRatings() {
               ) *
                 0.05;
 
+                const registrosHistoricos =
+  historicos.filter(
+    (h) =>
+      h.equipo ===
+      equipo.equipo
+  );
+
+let ratingHistorico = 0;
+
+if (
+  registrosHistoricos.length > 0
+) {
+  const suma =
+    registrosHistoricos.reduce(
+      (acc, item) => {
+        const pj =
+          item.partidos || 1;
+
+        const efectividad =
+          (item.puntos /
+            (pj * 3)) *
+          100;
+
+        return acc + efectividad;
+      },
+      0
+    );
+
+  ratingHistorico =
+    suma /
+    registrosHistoricos.length;
+}
+
+const ratingTendencia =
+  ratingTotal -
+  ratingHistorico;
+
             return {
               ...equipo,
 
@@ -156,6 +205,16 @@ export default function AdminRecalcularRatings() {
                     2
                   )
                 ),
+rating_historico:
+  Number(
+    ratingHistorico.toFixed(2)
+  ),
+
+rating_tendencia:
+  Number(
+    ratingTendencia.toFixed(2)
+  ),
+
             };
           });
 
@@ -341,6 +400,50 @@ export default function AdminRecalcularRatings() {
             </tbody>
 
           </table>
+
+          <h2 className="text-xl font-bold mt-8 mb-4">
+  📚 Rating Histórico
+</h2>
+
+<table className="w-full border">
+  <thead>
+    <tr className="bg-gray-100">
+
+      <th className="border p-2">
+        Equipo
+      </th>
+
+      <th className="border p-2">
+        Histórico
+      </th>
+
+      <th className="border p-2">
+        Tendencia
+      </th>
+
+    </tr>
+  </thead>
+
+  <tbody>
+    {equipos.map((equipo) => (
+      <tr key={`hist-${equipo.equipo}`}>
+
+        <td className="border p-2">
+          {equipo.equipo}
+        </td>
+
+        <td className="border p-2">
+          {equipo.rating_historico}
+        </td>
+
+        <td className="border p-2">
+          {equipo.rating_tendencia}
+        </td>
+
+      </tr>
+    ))}
+  </tbody>
+</table>
 
         </div>
       )}
