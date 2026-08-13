@@ -128,6 +128,10 @@ const [generando, setGenerando] =
       ];
     };
 
+    alert(
+  `Partidos encontrados: ${partidos.length}`
+);
+
     for (const partido of partidos) {
       const localEquipo =
         obtenerEquipo(
