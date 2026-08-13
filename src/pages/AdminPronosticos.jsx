@@ -230,12 +230,25 @@ export default function AdminPronosticos() {
   </div>
 </Link>
 
-<Route
-  path="/admin-recalcular-porcentajes"
-  element={
-    <AdminRecalcularPorcentajes />
-  }
-/>
+<Link
+  to="/admin-recalcular-porcentajes"
+  className="
+    bg-purple-600
+    text-white
+    p-5
+    rounded-lg
+    shadow
+    hover:bg-purple-700
+  "
+>
+  <div className="text-xl font-bold">
+    📊 Porcentajes
+  </div>
+
+  <div className="text-sm mt-2">
+    Recalcular porcentajes históricos
+  </div>
+</Link>
 
       </div>
 
