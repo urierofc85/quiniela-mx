@@ -44,13 +44,6 @@ alert(
     ? error.message
     : JSON.stringify(data)
 );
-      .from("pronosticos_partidos")
-      .select("*")
-      .order("fecha_partido");
-
-    setPartidos(data || []);
-  };
-
   const crearPartido = async () => {
     if (!local || !visita) {
       alert("Selecciona ambos equipos");
