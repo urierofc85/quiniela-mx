@@ -27,7 +27,23 @@ const [generando, setGenerando] =
   };
 
   const cargarPartidos = async () => {
-    const { data } = await supabase
+    const { data, error } =
+  await supabase
+    .from("pronosticos_partidos")
+    .update({
+      prob_local: 99,
+      prob_empate: 1,
+      prob_visita: 0,
+      pronostico: "LOCAL",
+    })
+    .eq("id", partido.id)
+    .select();
+
+alert(
+  error
+    ? error.message
+    : JSON.stringify(data)
+);
       .from("pronosticos_partidos")
       .select("*")
       .order("fecha_partido");
@@ -366,20 +382,7 @@ const [generando, setGenerando] =
           updateError
         );
       }
-      await supabase
-  .from("pronosticos_partidos")
-  .update({
-    prob_local: 99,
-    prob_empate: 1,
-    prob_visita: 0,
-    pronostico: "LOCAL",
-  })
-  .eq("id", partido.id);
-
-alert(
-  `Actualizado:
-${partido.local}`
-);
+      
     }
 
     await cargarPartidos();
