@@ -325,7 +325,7 @@ const [generando, setGenerando] =
           "VISITA";
       }
 
-     const {
+      const {
   error: updateError,
 } = await supabase
   .from("pronosticos_partidos")
@@ -339,10 +339,21 @@ if (updateError) {
   alert(updateError.message);
 } else {
   alert(
-    `Actualizado:
-${partido.local}`
+    `Guardado:
+${partido.local}
+vs
+${partido.visita}`
   );
 }
+        
+
+      if (updateError) {
+        console.error(
+          updateError
+        );
+      }
+      
+    }
 
     await cargarPartidos();
 
