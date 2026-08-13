@@ -128,8 +128,8 @@ const [generando, setGenerando] =
       ];
     };
 
-  alert(
-  `Partidos encontrados: ${partidosActuales.length}`
+    alert(
+  `Partidos encontrados: ${partidos.length}`
 );
 
     for (const partido of partidosActuales) {
@@ -363,15 +363,6 @@ const [generando, setGenerando] =
           "id",
           partido.id
         );
-      alert(`
-Actualizado:
-
-${partido.local}
-
-${probLocal}
-${probEmpate}
-${probVisita}
-`);
 if (updateError) {
   alert(updateError.message);
 } else {
