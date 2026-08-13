@@ -6,6 +6,13 @@ export default function AdminRecalcularRatings() {
   const [procesando, setProcesando] =
     useState(false);
 
+const normalizar = (texto) =>
+  texto
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
   const recalcularRatings =
     async () => {
       try {
@@ -224,27 +231,33 @@ rating_tendencia:
               "pronosticos_equipos"
             )
             .update({
-              rating_general:
-                equipo.rating_general,
+  rating_general:
+    equipo.rating_general,
 
-              rating_ofensivo:
-                equipo.rating_ofensivo,
+  rating_ofensivo:
+    equipo.rating_ofensivo,
 
-              rating_defensivo:
-                equipo.rating_defensivo,
+  rating_defensivo:
+    equipo.rating_defensivo,
 
-              rating_forma:
-                equipo.rating_forma,
+  rating_forma:
+    equipo.rating_forma,
 
-              rating_local:
-                equipo.rating_local,
+  rating_local:
+    equipo.rating_local,
 
-              rating_visitante:
-                equipo.rating_visitante,
+  rating_visitante:
+    equipo.rating_visitante,
 
-              rating_total:
-                equipo.rating_total,
-            })
+  rating_total:
+    equipo.rating_total,
+
+  rating_historico:
+    equipo.rating_historico,
+
+  rating_tendencia:
+    equipo.rating_tendencia,
+})
             .eq(
               "equipo",
               equipo.equipo
