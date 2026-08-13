@@ -366,15 +366,20 @@ const [generando, setGenerando] =
           updateError
         );
       }
-      alert(`
-${partido.local} vs ${partido.visita}
+      await supabase
+  .from("pronosticos_partidos")
+  .update({
+    prob_local: 99,
+    prob_empate: 1,
+    prob_visita: 0,
+    pronostico: "LOCAL",
+  })
+  .eq("id", partido.id);
 
-Local:
-${localEquipo?.equipo || "NO"}
-
-Visita:
-${visitaEquipo?.equipo || "NO"}
-`);
+alert(
+  `Actualizado:
+${partido.local}`
+);
     }
 
     await cargarPartidos();
