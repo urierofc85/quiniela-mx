@@ -3,8 +3,9 @@ import { supabase } from "../services/supabase";
 
 export default function AdminPronosticosPartidos() {
   const [equipos, setEquipos] = useState([]);
-  const [partidos, setPartidos] = useState([]);
-  const [generando, setGenerando] = useState(false);
+const [partidos, setPartidos] = useState([]);
+const [generando, setGenerando] =
+  useState(false);
 
   const [local, setLocal] = useState("");
   const [visita, setVisita] = useState("");
@@ -81,154 +82,148 @@ export default function AdminPronosticosPartidos() {
 
     cargarPartidos();
   };
-  const generarPronosticos =
-  async () => {
-    try {
-      setGenerando(true);
+  const generarPronosticos = async () => {
+  try {
+    setGenerando(true);
 
-      const {
-  data: equipos,
-  error: equiposError,
-} = await supabase
-  .from("pronosticos_equipos")
-  .select("*");
+    const {
+      data: equiposData,
+      error,
+    } = await supabase
+      .from("pronosticos_equipos")
+      .select("*");
 
-if (equiposError) {
-  alert(equiposError.message);
-  return;
-}
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-      const mapaEquipos = {};
+    const mapaEquipos = {};
 
-      if (!equipos?.length) {
-  alert("No hay equipos cargados");
-  return;
-}
+    equiposData.forEach((equipo) => {
+      mapaEquipos[equipo.equipo] =
+        equipo;
+    });
 
-      equipos.forEach((e) => {
-        mapaEquipos[e.equipo] = e;
-      });
+    for (const partido of partidos) {
+      const localEquipo =
+        mapaEquipos[partido.local];
 
-      for (const partido of partidos) {
-        const localEquipo =
-          mapaEquipos[
-            partido.local
-          ];
+      const visitaEquipo =
+        mapaEquipos[partido.visita];
 
-        const visitaEquipo =
-          mapaEquipos[
-            partido.visita
-          ];
-
-        if (
-          !localEquipo ||
-          !visitaEquipo
-        ) {
-          continue;
-        }
-
-        const fuerzaLocal =
-  Number(localEquipo.rating_total || 0) +
-  Number(localEquipo.rating_historico || 0) +
-  Number(localEquipo.pct_hist_local_gana || 0);
-
-const fuerzaVisita =
-  Number(visitaEquipo.rating_total || 0) +
-  Number(visitaEquipo.rating_historico || 0) +
-  Number(visitaEquipo.pct_hist_visita_gana || 0);
-
-      const empate =
-(
-  (
-    Number(localEquipo.pct_hist_local_empata || 0)
-    +
-    Number(visitaEquipo.pct_hist_visita_empata || 0)
-  ) / 2
-) * 4;
-
-        const total =
-          fuerzaLocal +
-          fuerzaVisita +
-          empate;
-
-        if (total <= 0)
-          continue;
-
-        const probLocal =
-          (
-            (fuerzaLocal /
-              total) *
-            100
-          ).toFixed(2);
-
-        const probEmpate =
-          (
-            (empate / total) *
-            100
-          ).toFixed(2);
-
-        const probVisita =
-          (
-            (fuerzaVisita /
-              total) *
-            100
-          ).toFixed(2);
-
-        let pronostico =
-          "EMPATE";
-
-        const maximo =
-          Math.max(
-            Number(probLocal),
-            Number(probEmpate),
-            Number(probVisita)
-          );
-
-        if (
-          maximo ===
-          Number(probLocal)
-        ) {
-          pronostico =
-            "LOCAL";
-        } else if (
-          maximo ===
-          Number(probVisita)
-        ) {
-          pronostico =
-            "VISITA";
-        }
-
-        await supabase
-          .from(
-            "pronosticos_partidos"
-          )
-          .update({
-            prob_local:
-              Number(probLocal),
-
-            prob_empate:
-              Number(probEmpate),
-
-            prob_visita:
-              Number(probVisita),
-
-            pronostico,
-          })
-          .eq("id", partido.id);
+      if (
+        !localEquipo ||
+        !visitaEquipo
+      ) {
+        continue;
       }
 
-      await cargarPartidos();
+      const fuerzaLocal =
+        Number(
+          localEquipo.rating_total || 0
+        ) +
+        Number(
+          localEquipo.rating_historico || 0
+        ) +
+        Number(
+          localEquipo.pct_hist_local_gana || 0
+        );
 
-      alert(
-        "Pronósticos generados correctamente"
+      const fuerzaVisita =
+        Number(
+          visitaEquipo.rating_total || 0
+        ) +
+        Number(
+          visitaEquipo.rating_historico || 0
+        ) +
+        Number(
+          visitaEquipo.pct_hist_visita_gana || 0
+        );
+
+      const empate =
+        (
+          (
+            Number(
+              localEquipo.pct_hist_local_empata || 0
+            ) +
+            Number(
+              visitaEquipo.pct_hist_visita_empata || 0
+            )
+          ) / 2
+        ) * 4;
+
+      const total =
+        fuerzaLocal +
+        fuerzaVisita +
+        empate;
+
+      if (total === 0) continue;
+
+      const probLocal = Number(
+        (
+          (fuerzaLocal / total) *
+          100
+        ).toFixed(2)
       );
-    } catch (error) {
-      console.error(error);
-      alert(error.message);
-    } finally {
-      setGenerando(false);
+
+      const probEmpate = Number(
+        (
+          (empate / total) *
+          100
+        ).toFixed(2)
+      );
+
+      const probVisita = Number(
+        (
+          (fuerzaVisita / total) *
+          100
+        ).toFixed(2)
+      );
+
+      let pronostico =
+        "EMPATE";
+
+      const maximo = Math.max(
+        probLocal,
+        probEmpate,
+        probVisita
+      );
+
+      if (maximo === probLocal) {
+        pronostico = "LOCAL";
+      } else if (
+        maximo === probVisita
+      ) {
+        pronostico = "VISITA";
+      }
+
+      await supabase
+        .from(
+          "pronosticos_partidos"
+        )
+        .update({
+          prob_local: probLocal,
+          prob_empate: probEmpate,
+          prob_visita: probVisita,
+          pronostico,
+        })
+        .eq("id", partido.id);
     }
-  };
+
+    await cargarPartidos();
+
+    alert(
+      "Pronósticos generados correctamente"
+    );
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+  } finally {
+    setGenerando(false);
+  }
+};
+
 
   return (
     <div className="p-6">
@@ -381,8 +376,9 @@ const fuerzaVisita =
                 <div className="text-sm text-gray-500">
                   {partido.fecha_partido}
                 </div>
-                {partido.prob_local >
-  0 && (
+              </div>
+
+              {partido.prob_local > 0 && (
   <div className="mt-2 text-sm">
 
     <div>
@@ -411,28 +407,24 @@ const fuerzaVisita =
 
   </div>
 )}
-              </div>
-              Eliminar
+
+              <button
+                onClick={() =>
+                  eliminarPartido(
+                    partido.id
+                  )
+                }
+                className="
+                  bg-red-600
+                  text-white
+                  px-3
+                  py-2
+                  rounded
+                "
+              >
+                Eliminar
               </button>
             </div>
-
-            <button
-  onClick={generarPronosticos}
-  disabled={generando}
-  className="
-    mb-4
-    bg-blue-600
-    text-white
-    px-4
-    py-2
-    rounded
-    hover:bg-blue-700
-  "
->
-  {generando
-    ? "Generando..."
-    : "🎯 Generar Pronósticos"}
-</button>
 
           ))}
 
