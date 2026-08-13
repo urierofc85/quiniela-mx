@@ -358,42 +358,39 @@ alert(
       }
 
       const {
-        error: updateError,
-      } = await supabase
-        .from(
-          "pronosticos_partidos"
-        )
-        .update({
-          score_local:
-            Number(
-              scoreLocal.toFixed(2)
-            ),
+  data: updateData,
+  error: updateError,
+} = await supabase
+  .from("pronosticos_partidos")
+  .update({
+    score_local: Number(
+      scoreLocal.toFixed(2)
+    ),
 
-          score_visita:
-            Number(
-              scoreVisita.toFixed(2)
-            ),
+    score_visita: Number(
+      scoreVisita.toFixed(2)
+    ),
 
-          diferencia:
-            Number(
-              diferencia.toFixed(2)
-            ),
+    diferencia: Number(
+      diferencia.toFixed(2)
+    ),
 
-          prob_local:
-            probLocal,
+    prob_local: probLocal,
 
-          prob_empate:
-            probEmpate,
+    prob_empate: probEmpate,
 
-          prob_visita:
-            probVisita,
+    prob_visita: probVisita,
 
-          pronostico,
-        })
-        .eq(
-          "id",
-          partido.id
-        );
+    pronostico,
+  })
+  .eq("id", partido.id)
+  .select();
+
+alert(
+  updateError
+    ? updateError.message
+    : `Guardado ${partido.local}`
+);
 
       if (updateError) {
         console.error(
