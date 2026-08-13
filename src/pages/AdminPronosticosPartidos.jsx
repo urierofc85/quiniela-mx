@@ -325,43 +325,20 @@ const [generando, setGenerando] =
           "VISITA";
       }
 
-      const {
-        error: updateError,
-      } = await supabase
-        .from(
-          "pronosticos_partidos"
-        )
-        .update({
-          score_local:
-            Number(
-              scoreLocal.toFixed(2)
-            ),
+      const { error: updateError } =
+  await supabase
+    .from("pronosticos_partidos")
+    .update({
+      prob_local: 88,
+      pronostico: "TEST",
+    })
+    .eq("id", partido.id);
 
-          score_visita:
-            Number(
-              scoreVisita.toFixed(2)
-            ),
-
-          diferencia:
-            Number(
-              diferencia.toFixed(2)
-            ),
-
-          prob_local:
-            probLocal,
-
-          prob_empate:
-            probEmpate,
-
-          prob_visita:
-            probVisita,
-
-          pronostico,
-        })
-        .eq(
-          "id",
-          partido.id
-        );
+alert(
+  updateError
+    ? updateError.message
+    : `Actualizado ${partido.id}`
+);
 if (updateError) {
   alert(updateError.message);
 } else {
