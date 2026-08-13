@@ -355,16 +355,14 @@ const [generando, setGenerando] =
 
 if (updateError) {
   alert(updateError.message);
-} 
-  
-              if (updateError) {
-        console.error(
-          updateError
-        );
-      }
-      
-    }
-
+} else {
+  alert(
+    `ACTUALIZADO:
+${partido.local}
+vs
+${partido.visita}`
+  );
+}
     await cargarPartidos();
 
     alert(
