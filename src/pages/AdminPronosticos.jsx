@@ -230,6 +230,13 @@ export default function AdminPronosticos() {
   </div>
 </Link>
 
+<Route
+  path="/admin-recalcular-porcentajes"
+  element={
+    <AdminRecalcularPorcentajes />
+  }
+/>
+
       </div>
 
     </div>

@@ -38,6 +38,7 @@ import AdminImportarFormaScore from "./pages/AdminImportarFormaScore";
 import AdminImportarCalendarioScore from "./pages/AdminImportarCalendarioScore";
 import AdminFormaTemporadas from "./pages/AdminFormaTemporadas";
 import AdminRecalcularRatings from "./pages/AdminRecalcularRatings";
+import AdminRecalcularPorcentajes from "./pages/AdminRecalcularPorcentajes";
 
 function App() {
   return (
@@ -205,6 +206,13 @@ function App() {
 <Route
   path="/admin-recalcular-ratings"
   element={<AdminRecalcularRatings />}
+/>
+
+<Route
+  path="/admin-recalcular-porcentajes"
+  element={
+    <AdminRecalcularPorcentajes />
+  }
 />
 
       </Routes>
