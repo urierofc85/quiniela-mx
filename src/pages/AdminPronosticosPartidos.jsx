@@ -119,67 +119,107 @@ const [generando, setGenerando] =
         continue;
       }
 
-      const fuerzaLocal =
-        Number(
-          localEquipo.rating_total || 0
-        ) +
-        Number(
-          localEquipo.rating_historico || 0
-        ) +
-        Number(
-          localEquipo.pct_hist_local_gana || 0
-        );
+     const scoreLocal =
+  (
+    Number(localEquipo.rating_total || 0) *
+    0.30
+  ) +
+  (
+    Number(localEquipo.rating_historico || 0) *
+    0.20
+  ) +
+  (
+    Number(localEquipo.rating_tendencia || 0) *
+    0.10
+  ) +
+  (
+    Number(localEquipo.rating_ofensivo || 0) *
+    0.10
+  ) +
+  (
+    Number(localEquipo.rating_defensivo || 0) *
+    0.10
+  ) +
+  (
+    Number(
+      localEquipo.pct_hist_local_gana || 0
+    ) * 0.20
+  );
 
-      const fuerzaVisita =
-        Number(
-          visitaEquipo.rating_total || 0
-        ) +
-        Number(
-          visitaEquipo.rating_historico || 0
-        ) +
-        Number(
-          visitaEquipo.pct_hist_visita_gana || 0
-        );
+const scoreVisita =
+  (
+    Number(visitaEquipo.rating_total || 0) *
+    0.30
+  ) +
+  (
+    Number(visitaEquipo.rating_historico || 0) *
+    0.20
+  ) +
+  (
+    Number(visitaEquipo.rating_tendencia || 0) *
+    0.10
+  ) +
+  (
+    Number(visitaEquipo.rating_ofensivo || 0) *
+    0.10
+  ) +
+  (
+    Number(visitaEquipo.rating_defensivo || 0) *
+    0.10
+  ) +
+  (
+    Number(
+      visitaEquipo.pct_hist_visita_gana || 0
+    ) * 0.20
+  );
 
-      const empate =
-        (
-          (
-            Number(
-              localEquipo.pct_hist_local_empata || 0
-            ) +
-            Number(
-              visitaEquipo.pct_hist_visita_empata || 0
-            )
-          ) / 2
-        ) * 4;
+const diferencia = Math.abs(
+  scoreLocal -
+  scoreVisita
+);
 
-      const total =
-        fuerzaLocal +
-        fuerzaVisita +
-        empate;
+let empateFactor =
+(
+  Number(
+    localEquipo.pct_hist_local_empata || 0
+  ) +
+  Number(
+    visitaEquipo.pct_hist_visita_empata || 0
+  )
+) / 2;
+
+if (diferencia < 5) {
+  empateFactor *= 2;
+} else if (diferencia < 10) {
+  empateFactor *= 1.5;
+} else if (diferencia < 15) {
+  empateFactor *= 1.2;
+}
+
+const total =
+  scoreLocal +
+  scoreVisita +
+  empateFactor;
 
       if (total === 0) continue;
 
       const probLocal = Number(
-        (
-          (fuerzaLocal / total) *
-          100
-        ).toFixed(2)
-      );
+  (
+    (scoreLocal / total) * 100
+  ).toFixed(2)
+);
 
-      const probEmpate = Number(
-        (
-          (empate / total) *
-          100
-        ).toFixed(2)
-      );
+const probEmpate = Number(
+  (
+    (empateFactor / total) * 100
+  ).toFixed(2)
+);
 
-      const probVisita = Number(
-        (
-          (fuerzaVisita / total) *
-          100
-        ).toFixed(2)
-      );
+const probVisita = Number(
+  (
+    (scoreVisita / total) * 100
+  ).toFixed(2)
+);
 
       let pronostico =
         "EMPATE";
@@ -203,11 +243,32 @@ const [generando, setGenerando] =
           "pronosticos_partidos"
         )
         .update({
-          prob_local: probLocal,
-          prob_empate: probEmpate,
-          prob_visita: probVisita,
-          pronostico,
-        })
+  score_local:
+    Number(
+      scoreLocal.toFixed(2)
+    ),
+
+  score_visita:
+    Number(
+      scoreVisita.toFixed(2)
+    ),
+
+  diferencia:
+    Number(
+      diferencia.toFixed(2)
+    ),
+
+  prob_local:
+    probLocal,
+
+  prob_empate:
+    probEmpate,
+
+  prob_visita:
+    probVisita,
+
+  pronostico,
+})
         .eq("id", partido.id);
     }
 
