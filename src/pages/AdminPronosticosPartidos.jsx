@@ -357,10 +357,7 @@ if (updateError) {
   alert(updateError.message);
 } 
   
-}
-        
-
-      if (updateError) {
+              if (updateError) {
         console.error(
           updateError
         );
