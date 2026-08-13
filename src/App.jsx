@@ -37,6 +37,7 @@ import AdminImportarSofaScore from "./pages/AdminImportarSofaScore";
 import AdminImportarFormaScore from "./pages/AdminImportarFormaScore";
 import AdminImportarCalendarioScore from "./pages/AdminImportarCalendarioScore";
 import AdminFormaTemporadas from "./pages/AdminFormaTemporadas";
+import AdminRecalcularRatings from "./pages/AdminRecalcularRatings";
 
 function App() {
   return (
@@ -199,6 +200,11 @@ function App() {
 <Route
   path="/admin-forma-temporadas"
   element={<AdminFormaTemporadas />}
+/>
+
+<Route
+  path="/admin-recalcular-ratings"
+  element={<AdminRecalcularRatings />}
 />
 
       </Routes>

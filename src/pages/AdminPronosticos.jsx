@@ -210,6 +210,26 @@ export default function AdminPronosticos() {
   </div>
 </Link>
 
+<Link
+  to="/admin-recalcular-ratings"
+  className="
+    bg-red-600
+    text-white
+    p-5
+    rounded-lg
+    shadow
+    hover:bg-red-700
+  "
+>
+  <div className="text-xl font-bold">
+    ⚙️ Ratings
+  </div>
+
+  <div className="text-sm mt-2">
+    Recalcular ratings de equipos
+  </div>
+</Link>
+
       </div>
 
     </div>
