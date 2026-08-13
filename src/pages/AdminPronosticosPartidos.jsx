@@ -132,7 +132,8 @@ const [generando, setGenerando] =
   `Partidos encontrados: ${partidos.length}`
 );
 
-    for (const partido of partidosActuales) {
+    for (const partido of partidos) 
+      {
       const localEquipo =
         obtenerEquipo(
           partido.local
@@ -325,25 +326,37 @@ const [generando, setGenerando] =
           "VISITA";
       }
 
-      const {
+     const {
   error: updateError,
 } = await supabase
   .from("pronosticos_partidos")
   .update({
-    prob_local: 88,
-    pronostico: "TEST",
+    score_local: Number(
+      scoreLocal.toFixed(2)
+    ),
+
+    score_visita: Number(
+      scoreVisita.toFixed(2)
+    ),
+
+    diferencia: Number(
+      diferencia.toFixed(2)
+    ),
+
+    prob_local: probLocal,
+
+    prob_empate: probEmpate,
+
+    prob_visita: probVisita,
+
+    pronostico,
   })
   .eq("id", partido.id);
 
 if (updateError) {
   alert(updateError.message);
-} else {
-  alert(
-    `Guardado:
-${partido.local}
-vs
-${partido.visita}`
-  );
+} 
+  
 }
         
 
