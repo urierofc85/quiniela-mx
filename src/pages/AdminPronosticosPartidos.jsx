@@ -366,6 +366,15 @@ const [generando, setGenerando] =
           updateError
         );
       }
+      alert(`
+${partido.local} vs ${partido.visita}
+
+Local:
+${localEquipo?.equipo || "NO"}
+
+Visita:
+${visitaEquipo?.equipo || "NO"}
+`);
     }
 
     await cargarPartidos();
