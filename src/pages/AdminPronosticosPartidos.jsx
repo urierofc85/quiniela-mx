@@ -362,6 +362,17 @@ const [generando, setGenerando] =
           "id",
           partido.id
         );
+if (updateError) {
+  alert(updateError.message);
+} else {
+  alert(
+    `Guardado:
+${partido.local}
+vs
+${partido.visita}`
+  );
+}
+        
 
       if (updateError) {
         console.error(
