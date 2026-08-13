@@ -75,7 +75,14 @@ const [generando, setGenerando] =
       return;
     }
 
-    await supabase
+   await supabase
+  .from("pronosticos_partidos")
+  .update({
+    prob_local: 50,
+    prob_empate: 25,
+    prob_visita: 25,
+    pronostico: "LOCAL",
+  })
       .from("pronosticos_partidos")
       .delete()
       .eq("id", id);
@@ -139,18 +146,30 @@ const [generando, setGenerando] =
           partido.visita
         );
 
-      if (
-        !localEquipo ||
-        !visitaEquipo
-      ) {
-        console.log(
-          "Equipo no encontrado:",
-          partido.local,
-          partido.visita
-        );
+        alert(
+  `${partido.local} vs ${partido.visita}
 
-        continue;
-      }
+Local:
+${localEquipo?.equipo || "NO"}
+
+Visita:
+${visitaEquipo?.equipo || "NO"}`
+);
+
+      if (
+  !localEquipo ||
+  !visitaEquipo
+) {
+
+  alert(
+    `No encontrado:
+${partido.local}
+vs
+${partido.visita}`
+  );
+
+  continue;
+}
 
       const scoreLocal =
         (
