@@ -302,24 +302,38 @@ const [generando, setGenerando] =
           ).toFixed(2)
         );
 
-        alert(`
-${partido.local} vs ${partido.visita}
+        const { data, error } =
+  await supabase
+    .from("pronosticos_partidos")
+    .update({
+      score_local: Number(
+        scoreLocal.toFixed(2)
+      ),
 
-Score Local:
-${scoreLocal}
+      score_visita: Number(
+        scoreVisita.toFixed(2)
+      ),
 
-Score Visita:
-${scoreVisita}
+      diferencia: Number(
+        diferencia.toFixed(2)
+      ),
 
-Prob Local:
-${probLocal}
+      prob_local: probLocal,
 
-Prob Empate:
-${probEmpate}
+      prob_empate: probEmpate,
 
-Prob Visita:
-${probVisita}
-`);
+      prob_visita: probVisita,
+
+      pronostico,
+    })
+    .eq("id", partido.id)
+    .select();
+
+alert(
+  error
+    ? error.message
+    : `Guardado ${partido.local}`
+);
 
       let pronostico =
         "EMPATE";
