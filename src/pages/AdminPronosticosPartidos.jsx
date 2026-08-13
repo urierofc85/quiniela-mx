@@ -302,39 +302,7 @@ const [generando, setGenerando] =
           ).toFixed(2)
         );
 
-        const { data, error } =
-  await supabase
-    .from("pronosticos_partidos")
-    .update({
-      score_local: Number(
-        scoreLocal.toFixed(2)
-      ),
-
-      score_visita: Number(
-        scoreVisita.toFixed(2)
-      ),
-
-      diferencia: Number(
-        diferencia.toFixed(2)
-      ),
-
-      prob_local: probLocal,
-
-      prob_empate: probEmpate,
-
-      prob_visita: probVisita,
-
-      pronostico,
-    })
-    .eq("id", partido.id)
-    .select();
-
-alert(
-  error
-    ? error.message
-    : `Guardado ${partido.local}`
-);
-
+        
       let pronostico =
         "EMPATE";
 
@@ -358,39 +326,42 @@ alert(
       }
 
       const {
-  data: updateData,
-  error: updateError,
-} = await supabase
-  .from("pronosticos_partidos")
-  .update({
-    score_local: Number(
-      scoreLocal.toFixed(2)
-    ),
+        error: updateError,
+      } = await supabase
+        .from(
+          "pronosticos_partidos"
+        )
+        .update({
+          score_local:
+            Number(
+              scoreLocal.toFixed(2)
+            ),
 
-    score_visita: Number(
-      scoreVisita.toFixed(2)
-    ),
+          score_visita:
+            Number(
+              scoreVisita.toFixed(2)
+            ),
 
-    diferencia: Number(
-      diferencia.toFixed(2)
-    ),
+          diferencia:
+            Number(
+              diferencia.toFixed(2)
+            ),
 
-    prob_local: probLocal,
+          prob_local:
+            probLocal,
 
-    prob_empate: probEmpate,
+          prob_empate:
+            probEmpate,
 
-    prob_visita: probVisita,
+          prob_visita:
+            probVisita,
 
-    pronostico,
-  })
-  .eq("id", partido.id)
-  .select();
-
-alert(
-  updateError
-    ? updateError.message
-    : `Guardado ${partido.local}`
-);
+          pronostico,
+        })
+        .eq(
+          "id",
+          partido.id
+        );
 
       if (updateError) {
         console.error(
