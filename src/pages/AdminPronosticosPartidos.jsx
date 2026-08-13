@@ -363,6 +363,19 @@ vs
 ${partido.visita}`
   );
 }
+
+if (updateError) {
+  alert(updateError.message);
+} 
+  
+              if (updateError) {
+        console.error(
+          updateError
+        );
+      }
+      
+    }
+
     await cargarPartidos();
 
     alert(
