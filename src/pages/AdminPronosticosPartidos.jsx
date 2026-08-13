@@ -344,8 +344,7 @@ if (updateError) {
     updateError
   );
 }
-
-  
+ 
       await cargarPartidos();
 
       alert(
