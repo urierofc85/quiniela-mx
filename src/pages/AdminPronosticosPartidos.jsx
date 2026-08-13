@@ -27,23 +27,14 @@ const [generando, setGenerando] =
   };
 
   const cargarPartidos = async () => {
-    const { data, error } =
-  await supabase
-    .from("pronosticos_partidos")
-    .update({
-      prob_local: 99,
-      prob_empate: 1,
-      prob_visita: 0,
-      pronostico: "LOCAL",
-    })
-    .eq("id", partido.id)
-    .select();
+    const { data } = await supabase
+      .from("pronosticos_partidos")
+      .select("*")
+      .order("fecha_partido");
 
-alert(
-  error
-    ? error.message
-    : JSON.stringify(data)
-);
+    setPartidos(data || []);
+  };
+
   const crearPartido = async () => {
     if (!local || !visita) {
       alert("Selecciona ambos equipos");
@@ -151,6 +142,17 @@ alert(
         obtenerEquipo(
           partido.visita
         );
+        alert(`
+${partido.local}
+vs
+${partido.visita}
+
+Local:
+${localEquipo?.equipo || "NO"}
+
+Visita:
+${visitaEquipo?.equipo || "NO"}
+`);
 
       if (
         !localEquipo ||
