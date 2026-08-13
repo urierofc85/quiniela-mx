@@ -353,7 +353,17 @@ const [generando, setGenerando] =
   })
   .eq("id", partido.id);
 
-  const {
+  
+if (updateError) {
+  alert(updateError.message);
+} 
+  
+              if (updateError) {
+        console.error(
+          updateError
+        );
+      }
+      const {
   data,
   error: updateError,
 } = await supabase
@@ -369,16 +379,6 @@ alert(
   JSON.stringify(data)
 );
 ``
-
-if (updateError) {
-  alert(updateError.message);
-} 
-  
-              if (updateError) {
-        console.error(
-          updateError
-        );
-      }
       
     }
 
