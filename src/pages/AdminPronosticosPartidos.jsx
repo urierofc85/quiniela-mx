@@ -353,16 +353,22 @@ const [generando, setGenerando] =
   })
   .eq("id", partido.id);
 
-if (updateError) {
-  alert(updateError.message);
-} else {
-  alert(
-    `ACTUALIZADO:
-${partido.local}
-vs
-${partido.visita}`
-  );
-}
+  const {
+  data,
+  error: updateError,
+} = await supabase
+  .from("pronosticos_partidos")
+  .update({
+    prob_local: 88,
+    pronostico: "TEST",
+  })
+  .eq("id", partido.id)
+  .select();
+
+alert(
+  JSON.stringify(data)
+);
+``
 
 if (updateError) {
   alert(updateError.message);
