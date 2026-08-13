@@ -132,8 +132,8 @@ if (errorHistoricos) {
                 const registrosHistoricos =
   historicos.filter(
     (h) =>
-      h.equipo ===
-      equipo.equipo
+      normalizar(h.equipo) ===
+      normalizar(equipo.equipo)
   );
 
 let ratingHistorico = 0;
