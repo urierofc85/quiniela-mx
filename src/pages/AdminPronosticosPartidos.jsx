@@ -82,281 +82,300 @@ const [generando, setGenerando] =
 
     cargarPartidos();
   };
-  const generarPronosticos = async () => {
+ const generarPronosticos = async () => {
   try {
     setGenerando(true);
 
     const normalizar = (texto = "") =>
-  texto
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
+      texto
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
 
-const {
-  data: equiposData,
-  error,
-} = await supabase
-  .from("pronosticos_equipos")
-  .select("*");
+    const {
+      data: equiposData,
+      error,
+    } = await supabase
+      .from("pronosticos_equipos")
+      .select("*");
 
-if (error) {
-  alert(error.message);
-  return;
-}
-
-        const mapaEquipos = {};
-
-equiposData.forEach((equipo) => {
-  mapaEquipos[
-    normalizar(equipo.equipo)
-  ] = equipo;
-});
-
-const alias = {
-  guadalajara: "chivas",
-};
-
-const obtenerEquipo = (
-  nombre
-) => {
-  const clave =
-    normalizar(nombre);
-
-  return mapaEquipos[
-    alias[clave] || clave
-  ];
-};
-
-for (const partido of partidos) {
-
-  const localEquipo =
-    obtenerEquipo(
-      partido.local
-    );
-
-  const visitaEquipo =
-    obtenerEquipo(
-      partido.visita
-    );
-
-  if (
-    !localEquipo ||
-    !visitaEquipo
-  ) {
-
-    console.log(
-      "Equipo no encontrado:",
-      partido.local,
-      partido.visita
-    );
-
-    continue;
-  }
-
-  const scoreLocal =
-    (
-      Number(
-        localEquipo.rating_total || 0
-      ) * 0.30
-    ) +
-    (
-      Number(
-        localEquipo.rating_historico || 0
-      ) * 0.20
-    ) +
-    (
-      Number(
-        localEquipo.rating_tendencia || 0
-      ) * 0.10
-    ) +
-    (
-      Number(
-        localEquipo.rating_ofensivo || 0
-      ) * 0.10
-    ) +
-    (
-      Number(
-        localEquipo.rating_defensivo || 0
-      ) * 0.10
-    ) +
-    (
-      Number(
-        localEquipo.pct_hist_local_gana || 0
-      ) * 0.20
-    );
-
-  const scoreVisita =
-    (
-      Number(
-        visitaEquipo.rating_total || 0
-      ) * 0.30
-    ) +
-    (
-      Number(
-        visitaEquipo.rating_historico || 0
-      ) * 0.20
-    ) +
-    (
-      Number(
-        visitaEquipo.rating_tendencia || 0
-      ) * 0.10
-    ) +
-    (
-      Number(
-        visitaEquipo.rating_ofensivo || 0
-      ) * 0.10
-    ) +
-    (
-      Number(
-        visitaEquipo.rating_defensivo || 0
-      ) * 0.10
-    ) +
-    (
-      Number(
-        visitaEquipo.pct_hist_visita_gana || 0
-      ) * 0.20
-    );
-
-  const diferencia =
-    Math.abs(
-      scoreLocal -
-      scoreVisita
-    );
-
-  let empateFactor =
-    (
-      Number(
-        localEquipo.pct_hist_local_empata || 0
-      ) +
-      Number(
-        visitaEquipo.pct_hist_visita_empata || 0
-      )
-    ) / 2;
-
-  if (diferencia < 5) {
-    empateFactor *= 2;
-  } else if (
-    diferencia < 10
-  ) {
-    empateFactor *= 1.5;
-  } else if (
-    diferencia < 15
-  ) {
-    empateFactor *= 1.2;
-  }
-
-  const total =
-    scoreLocal +
-    scoreVisita +
-    empateFactor;
-
-  if (total <= 0) {
-    continue;
-  }
-
-  const probLocal =
-    Number(
-      (
-        (
-          scoreLocal /
-          total
-        ) * 100
-      ).toFixed(2)
-    );
-
-  const probEmpate =
-    Number(
-      (
-        (
-          empateFactor /
-          total
-        ) * 100
-      ).toFixed(2)
-    );
-
-  const probVisita =
-    Number(
-      (
-        (
-          scoreVisita /
-          total
-        ) * 100
-      ).toFixed(2)
-    );
-
-  let pronostico =
-    "EMPATE";
-
-  const maximo =
-    Math.max(
-      probLocal,
-      probEmpate,
-      probVisita
-    );
-
-  if (maximo === probLocal) {
-    pronostico = "LOCAL";
-  } else if (
-    maximo === probVisita
-  ) {
-    pronostico = "VISITA";
-  }
-  const { error: updateError } =
-  await supabase
-    .from(
-      "pronosticos_partidos"
-    )
-    .update({
-      score_local:
-        Number(
-          scoreLocal.toFixed(2)
-        ),
-
-      score_visita:
-        Number(
-          scoreVisita.toFixed(2)
-        ),
-
-      diferencia:
-        Number(
-          diferencia.toFixed(2)
-        ),
-
-      prob_local:
-        probLocal,
-
-      prob_empate:
-        probEmpate,
-
-      prob_visita:
-        probVisita,
-
-      pronostico,
-    })
-    .eq(
-      "id",
-      partido.id
-    );
-
-if (updateError) {
-  console.error(
-    updateError
-  );
-}
- 
-      await cargarPartidos();
-
-      alert(
-        "Pronósticos generados correctamente"
-      );
-    } catch (error) {
-      console.error(error);
+    if (error) {
       alert(error.message);
-    } finally {
-      setGenerando(false);
+      return;
     }
-  };
+
+    const mapaEquipos = {};
+
+    equiposData.forEach((equipo) => {
+      mapaEquipos[
+        normalizar(equipo.equipo)
+      ] = equipo;
+    });
+
+    const alias = {
+      guadalajara: "chivas",
+    };
+
+    const obtenerEquipo = (
+      nombre
+    ) => {
+      const clave =
+        normalizar(nombre);
+
+      return mapaEquipos[
+        alias[clave] || clave
+      ];
+    };
+
+    for (const partido of partidos) {
+      const localEquipo =
+        obtenerEquipo(
+          partido.local
+        );
+
+      const visitaEquipo =
+        obtenerEquipo(
+          partido.visita
+        );
+
+      if (
+        !localEquipo ||
+        !visitaEquipo
+      ) {
+        console.log(
+          "Equipo no encontrado:",
+          partido.local,
+          partido.visita
+        );
+
+        continue;
+      }
+
+      const scoreLocal =
+        (
+          Number(
+            localEquipo.rating_total ||
+              0
+          ) * 0.30
+        ) +
+        (
+          Number(
+            localEquipo.rating_historico ||
+              0
+          ) * 0.20
+        ) +
+        (
+          Number(
+            localEquipo.rating_tendencia ||
+              0
+          ) * 0.10
+        ) +
+        (
+          Number(
+            localEquipo.rating_ofensivo ||
+              0
+          ) * 0.10
+        ) +
+        (
+          Number(
+            localEquipo.rating_defensivo ||
+              0
+          ) * 0.10
+        ) +
+        (
+          Number(
+            localEquipo.pct_hist_local_gana ||
+              0
+          ) * 0.20
+        );
+
+      const scoreVisita =
+        (
+          Number(
+            visitaEquipo.rating_total ||
+              0
+          ) * 0.30
+        ) +
+        (
+          Number(
+            visitaEquipo.rating_historico ||
+              0
+          ) * 0.20
+        ) +
+        (
+          Number(
+            visitaEquipo.rating_tendencia ||
+              0
+          ) * 0.10
+        ) +
+        (
+          Number(
+            visitaEquipo.rating_ofensivo ||
+              0
+          ) * 0.10
+        ) +
+        (
+          Number(
+            visitaEquipo.rating_defensivo ||
+              0
+          ) * 0.10
+        ) +
+        (
+          Number(
+            visitaEquipo.pct_hist_visita_gana ||
+              0
+          ) * 0.20
+        );
+
+      const diferencia =
+        Math.abs(
+          scoreLocal -
+            scoreVisita
+        );
+
+      let empateFactor =
+        (
+          Number(
+            localEquipo.pct_hist_local_empata ||
+              0
+          ) +
+          Number(
+            visitaEquipo.pct_hist_visita_empata ||
+              0
+          )
+        ) / 2;
+
+      if (diferencia < 5) {
+        empateFactor *= 2;
+      } else if (
+        diferencia < 10
+      ) {
+        empateFactor *= 1.5;
+      } else if (
+        diferencia < 15
+      ) {
+        empateFactor *= 1.2;
+      }
+
+      const total =
+        scoreLocal +
+        scoreVisita +
+        empateFactor;
+
+      if (total <= 0) {
+        continue;
+      }
+
+      const probLocal =
+        Number(
+          (
+            (
+              scoreLocal /
+              total
+            ) * 100
+          ).toFixed(2)
+        );
+
+      const probEmpate =
+        Number(
+          (
+            (
+              empateFactor /
+              total
+            ) * 100
+          ).toFixed(2)
+        );
+
+      const probVisita =
+        Number(
+          (
+            (
+              scoreVisita /
+              total
+            ) * 100
+          ).toFixed(2)
+        );
+
+      let pronostico =
+        "EMPATE";
+
+      const maximo =
+        Math.max(
+          probLocal,
+          probEmpate,
+          probVisita
+        );
+
+      if (
+        maximo === probLocal
+      ) {
+        pronostico =
+          "LOCAL";
+      } else if (
+        maximo === probVisita
+      ) {
+        pronostico =
+          "VISITA";
+      }
+
+      const {
+        error: updateError,
+      } = await supabase
+        .from(
+          "pronosticos_partidos"
+        )
+        .update({
+          score_local:
+            Number(
+              scoreLocal.toFixed(2)
+            ),
+
+          score_visita:
+            Number(
+              scoreVisita.toFixed(2)
+            ),
+
+          diferencia:
+            Number(
+              diferencia.toFixed(2)
+            ),
+
+          prob_local:
+            probLocal,
+
+          prob_empate:
+            probEmpate,
+
+          prob_visita:
+            probVisita,
+
+          pronostico,
+        })
+        .eq(
+          "id",
+          partido.id
+        );
+
+      if (updateError) {
+        console.error(
+          updateError
+        );
+      }
+    }
+
+    await cargarPartidos();
+
+    alert(
+      "Pronósticos generados correctamente"
+    );
+  } catch (error) {
+    console.error(error);
+    alert(error.message);
+  } finally {
+    setGenerando(false);
+  }
+};
 
 
   return (
