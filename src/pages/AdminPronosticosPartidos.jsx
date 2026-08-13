@@ -128,11 +128,11 @@ const [generando, setGenerando] =
       ];
     };
 
-    alert(
-  `Partidos encontrados: ${partidos.length}`
+  alert(
+  `Partidos encontrados: ${partidosActuales.length}`
 );
 
-    for (const partido of partidos) {
+    for (const partido of partidosActuales) {
       const localEquipo =
         obtenerEquipo(
           partido.local
@@ -325,20 +325,53 @@ const [generando, setGenerando] =
           "VISITA";
       }
 
-      const { error: updateError } =
-  await supabase
-    .from("pronosticos_partidos")
-    .update({
-      prob_local: 88,
-      pronostico: "TEST",
-    })
-    .eq("id", partido.id);
+      const {
+        error: updateError,
+      } = await supabase
+        .from(
+          "pronosticos_partidos"
+        )
+        
+        .update({
+          score_local:
+            Number(
+              scoreLocal.toFixed(2)
+            ),
 
-alert(
-  updateError
-    ? updateError.message
-    : `Actualizado ${partido.id}`
-);
+          score_visita:
+            Number(
+              scoreVisita.toFixed(2)
+            ),
+
+          diferencia:
+            Number(
+              diferencia.toFixed(2)
+            ),
+
+          prob_local:
+            probLocal,
+
+          prob_empate:
+            probEmpate,
+
+          prob_visita:
+            probVisita,
+
+          pronostico,
+        })
+        .eq(
+          "id",
+          partido.id
+        );
+      alert(`
+Actualizado:
+
+${partido.local}
+
+${probLocal}
+${probEmpate}
+${probVisita}
+`);
 if (updateError) {
   alert(updateError.message);
 } else {
@@ -371,6 +404,13 @@ ${partido.visita}`
     setGenerando(false);
   }
 };
+
+const {
+  data: partidosActuales,
+  error: partidosError,
+} = await supabase
+  .from("pronosticos_partidos")
+  .select("*");
 
 
   return (
