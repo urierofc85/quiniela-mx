@@ -3,6 +3,7 @@ import { supabase } from "../services/supabase";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { obtenerHoraMexico } from "../services/horario";
 
 export default function AdminSurvivor() {
   //=========================================
@@ -31,11 +32,11 @@ export default function AdminSurvivor() {
   }, []);
 
   useEffect(() => {
-    if (rawSurvivor.length > 0) {
+    if (rawSurvivor.length > 0 && jornadas.length > 0) {
       calcularRanking();
       cargarReporteJornada();
     }
-  }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos]);
+  }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, jornadas]);
 
   //=========================================
   // CARGA DE DATOS (SUPABASE)
@@ -87,58 +88,98 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING
+  // LÓGICA DEL RANKING (AJUSTADA CON JORNADAS CERRADAS)
   //=========================================
-  const calcularRanking = () => {
-    const registrosFiltrados = rawSurvivor.filter((registro) => {
+  const calcularRanking = async () => {
+    const horaMexico = await obtenerHoraMexico();
+
+    // Filtramos jornadas a evaluar según lo seleccionado en el combo
+    const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
-      return Number(registro.jornada_id) === Number(jornadaSeleccionada);
+      return Number(j.id) === Number(jornadaSeleccionada);
     });
 
     const acumulado = {};
 
-    for (const registro of registrosFiltrados) {
-      const usuario = rawPerfiles.find((p) => p.id === registro.usuario_id);
-      const partido = rawPartidos.find(
-        (p) =>
-          Number(p.jornada_id) === Number(registro.jornada_id) &&
-          (p.local === registro.equipo || p.visitante === registro.equipo)
-      );
-
+    // Inicializamos el acumulado para todos los perfiles existentes
+    rawPerfiles.forEach((usuario) => {
       const nombre =
         usuario?.nombre_usuario ||
         usuario?.nombre ||
         usuario?.nombre_completo ||
-        registro.usuario ||
         "Sin nombre";
 
-      if (!acumulado[registro.usuario_id]) {
-        acumulado[registro.usuario_id] = {
-          usuario_id: registro.usuario_id,
-          nombre,
-          puntos: 0,
-          vidas: 0,
-          equipoElegido: registro.equipo,
-        };
-      }
+      acumulado[usuario.id] = {
+        usuario_id: usuario.id,
+        nombre,
+        puntos: 0,
+        vidas: 0,
+        equipoElegido: "-",
+      };
+    });
 
-      if (!partido || !partido.resultado) continue;
+    // Procesamos cada jornada elegible
+    for (const jornada of jornadasAProcesar) {
+      const esPasadaYCerrada = jornada.fecha_limite
+        ? horaMexico > new Date(jornada.fecha_limite)
+        : false;
 
-      let puntos = 0;
-      let perdio = false;
+      // Obtenemos selecciones de esta jornada
+      const eleccionesJornada = rawSurvivor.filter(
+        (s) => Number(s.jornada_id) === Number(jornada.id)
+      );
 
-      if (partido.local === registro.equipo) {
-        if (partido.resultado === "L") puntos = 3;
-        else if (partido.resultado === "E") puntos = 1;
-        else if (partido.resultado === "V") perdio = true;
-      } else if (partido.visitante === registro.equipo) {
-        if (partido.resultado === "V") puntos = 3;
-        else if (partido.resultado === "E") puntos = 1;
-        else if (partido.resultado === "L") perdio = true;
-      }
+      rawPerfiles.forEach((usuario) => {
+        const seleccion = eleccionesJornada.find(
+          (s) => s.usuario_id === usuario.id
+        );
 
-      acumulado[registro.usuario_id].puntos += puntos;
-      if (perdio) acumulado[registro.usuario_id].vidas += 1;
+        const registroAcumulado = acumulado[usuario.id];
+        if (!registroAcumulado) return;
+
+        // Si estamos viendo una jornada individual, guardamos su equipo elegido específico
+        if (jornadaSeleccionada !== "general") {
+          registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
+        }
+
+        // CASO A: No seleccionó y la jornada ya cerró -> Pierde 1 vida
+        if (!seleccion && esPasadaYCerrada) {
+          registroAcumulado.vidas += 1;
+          return;
+        }
+
+        // CASO B: No seleccionó y la jornada sigue abierta -> No afecta
+        if (!seleccion) {
+          return;
+        }
+
+        // CASO C: Sí seleccionó, calculamos puntos y resultados
+        const partido = rawPartidos.find(
+          (p) =>
+            Number(p.jornada_id) === Number(jornada.id) &&
+            (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
+        );
+
+        if (!partido || !partido.resultado) return;
+
+        let puntos = 0;
+        let perdio = false;
+
+        if (partido.local === seleccion.equipo) {
+          if (partido.resultado === "L") puntos = 3;
+          else if (partido.resultado === "E") puntos = 1;
+          else if (partido.resultado === "V") perdio = true;
+        } else if (partido.visitante === seleccion.equipo) {
+          if (partido.resultado === "V") puntos = 3;
+          else if (partido.resultado === "E") puntos = 1;
+          else if (partido.resultado === "L") perdio = true;
+        }
+
+        registroAcumulado.puntos += puntos;
+        if (perdio) {
+          registroAcumulado.vidas += 1;
+        }
+      });
     }
 
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
@@ -163,16 +204,17 @@ export default function AdminSurvivor() {
       (item) => Number(item.jornada_id) === Number(jornadaSeleccionada)
     );
 
-    const filas = eleccionesJornada.map((item) => {
-      const perfil = rawPerfiles.find((p) => p.id === item.usuario_id);
+    const filas = rawPerfiles.map((perfil) => {
+      const seleccion = eleccionesJornada.find((item) => item.usuario_id === perfil.id);
+      const participante =
+        perfil?.nombre_usuario ||
+        perfil?.nombre ||
+        perfil?.nombre_completo ||
+        "Sin nombre";
+
       return {
-        participante:
-          perfil?.nombre_usuario ||
-          perfil?.nombre ||
-          perfil?.nombre_completo ||
-          item.usuario ||
-          "Sin nombre",
-        seleccion: item.equipo,
+        participante,
+        seleccion: seleccion ? seleccion.equipo : "Sin selección",
       };
     });
 
@@ -268,23 +310,19 @@ export default function AdminSurvivor() {
       return;
     }
 
-    // Orientación horizontal ("landscape") para dar más espacio a los nombres
     const doc = new jsPDF({
       orientation: "landscape",
       unit: "pt",
       format: "a4",
     });
 
-    // Encabezados: [ "Equipo", "Usuario 1", "Usuario 2", ... ]
     const head = [["Equipo", ...usuarios.map((u) => u.nombre)]];
 
-    // Filas de la tabla
     const body = resultado.map((row) => [
       row.equipo,
       ...row.usosPorUsuario.map((u) => u.cantidad),
     ]);
 
-    // Título del documento
     const jornadaNombre =
       jornadaSeleccionada === "general"
         ? "General"
@@ -294,7 +332,6 @@ export default function AdminSurvivor() {
     doc.setFontSize(16);
     doc.text(`Usos por Equipo - ${jornadaNombre}`, 40, 40);
 
-    // Renderizar la tabla dinámica
     autoTable(doc, {
       startY: 50,
       head: head,
@@ -314,21 +351,20 @@ export default function AdminSurvivor() {
       columnStyles: {
         0: { halign: "left", fontStyle: "bold" },
       },
-      // Formatear el color de fondo dinámicamente según los usos
       didParseCell: (data) => {
         if (data.section === "body" && data.column.index > 0) {
           const valor = Number(data.cell.raw);
           if (valor === 1) {
-            data.cell.styles.fillColor = [34, 197, 94]; // Verde (#22c55e)
+            data.cell.styles.fillColor = [34, 197, 94];
             data.cell.styles.textColor = [255, 255, 255];
           } else if (valor === 2) {
-            data.cell.styles.fillColor = [250, 204, 21]; // Amarillo (#facc15)
+            data.cell.styles.fillColor = [250, 204, 21];
             data.cell.styles.textColor = [0, 0, 0];
           } else if (valor >= 3) {
-            data.cell.styles.fillColor = [239, 68, 68]; // Rojo (#ef4444)
+            data.cell.styles.fillColor = [239, 68, 68];
             data.cell.styles.textColor = [255, 255, 255];
           } else {
-            data.cell.styles.fillColor = [255, 255, 255]; // Blanco
+            data.cell.styles.fillColor = [255, 255, 255];
             data.cell.styles.textColor = [156, 163, 175];
           }
         }
@@ -508,10 +544,10 @@ export default function AdminSurvivor() {
                           className="p-2 text-center font-semibold"
                           style={{
                             border: "1px solid #e5e7eb",
-                            color: "#1d4ed8",
+                            color: fila.equipoElegido === "Sin selección" ? "#dc2626" : "#1d4ed8",
                           }}
                         >
-                          {fila.equipoElegido || "-"}
+                          {fila.equipoElegido}
                         </td>
                       )}
                       <td
@@ -558,7 +594,7 @@ export default function AdminSurvivor() {
                     color: "#854d0e",
                   }}
                 >
-                  No se registraron selecciones de equipos para esta jornada.
+                  No se registraron perfiles de usuario.
                 </div>
               ) : (
                 <table
@@ -587,7 +623,7 @@ export default function AdminSurvivor() {
                           className="p-2 text-center font-bold"
                           style={{
                             border: "1px solid #e5e7eb",
-                            color: "#1f2937",
+                            color: fila.seleccion === "Sin selección" ? "#dc2626" : "#1f2937",
                           }}
                         >
                           {fila.seleccion}

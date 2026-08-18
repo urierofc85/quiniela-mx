@@ -123,28 +123,60 @@ export default function Survivor() {
       .eq("usuario_id", user.id)
       .order("jornada_id", { ascending: true });
 
-    const { data: jornadas } = await supabase.from("jornadas").select("*");
+    const { data: jornadas } = await supabase
+      .from("jornadas")
+      .select("*")
+      .order("id", { ascending: true });
+
     const { data: partidos } = await supabase.from("partidos").select("*");
+    const horaMexico = await obtenerHoraMexico();
 
     let total = 0;
     let vidas = 0;
 
-    const procesado = (selecciones || []).map((item) => {
-      const jornada = jornadas?.find(
-        (j) => Number(j.id) === Number(item.jornada_id)
+    const procesado = (jornadas || []).map((jornada) => {
+      // Validamos si esta jornada ya pasó su fecha límite para considerarla cerrada/expirada
+      const esPasadaYCerrada = jornada.fecha_limite ? horaMexico > new Date(jornada.fecha_limite) : false;
+
+      const seleccion = selecciones?.find(
+        (s) => Number(s.jornada_id) === Number(jornada.id)
       );
 
+      // CASO 1: No seleccionó equipo y la jornada ya cerró/pasó
+      if (!seleccion && esPasadaYCerrada) {
+        vidas++;
+        return {
+          id: `jornada-${jornada.id}`,
+          nombreJornada: jornada.nombre || `Jornada ${jornada.id}`,
+          equipo: "Sin selección",
+          resultado: "❌ No elegible (Perdió vida)",
+          puntos: 0,
+        };
+      }
+
+      // CASO 2: La jornada aún está activa o abierta y no seleccionó nada todavía
+      if (!seleccion) {
+        return {
+          id: `jornada-${jornada.id}`,
+          nombreJornada: jornada.nombre || `Jornada ${jornada.id}`,
+          equipo: "Sin selección",
+          resultado: "Pendiente",
+          puntos: 0,
+        };
+      }
+
+      // CASO 3: Sí tiene selección, calculamos puntos y resultados normales
       const partido = partidos?.find(
         (p) =>
-          Number(p.jornada_id) === Number(item.jornada_id) &&
-          (p.local === item.equipo || p.visitante === item.equipo)
+          Number(p.jornada_id) === Number(jornada.id) &&
+          (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
       );
 
       let puntos = 0;
       let resultado = "Pendiente";
 
       if (partido?.resultado) {
-        if (partido.local === item.equipo) {
+        if (partido.local === seleccion.equipo) {
           if (partido.resultado === "L") {
             puntos = 3;
             resultado = "✅ Ganó";
@@ -159,7 +191,7 @@ export default function Survivor() {
           }
         }
 
-        if (partido.visitante === item.equipo) {
+        if (partido.visitante === seleccion.equipo) {
           if (partido.resultado === "V") {
             puntos = 3;
             resultado = "✅ Ganó";
@@ -182,8 +214,8 @@ export default function Survivor() {
       }
 
       return {
-        ...item,
-        nombreJornada: jornada?.nombre || `Jornada ${item.jornada_id}`,
+        ...seleccion,
+        nombreJornada: jornada.nombre || `Jornada ${seleccion.jornada_id}`,
         puntos,
         resultado,
       };
@@ -331,6 +363,7 @@ export default function Survivor() {
 
           <div>
             <button
+              guardarSeleccion
               onClick={guardarSeleccion}
               disabled={jornadaCerrada}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded mt-4 disabled:bg-gray-400"
