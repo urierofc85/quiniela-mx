@@ -25,10 +25,10 @@ export default function RankingSurvivor() {
   }, []);
 
   useEffect(() => {
-    if (rawSurvivor.length > 0) {
+    if (rawPerfiles.length > 0 && jornadas.length > 0 && horaMexico) {
       calcularRanking();
     }
-  }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, horaMexico]);
+  }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, jornadas, horaMexico]);
 
   //=========================================
   // CARGA DE DATOS (SUPABASE Y HORARIO)
@@ -87,58 +87,98 @@ export default function RankingSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING
+  // LÓGICA DEL RANKING (IGUALADA A ADMIN)
   //=========================================
   const calcularRanking = () => {
-    const registrosFiltrados = rawSurvivor.filter((registro) => {
+    const referenciaTiempo = horaMexico || new Date();
+
+    // Filtramos jornadas a evaluar según lo seleccionado en el combo
+    const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
-      return Number(registro.jornada_id) === Number(jornadaSeleccionada);
+      return Number(j.id) === Number(jornadaSeleccionada);
     });
 
     const acumulado = {};
 
-    for (const registro of registrosFiltrados) {
-      const usuario = rawPerfiles.find((p) => p.id === registro.usuario_id);
-      const partido = rawPartidos.find(
-        (p) =>
-          Number(p.jornada_id) === Number(registro.jornada_id) &&
-          (p.local === registro.equipo || p.visitante === registro.equipo)
-      );
-
+    // 1. Inicializamos el acumulado con TODOS los perfiles existentes
+    rawPerfiles.forEach((usuario) => {
       const nombre =
         usuario?.nombre_usuario ||
         usuario?.nombre ||
         usuario?.nombre_completo ||
-        registro.usuario ||
         "Sin nombre";
 
-      if (!acumulado[registro.usuario_id]) {
-        acumulado[registro.usuario_id] = {
-          usuario_id: registro.usuario_id,
-          nombre,
-          puntos: 0,
-          vidas: 0,
-          equipoElegido: registro.equipo,
-        };
-      }
+      acumulado[usuario.id] = {
+        usuario_id: usuario.id,
+        nombre,
+        puntos: 0,
+        vidas: 0,
+        equipoElegido: "-",
+      };
+    });
 
-      if (!partido || !partido.resultado) continue;
+    // 2. Procesamos cada jornada elegible
+    for (const jornada of jornadasAProcesar) {
+      const esPasadaYCerrada = jornada.fecha_limite
+        ? referenciaTiempo > new Date(jornada.fecha_limite)
+        : jornada.cerrada === true || jornada.estado === "cerrada";
 
-      let puntos = 0;
-      let perdio = false;
+      // Obtenemos las selecciones de esta jornada específica
+      const eleccionesJornada = rawSurvivor.filter(
+        (s) => Number(s.jornada_id) === Number(jornada.id)
+      );
 
-      if (partido.local === registro.equipo) {
-        if (partido.resultado === "L") puntos = 3;
-        else if (partido.resultado === "E") puntos = 1;
-        else if (partido.resultado === "V") perdio = true;
-      } else if (partido.visitante === registro.equipo) {
-        if (partido.resultado === "V") puntos = 3;
-        else if (partido.resultado === "E") puntos = 1;
-        else if (partido.resultado === "L") perdio = true;
-      }
+      rawPerfiles.forEach((usuario) => {
+        const seleccion = eleccionesJornada.find(
+          (s) => s.usuario_id === usuario.id
+        );
 
-      acumulado[registro.usuario_id].puntos += puntos;
-      if (perdio) acumulado[registro.usuario_id].vidas += 1;
+        const registroAcumulado = acumulado[usuario.id];
+        if (!registroAcumulado) return;
+
+        // Si estamos viendo una jornada individual, guardamos su equipo elegido
+        if (jornadaSeleccionada !== "general") {
+          registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
+        }
+
+        // CASO A: No seleccionó y la jornada ya cerró -> Pierde 1 vida
+        if (!seleccion && esPasadaYCerrada) {
+          registroAcumulado.vidas += 1;
+          return;
+        }
+
+        // CASO B: No seleccionó y la jornada sigue abierta -> No afecta
+        if (!seleccion) {
+          return;
+        }
+
+        // CASO C: Sí seleccionó, calculamos puntos y resultados
+        const partido = rawPartidos.find(
+          (p) =>
+            Number(p.jornada_id) === Number(jornada.id) &&
+            (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
+        );
+
+        if (!partido || !partido.resultado) return;
+
+        let puntos = 0;
+        let perdio = false;
+
+        if (partido.local === seleccion.equipo) {
+          if (partido.resultado === "L") puntos = 3;
+          else if (partido.resultado === "E") puntos = 1;
+          else if (partido.resultado === "V") perdio = true;
+        } else if (partido.visitante === seleccion.equipo) {
+          if (partido.resultado === "V") puntos = 3;
+          else if (partido.resultado === "E") puntos = 1;
+          else if (partido.resultado === "L") perdio = true;
+        }
+
+        registroAcumulado.puntos += puntos;
+        if (perdio) {
+          registroAcumulado.vidas += 1;
+        }
+      });
     }
 
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
@@ -310,7 +350,7 @@ export default function RankingSurvivor() {
                         className="p-2 text-center font-semibold"
                         style={{
                           border: "1px solid #e5e7eb",
-                          color: "#1d4ed8",
+                          color: fila.equipoElegido === "Sin selección" ? "#dc2626" : "#1d4ed8",
                         }}
                       >
                         {tiempoExpirado
