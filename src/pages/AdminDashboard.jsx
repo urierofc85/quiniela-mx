@@ -35,7 +35,7 @@ export default function AdminDashboard() {
   const [rankingAcumulado, setRankingAcumulado] = useState([]);
 
   // Estado para tipo de exportación
-  const [tipoExportacion, setTipoExportacion] = useState("jornada"); // "jornada" o "acumulado"
+  const [tipoExportacion, setTipoExportacion] = useState("jornada");
 
   useEffect(() => {
     cargarDashboard();
@@ -54,7 +54,6 @@ export default function AdminDashboard() {
     window.location.replace("/");
   };
 
-  // Función para identificar al admin
   const esAdmin = (p) => {
     const email = (p.email || "").toLowerCase();
     const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
@@ -64,7 +63,6 @@ export default function AdminDashboard() {
   const cargarDashboard = async () => {
     const ahora = await obtenerHoraMexico();
 
-    // 1. Obtener jornadas y perfiles
     const { data: jornadasData } = await supabase.from("jornadas").select("*").order("id", { ascending: true });
     setJornadas(jornadasData || []);
 
@@ -75,16 +73,13 @@ export default function AdminDashboard() {
     const { count } = await supabase.from("profiles").select("*", { count: "exact", head: true });
     setParticipantes(count || 0);
 
-    // 2. Obtener TODOS los datos históricos para cálculos precisos
     const { data: perfilesData } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email");
     const { data: todasQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id");
     const { data: todosSurvivor } = await supabase.from("survivor").select("jornada_id, usuario_id, equipo");
     const { data: todosPartidos } = await supabase.from("partidos").select("jornada_id, local, visitante, resultado");
 
-    // 3. Preparar datos para la gráfica
     prepararDatosGrafica(jornadasData, jornadaActivaData?.id, todasQuinielas, todosSurvivor);
 
-    // 4. Calcular ausentes con filtros inteligentes
     if (jornadaActivaData && perfilesData) {
       calcularAusentesInteligentes(
         jornadaActivaData.id,
@@ -97,7 +92,6 @@ export default function AdminDashboard() {
       );
     }
 
-    // 5. Calcular ranking acumulado
     if (perfilesData && todasQuinielas && todosPartidos) {
       await calcularRankingAcumulado(perfilesData, todasQuinielas, todosPartidos, jornadasData);
     }
@@ -121,9 +115,8 @@ export default function AdminDashboard() {
     const ahora = await obtenerHoraMexico();
     const acumulado = {};
 
-    // Inicializar todos los participantes
     perfilesData.forEach((usuario) => {
-      if (esAdmin(usuario)) return; // Excluir admin
+      if (esAdmin(usuario)) return;
       
       const nombre = usuario.nombre_usuario || usuario.nombre || "Sin nombre";
       acumulado[usuario.id] = {
@@ -135,7 +128,6 @@ export default function AdminDashboard() {
       };
     });
 
-    // Procesar cada jornada
     jornadasData.forEach((jornada) => {
       const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
       const eleccionesJornada = todasQuinielas.filter(s => Number(s.jornada_id) === Number(jornada.id));
@@ -147,7 +139,6 @@ export default function AdminDashboard() {
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
-        // Si no seleccionó y la jornada cerró
         if (!seleccion && esPasadaYCerrada) {
           if (registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
           return;
@@ -155,7 +146,6 @@ export default function AdminDashboard() {
 
         if (!seleccion) return;
 
-        // Buscar partido y calcular puntos
         const partido = todosPartidos.find(p => 
           Number(p.jornada_id) === Number(jornada.id) &&
           (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
@@ -186,7 +176,6 @@ export default function AdminDashboard() {
       });
     });
 
-    // Ordenar: primero por menos vidas, luego por más puntos
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
       if (a.vidas !== b.vidas) return a.vidas - b.vidas;
       if (b.puntos !== a.puntos) return b.puntos - a.puntos;
@@ -274,24 +263,101 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG)
+  // EXPORTAR A IMAGEN (JPEG) - VERSIÓN CORREGIDA
   //---------------------------------------
   const exportarImagen = async (tipo) => {
-    const elementoId = tipo === "acumulado" ? "tabla-ranking-acumulado" : "tabla-quiniela-jornada";
-    const elemento = document.getElementById(elementoId);
-    
-    if (!elemento) {
-      alert("No hay datos para exportar");
-      return;
-    }
-
     try {
-      const canvas = await html2canvas(elemento, {
+      const contenedorTemp = document.createElement('div');
+      contenedorTemp.style.position = 'fixed';
+      contenedorTemp.style.top = '0';
+      contenedorTemp.style.left = '0';
+      contenedorTemp.style.width = '1200px';
+      contenedorTemp.style.background = 'white';
+      contenedorTemp.style.padding = '40px';
+      contenedorTemp.style.boxShadow = '0 0 20px rgba(0,0,0,0.1)';
+      contenedorTemp.style.zIndex = '9999';
+      
+      if (tipo === "acumulado") {
+        const titulo = document.createElement('h2');
+        titulo.textContent = '🏆 Ranking Acumulado General';
+        titulo.style.fontSize = '28px';
+        titulo.style.fontWeight = 'bold';
+        titulo.style.marginBottom = '20px';
+        titulo.style.textAlign = 'center';
+        contenedorTemp.appendChild(titulo);
+
+        const tabla = document.createElement('table');
+        tabla.style.width = '100%';
+        tabla.style.borderCollapse = 'collapse';
+        tabla.style.fontSize = '14px';
+
+        const thead = document.createElement('thead');
+        thead.innerHTML = `
+          <tr style="background-color: #f3f4f6;">
+            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Pos</th>
+            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Participante</th>
+            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: center;">Puntos</th>
+            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: center;">Aciertos</th>
+            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: center;">Vidas</th>
+          </tr>
+        `;
+        tabla.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        rankingAcumulado.forEach((fila, index) => {
+          let bgColor = '#ffffff';
+          if (fila.vidas >= 3) bgColor = '#fecaca';
+          else if (fila.vidas === 2) bgColor = '#fef08a';
+          else if (index < 3) bgColor = '#bbf7d0';
+
+          const tr = document.createElement('tr');
+          tr.style.backgroundColor = bgColor;
+          
+          const medalla = index === 0 ? '🥇 ' : index === 1 ? '🥈 ' : index === 2 ? '🥉 ' : '';
+          const calavera = fila.vidas >= 3 ? ' 💀' : '';
+          
+          tr.innerHTML = `
+            <td style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold;">${medalla}${index + 1}</td>
+            <td style="border: 1px solid #d1d5db; padding: 10px; font-weight: 600;">${fila.nombre}</td>
+            <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center; font-weight: bold;">${fila.puntos}</td>
+            <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">${fila.aciertos}</td>
+            <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center; font-weight: bold; color: ${fila.vidas >= 3 ? '#dc2626' : 'inherit'};">${fila.vidas}${calavera}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        tabla.appendChild(tbody);
+        contenedorTemp.appendChild(tabla);
+
+      } else {
+        const jornada = jornadas.find(j => j.id === jornadaSeleccionada);
+        const titulo = document.createElement('h2');
+        titulo.textContent = `📊 Quiniela - ${jornada?.nombre || 'Jornada'}`;
+        titulo.style.fontSize = '28px';
+        titulo.style.fontWeight = 'bold';
+        titulo.style.marginBottom = '20px';
+        titulo.style.textAlign = 'center';
+        contenedorTemp.appendChild(titulo);
+
+        const mensaje = document.createElement('p');
+        mensaje.textContent = 'Tabla de quiniela por jornada (personalizar según necesites)';
+        mensaje.style.textAlign = 'center';
+        mensaje.style.color = '#6b7280';
+        contenedorTemp.appendChild(mensaje);
+      }
+
+      document.body.appendChild(contenedorTemp);
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(contenedorTemp, {
         scale: 2,
-        backgroundColor: "#ffffff",
+        backgroundColor: '#ffffff',
         logging: false,
         useCORS: true,
+        allowTaint: true,
       });
+
+      document.body.removeChild(contenedorTemp);
 
       const imagenData = canvas.toDataURL("image/jpeg", 0.95);
       const link = document.createElement("a");
@@ -308,12 +374,12 @@ export default function AdminDashboard() {
       
     } catch (error) {
       console.error("Error al exportar:", error);
-      alert("Error al generar la imagen");
+      alert("Error al generar la imagen: " + error.message);
     }
   };
 
   //---------------------------------------
-  // EXPORTAR PDF (Detallado por partido)
+  // EXPORTAR PDF
   //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
@@ -399,7 +465,7 @@ export default function AdminDashboard() {
           className="border rounded px-3 py-2 bg-white"
         >
           {jornadas.map((j) => (
-            <option key={j.id} value={j.id}>{j.nombre} {j.activa ? "🟢 (Activa)" : ""}</option>
+            <option key={j.id} value={j.id}>{j.nombre} {j.activa ? " (Activa)" : ""}</option>
           ))}
         </select>
 
@@ -464,59 +530,9 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* TABLA DE QUINIELA POR JORNADA (Oculta pero exportable) */}
-      <div id="tabla-quiniela-jornada" className="bg-white rounded shadow p-6 mb-8" style={{ display: 'none' }}>
-        <h2 className="text-2xl font-bold mb-4 text-center">
-          Quiniela - {jornadas.find(j => j.id === jornadaSeleccionada)?.nombre || 'Jornada'}
-        </h2>
-        {/* Aquí iría tu tabla de quiniela por jornada si la tienes */}
-      </div>
-
-      {/* TABLA DE RANKING ACUMULADO (Oculta pero exportable) */}
-      <div id="tabla-ranking-acumulado" className="bg-white rounded shadow p-6 mb-8" style={{ display: 'none' }}>
-        <h2 className="text-2xl font-bold mb-4 text-center"> Ranking Acumulado General</h2>
-        <table className="w-full border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border border-gray-300 px-4 py-2 text-left">Pos</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">Participante</th>
-              <th className="border border-gray-300 px-4 py-2 text-center">Puntos</th>
-              <th className="border border-gray-300 px-4 py-2 text-center">Aciertos</th>
-              <th className="border border-gray-300 px-4 py-2 text-center">Vidas</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rankingAcumulado.map((fila, index) => {
-              let bgColor = "bg-white";
-              if (fila.vidas >= 3) bgColor = "bg-red-200";
-              else if (fila.vidas === 2) bgColor = "bg-yellow-200";
-              else if (fila.vidas <= 1 && index < 5) bgColor = "bg-green-100";
-
-              return (
-                <tr key={fila.usuario_id} className={bgColor}>
-                  <td className="border border-gray-300 px-4 py-2 font-bold">
-                    {index === 0 && "🥇 "}
-                    {index === 1 && "🥈 "}
-                    {index === 2 && "🥉 "}
-                    {index + 1}
-                  </td>
-                  <td className="border border-gray-300 px-4 py-2 font-semibold">{fila.nombre}</td>
-                  <td className="border border-gray-300 px-4 py-2 text-center font-bold">{fila.puntos}</td>
-                  <td className="border border-gray-300 px-4 py-2 text-center">{fila.aciertos}</td>
-                  <td className="border border-gray-300 px-4 py-2 text-center font-bold" style={{ color: fila.vidas >= 3 ? '#dc2626' : 'inherit' }}>
-                    {fila.vidas} {fila.vidas >= 3 && "💀"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
       {/* SECCIÓN DE AUSENTES EN JORNADA ACTIVA */}
       {jornadaActiva && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Ausentes Quiniela */}
           <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -542,7 +558,6 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {/* Ausentes Survivor */}
           <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
