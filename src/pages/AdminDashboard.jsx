@@ -24,17 +24,12 @@ export default function AdminDashboard() {
   const [jornadas, setJornadas] = useState([]);
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState("");
 
-  // Estados para la gráfica dinámica
   const [datosGrafica, setDatosGrafica] = useState([]);
-  
-  // Estados para ausentes
   const [ausentesQuiniela, setAusentesQuiniela] = useState([]);
   const [ausentesSurvivor, setAusentesSurvivor] = useState([]);
 
-  // Estados para ranking acumulado
-  const [rankingAcumulado, setRankingAcumulado] = useState([]);
-
-  // Estado para tipo de exportación
+  // Estados para ranking de quinielas
+  const [rankingQuinielas, setRankingQuinielas] = useState([]);
   const [tipoExportacion, setTipoExportacion] = useState("jornada");
 
   useEffect(() => {
@@ -74,9 +69,9 @@ export default function AdminDashboard() {
     setParticipantes(count || 0);
 
     const { data: perfilesData } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email");
-    const { data: todasQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id");
+    const { data: todasQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico");
     const { data: todosSurvivor } = await supabase.from("survivor").select("jornada_id, usuario_id, equipo");
-    const { data: todosPartidos } = await supabase.from("partidos").select("jornada_id, local, visitante, resultado");
+    const { data: todosPartidos } = await supabase.from("partidos").select("jornada_id, id, local, visitante, resultado");
 
     prepararDatosGrafica(jornadasData, jornadaActivaData?.id, todasQuinielas, todosSurvivor);
 
@@ -93,7 +88,7 @@ export default function AdminDashboard() {
     }
 
     if (perfilesData && todasQuinielas && todosPartidos) {
-      await calcularRankingAcumulado(perfilesData, todasQuinielas, todosPartidos, jornadasData);
+      await calcularRankingQuinielas(perfilesData, todasQuinielas, todosPartidos, jornadasData);
     }
   };
 
@@ -111,10 +106,10 @@ export default function AdminDashboard() {
     setDatosGrafica(datos);
   };
 
-  const calcularRankingAcumulado = async (perfilesData, todasQuinielas, todosPartidos, jornadasData) => {
-    const ahora = await obtenerHoraMexico();
+  const calcularRankingQuinielas = async (perfilesData, todasQuinielas, todosPartidos, jornadasData) => {
     const acumulado = {};
 
+    // Inicializar todos los participantes
     perfilesData.forEach((usuario) => {
       if (esAdmin(usuario)) return;
       
@@ -122,67 +117,67 @@ export default function AdminDashboard() {
       acumulado[usuario.id] = {
         usuario_id: usuario.id,
         nombre,
-        puntos: 0,
+        aciertosPorJornada: {},
+        totalAciertos: 0,
         vidas: 0,
-        aciertos: 0,
       };
-    });
 
-    jornadasData.forEach((jornada) => {
-      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
-      const eleccionesJornada = todasQuinielas.filter(s => Number(s.jornada_id) === Number(jornada.id));
-
-      perfilesData.forEach((usuario) => {
-        if (esAdmin(usuario)) return;
-        
-        const seleccion = eleccionesJornada.find(s => s.usuario_id === usuario.id);
-        const registroAcumulado = acumulado[usuario.id];
-        if (!registroAcumulado) return;
-
-        if (!seleccion && esPasadaYCerrada) {
-          if (registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
-          return;
-        }
-
-        if (!seleccion) return;
-
-        const partido = todosPartidos.find(p => 
-          Number(p.jornada_id) === Number(jornada.id) &&
-          (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
-        );
-
-        if (!partido || !partido.resultado) return;
-
-        let puntos = 0;
-        let perdio = false;
-
-        if (partido.local === seleccion.equipo) {
-          if (partido.resultado === "L") puntos = 3;
-          else if (partido.resultado === "E") puntos = 1;
-          else if (partido.resultado === "V") perdio = true;
-        } else if (partido.visitante === seleccion.equipo) {
-          if (partido.resultado === "V") puntos = 3;
-          else if (partido.resultado === "E") puntos = 1;
-          else if (partido.resultado === "L") perdio = true;
-        }
-
-        registroAcumulado.puntos += puntos;
-        if (partido.resultado === seleccion.pronostico) {
-          registroAcumulado.aciertos += 1;
-        }
-        if (perdio && registroAcumulado.vidas < 3) {
-          registroAcumulado.vidas += 1;
-        }
+      // Inicializar aciertos por jornada en 0
+      jornadasData.forEach(jornada => {
+        acumulado[usuario.id].aciertosPorJornada[jornada.id] = 0;
       });
     });
 
+    // Calcular aciertos por jornada para cada usuario
+    todasQuinielas?.forEach(quiniela => {
+      const usuarioId = quiniela.usuario_id;
+      const jornadaId = quiniela.jornada_id;
+      const partidoId = quiniela.partido_id;
+      const pronostico = quiniela.pronostico;
+
+      if (!acumulado[usuarioId]) return;
+
+      // Buscar el partido y su resultado
+      const partido = todosPartidos.find(p => 
+        Number(p.id) === Number(partidoId) && 
+        Number(p.jornada_id) === Number(jornadaId)
+      );
+
+      if (partido && partido.resultado && pronostico === partido.resultado) {
+        acumulado[usuarioId].aciertosPorJornada[jornadaId] = 
+          (acumulado[usuarioId].aciertosPorJornada[jornadaId] || 0) + 1;
+        acumulado[usuarioId].totalAciertos += 1;
+      }
+    });
+
+    // Calcular vidas perdidas (jornadas cerradas sin quiniela)
+    const ahora = await obtenerHoraMexico();
+    jornadasData.forEach(jornada => {
+      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
+      
+      if (esPasadaYCerrada) {
+        perfilesData.forEach(usuario => {
+          if (esAdmin(usuario)) return;
+          
+          const tieneQuiniela = todasQuinielas?.some(q => 
+            q.usuario_id === usuario.id && Number(q.jornada_id) === Number(jornada.id)
+          );
+
+          if (!tieneQuiniela && acumulado[usuario.id].vidas < 3) {
+            acumulado[usuario.id].vidas += 1;
+          }
+        });
+      }
+    });
+
+    // Ordenar: primero por menos vidas, luego por más aciertos
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
       if (a.vidas !== b.vidas) return a.vidas - b.vidas;
-      if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+      if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
       return a.nombre.localeCompare(b.nombre);
     });
 
-    setRankingAcumulado(rankingFinal);
+    setRankingQuinielas(rankingFinal);
   };
 
   const calcularAusentesInteligentes = (idJornadaActiva, jornadasData, perfilesData, todasQuinielas, todosSurvivor, todosPartidos, ahora) => {
@@ -263,7 +258,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG) - VERSIÓN CORREGIDA
+  // EXPORTAR A IMAGEN (JPEG) - QUINIELAS
   //---------------------------------------
   const exportarImagen = async (tipo) => {
     try {
@@ -271,82 +266,105 @@ export default function AdminDashboard() {
       contenedorTemp.style.position = 'fixed';
       contenedorTemp.style.top = '0';
       contenedorTemp.style.left = '0';
-      contenedorTemp.style.width = '1200px';
+      contenedorTemp.style.width = '1400px';
       contenedorTemp.style.background = 'white';
       contenedorTemp.style.padding = '40px';
       contenedorTemp.style.boxShadow = '0 0 20px rgba(0,0,0,0.1)';
       contenedorTemp.style.zIndex = '9999';
       
+      // Título
+      const titulo = document.createElement('h2');
       if (tipo === "acumulado") {
-        const titulo = document.createElement('h2');
-        titulo.textContent = '🏆 Ranking Acumulado General';
-        titulo.style.fontSize = '28px';
-        titulo.style.fontWeight = 'bold';
-        titulo.style.marginBottom = '20px';
-        titulo.style.textAlign = 'center';
-        contenedorTemp.appendChild(titulo);
-
-        const tabla = document.createElement('table');
-        tabla.style.width = '100%';
-        tabla.style.borderCollapse = 'collapse';
-        tabla.style.fontSize = '14px';
-
-        const thead = document.createElement('thead');
-        thead.innerHTML = `
-          <tr style="background-color: #f3f4f6;">
-            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Pos</th>
-            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: left;">Participante</th>
-            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: center;">Puntos</th>
-            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: center;">Aciertos</th>
-            <th style="border: 1px solid #d1d5db; padding: 12px; text-align: center;">Vidas</th>
-          </tr>
-        `;
-        tabla.appendChild(thead);
-
-        const tbody = document.createElement('tbody');
-        rankingAcumulado.forEach((fila, index) => {
-          let bgColor = '#ffffff';
-          if (fila.vidas >= 3) bgColor = '#fecaca';
-          else if (fila.vidas === 2) bgColor = '#fef08a';
-          else if (index < 3) bgColor = '#bbf7d0';
-
-          const tr = document.createElement('tr');
-          tr.style.backgroundColor = bgColor;
-          
-          const medalla = index === 0 ? '🥇 ' : index === 1 ? '🥈 ' : index === 2 ? '🥉 ' : '';
-          const calavera = fila.vidas >= 3 ? ' 💀' : '';
-          
-          tr.innerHTML = `
-            <td style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold;">${medalla}${index + 1}</td>
-            <td style="border: 1px solid #d1d5db; padding: 10px; font-weight: 600;">${fila.nombre}</td>
-            <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center; font-weight: bold;">${fila.puntos}</td>
-            <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">${fila.aciertos}</td>
-            <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center; font-weight: bold; color: ${fila.vidas >= 3 ? '#dc2626' : 'inherit'};">${fila.vidas}${calavera}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-        tabla.appendChild(tbody);
-        contenedorTemp.appendChild(tabla);
-
+        titulo.textContent = '🏆 Ranking Acumulado General - Quinielas';
       } else {
         const jornada = jornadas.find(j => j.id === jornadaSeleccionada);
-        const titulo = document.createElement('h2');
         titulo.textContent = `📊 Quiniela - ${jornada?.nombre || 'Jornada'}`;
-        titulo.style.fontSize = '28px';
-        titulo.style.fontWeight = 'bold';
-        titulo.style.marginBottom = '20px';
-        titulo.style.textAlign = 'center';
-        contenedorTemp.appendChild(titulo);
+      }
+      titulo.style.fontSize = '28px';
+      titulo.style.fontWeight = 'bold';
+      titulo.style.marginBottom = '20px';
+      titulo.style.textAlign = 'center';
+      contenedorTemp.appendChild(titulo);
 
-        const mensaje = document.createElement('p');
-        mensaje.textContent = 'Tabla de quiniela por jornada (personalizar según necesites)';
-        mensaje.style.textAlign = 'center';
-        mensaje.style.color = '#6b7280';
-        contenedorTemp.appendChild(mensaje);
+      // Tabla
+      const tabla = document.createElement('table');
+      tabla.style.width = '100%';
+      tabla.style.borderCollapse = 'collapse';
+      tabla.style.fontSize = '13px';
+
+      // Encabezados
+      const thead = document.createElement('thead');
+      let encabezadosHTML = `
+        <tr style="background-color: #e5e7eb;">
+          <th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 50px;">Pos</th>
+          <th style="border: 1px solid #9ca3af; padding: 8px; text-align: left; width: 150px;">Usuario</th>
+      `;
+
+      if (tipo === "acumulado") {
+        // Mostrar todas las jornadas
+        jornadas.forEach(jornada => {
+          encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 50px;">J${jornada.id}</th>`;
+        });
+        encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db;">TOTAL</th>`;
+      } else {
+        // Solo mostrar la jornada seleccionada
+        const jornada = jornadas.find(j => j.id === jornadaSeleccionada);
+        encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db;">J${jornada?.id || ''}</th>`;
       }
 
-      document.body.appendChild(contenedorTemp);
+      encabezadosHTML += `</tr>`;
+      thead.innerHTML = encabezadosHTML;
+      tabla.appendChild(thead);
 
+      // Filas
+      const tbody = document.createElement('tbody');
+      
+      // Filtrar ranking según tipo
+      let rankingMostrar = rankingQuinielas;
+      if (tipo === "jornada") {
+        // Para jornada individual, mostrar todos los que participaron
+        rankingMostrar = rankingQuinielas.filter(r => 
+          r.aciertosPorJornada[jornadaSeleccionada] > 0 || r.vidas < 3
+        );
+      }
+
+      rankingMostrar.forEach((fila, index) => {
+        let bgColor = '#ffffff';
+        if (fila.vidas >= 3) bgColor = '#ef4444'; // Rojo - eliminado
+        else if (fila.vidas === 2) bgColor = '#fbbf24'; // Amarillo
+        else if (index < 3) bgColor = '#22c55e'; // Verde - top 3
+
+        const tr = document.createElement('tr');
+        tr.style.backgroundColor = bgColor;
+
+        let filaHTML = `
+          <td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold;">${index + 1}</td>
+          <td style="border: 1px solid #9ca3af; padding: 8px; font-weight: 600;">${fila.nombre}</td>
+        `;
+
+        if (tipo === "acumulado") {
+          // Mostrar aciertos por cada jornada
+          jornadas.forEach(jornada => {
+            const aciertos = fila.aciertosPorJornada[jornada.id] || 0;
+            filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center;">${aciertos}</td>`;
+          });
+          // Total
+          filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${fila.totalAciertos}</td>`;
+        } else {
+          // Solo mostrar la jornada seleccionada
+          const aciertos = fila.aciertosPorJornada[jornadaSeleccionada] || 0;
+          filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${aciertos}</td>`;
+        }
+
+        filaHTML += `</tr>`;
+        tr.innerHTML = filaHTML;
+        tbody.appendChild(tr);
+      });
+
+      tabla.appendChild(tbody);
+      contenedorTemp.appendChild(tabla);
+
+      document.body.appendChild(contenedorTemp);
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const canvas = await html2canvas(contenedorTemp, {
@@ -363,7 +381,7 @@ export default function AdminDashboard() {
       const link = document.createElement("a");
       
       if (tipo === "acumulado") {
-        link.download = `Ranking_Acumulado_General.jpg`;
+        link.download = `Ranking_Acumulado_Quinielas.jpg`;
       } else {
         const jornada = jornadas.find(j => j.id === jornadaSeleccionada);
         link.download = `Quiniela_${jornada?.nombre || 'Jornada'}.jpg`;
@@ -475,14 +493,14 @@ export default function AdminDashboard() {
           className="border rounded px-3 py-2 bg-white"
         >
           <option value="jornada"> Por Jornada</option>
-          <option value="acumulado">🏆 Acumulado General</option>
+          <option value="acumulado"> Acumulado General</option>
         </select>
 
         <button 
           onClick={() => exportarImagen(tipoExportacion)} 
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
         >
-          📸 Exportar Imagen (JPEG)
+          📸 Exportar Imagen Quinielas (JPEG)
         </button>
 
         <button onClick={exportarPDF} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">📄 Exportar PDF</button>
@@ -491,7 +509,7 @@ export default function AdminDashboard() {
         <Link to="/partidos" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Crear Partidos</Link>
         <Link to="/admin/resultados" className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 transition">Capturar Resultados</Link>
         <Link to="/posiciones" className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition">Ranking</Link>
-        <Link to="/admin-survivor" className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 transition">🏆 Admin Survivor</Link>
+        <Link to="/admin-survivor" className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 transition"> Admin Survivor</Link>
         <Link to="/acceso-pronosticos" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700 transition">🔒 Pronósticos Privados</Link>
         <button onClick={cerrarSesion} className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 transition">🚪 Cerrar Sesión</button>
       </div>
@@ -537,7 +555,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesQuiniela.length}</span>
-                ❌ Faltan Quiniela
+                 Faltan Quiniela
               </h2>
             </div>
             {ausentesQuiniela.length > 0 ? (
@@ -562,7 +580,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesSurvivor.length}</span>
-                🦖 Faltan Survivor
+                 Faltan Survivor
               </h2>
             </div>
             {ausentesSurvivor.length > 0 ? (
