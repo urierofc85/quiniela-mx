@@ -1,8 +1,7 @@
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+// Importa el guardia de seguridad
+import AdminRoute from "./AdminRoute"; 
 
 import Login from "./Login";
 import Admin from "./Admin";
@@ -44,177 +43,48 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* ========================================== */}
+        {/* RUTAS PÚBLICAS / DE USUARIO (Sin protección) */}
+        {/* ========================================== */}
+        <Route path="/" element={<Login />} />
+        <Route path="/quiniela" element={<Quiniela />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/posiciones" element={<Posiciones />} />
+        <Route path="/perfil" element={<Perfil />} />
+        <Route path="/survivor" element={<Survivor />} />
+        <Route path="/ranking-survivor" element={<RankingSurvivor />} />
+        <Route path="/historico" element={<Historico />} />
+        <Route path="/historico/:id" element={<JugadorHistorico />} />
+        <Route path="/comparador" element={<JugadorVsJugador />} />
+        <Route path="/acceso-pronosticos" element={<AccesoPronosticos />} />
+        <Route path="/pronosticos" element={<Pronosticos />} />
 
-        <Route
-          path="/"
-          element={<Login />}
-        />
+        {/* ========================================== */}
+        {/* RUTAS DE ADMINISTRADOR (Protegidas) */}
+        {/* ========================================== */}
+        <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+        <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+        <Route path="/partidos" element={<AdminRoute><Partidos /></AdminRoute>} />
+        <Route path="/admin/resultados" element={<AdminRoute><ResultadosAdmin /></AdminRoute>} />
+        <Route path="/participantes" element={<AdminRoute><Participantes /></AdminRoute>} />
+        <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
+        <Route path="/admin-survivor" element={<AdminRoute><AdminSurvivor /></AdminRoute>} />
+        <Route path="/corregir-pronosticos" element={<AdminRoute><CorregirPronosticos /></AdminRoute>} />
+        <Route path="/temporadas" element={<AdminRoute><Temporadas /></AdminRoute>} />
 
-        <Route
-          path="/admin"
-          element={<Admin />}
-        />
-
-        <Route
-          path="/admin/dashboard"
-          element={<AdminDashboard />}
-        />
-
-        <Route
-          path="/partidos"
-          element={<Partidos />}
-        />
-
-        <Route
-          path="/quiniela"
-          element={<Quiniela />}
-        />
-
-        <Route
-          path="/forgot-password"
-          element={<ForgotPassword />}
-        />
-
-        <Route
-          path="/reset-password"
-          element={<ResetPassword />}
-        />
-
-        <Route
-          path="/admin/resultados"
-          element={<ResultadosAdmin />}
-        />
-
-        <Route
-          path="/posiciones"
-          element={<Posiciones />}
-        />
-
-        <Route
-          path="/perfil"
-          element={<Perfil />}
-        />
-
-        <Route
-          path="/participantes"
-          element={<Participantes />}
-        />
-
-        <Route
-          path="/dashboard"
-          element={<Dashboard />}
-        />
-
-        <Route
-          path="/survivor"
-          element={<Survivor />}
-        />
-
-        <Route
-          path="/admin-survivor"
-          element={<AdminSurvivor />}
-        />
-
-        <Route
-          path="/ranking-survivor"
-          element={<RankingSurvivor />}
-        />
-
-        <Route
-          path="/corregir-pronosticos"
-          element={<CorregirPronosticos />}
-        />
-
-        <Route
-          path="/historico"
-          element={<Historico />}
-        />
-
-        <Route
-          path="/historico/:id"
-          element={<JugadorHistorico />}
-        />
-
-        <Route
-          path="/comparador"
-          element={<JugadorVsJugador />}
-        />
-
-        <Route
-          path="/temporadas"
-          element={<Temporadas />}
-        />
-
-        {/* ========================= */}
-        {/* PRONÓSTICOS PRIVADOS */}
-        {/* ========================= */}
-
-        <Route
-          path="/acceso-pronosticos"
-          element={<AccesoPronosticos />}
-        />
-
-        <Route
-          path="/pronosticos"
-          element={<Pronosticos />}
-        />
-
-        <Route
-          path="/admin-pronosticos-equipos"
-          element={<AdminPronosticosEquipos />}
-        />
-
-        <Route
-          path="/admin-pronosticos-partidos"
-          element={<AdminPronosticosPartidos />}
-        />
-
-        <Route
-          path="/admin-actualizar-estadisticas"
-          element={<AdminActualizarEstadisticas />}
-        />
-
-        <Route
-        path="/admin-pronosticos"
-        element={<AdminPronosticos />}
-        />
-
-        <Route
-          path="/admin-importar-ligamx"
-          element={<AdminImportarLigaMX />}
-        />
-
-        <Route
-  path="/admin-importar-sofascore"
-  element={<AdminImportarSofaScore />}
-/>
-
-<Route
-  path="/admin-importar-formascore"
-  element={<AdminImportarFormaScore />}
-/>
-
-<Route
-  path="/admin-importar-calendario-score"
-  element={<AdminImportarCalendarioScore />}
-/>
-<Route
-  path="/admin-forma-temporadas"
-  element={<AdminFormaTemporadas />}
-/>
-
-<Route
-  path="/admin-recalcular-ratings"
-  element={<AdminRecalcularRatings />}
-/>
-
-<Route
-  path="/admin-recalcular-porcentajes"
-  element={
-    <AdminRecalcularPorcentajes />
-  }
-/>
-
+        {/* Rutas de administración de pronósticos (Todas protegidas) */}
+        <Route path="/admin-pronosticos-equipos" element={<AdminRoute><AdminPronosticosEquipos /></AdminRoute>} />
+        <Route path="/admin-pronosticos-partidos" element={<AdminRoute><AdminPronosticosPartidos /></AdminRoute>} />
+        <Route path="/admin-actualizar-estadisticas" element={<AdminRoute><AdminActualizarEstadisticas /></AdminRoute>} />
+        <Route path="/admin-pronosticos" element={<AdminRoute><AdminPronosticos /></AdminRoute>} />
+        <Route path="/admin-importar-ligamx" element={<AdminRoute><AdminImportarLigaMX /></AdminRoute>} />
+        <Route path="/admin-importar-sofascore" element={<AdminRoute><AdminImportarSofaScore /></AdminRoute>} />
+        <Route path="/admin-importar-formascore" element={<AdminRoute><AdminImportarFormaScore /></AdminRoute>} />
+        <Route path="/admin-importar-calendario-score" element={<AdminRoute><AdminImportarCalendarioScore /></AdminRoute>} />
+        <Route path="/admin-forma-temporadas" element={<AdminRoute><AdminFormaTemporadas /></AdminRoute>} />
+        <Route path="/admin-recalcular-ratings" element={<AdminRoute><AdminRecalcularRatings /></AdminRoute>} />
+        <Route path="/admin-recalcular-porcentajes" element={<AdminRoute><AdminRecalcularPorcentajes /></AdminRoute>} />
       </Routes>
     </BrowserRouter>
   );
