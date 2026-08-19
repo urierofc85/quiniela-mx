@@ -87,7 +87,7 @@ export default function RankingSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING (IGUALADA A ADMIN)
+  // LÓGICA DEL RANKING
   //=========================================
   const calcularRanking = () => {
     const referenciaTiempo = horaMexico || new Date();
@@ -141,9 +141,11 @@ export default function RankingSurvivor() {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
-        // CASO A: No seleccionó y la jornada ya cerró -> Pierde 1 vida
+        // CASO A: No seleccionó y la jornada ya cerró -> Pierde 1 vida (TOPE DE 3)
         if (!seleccion && esPasadaYCerrada) {
-          registroAcumulado.vidas += 1;
+          if (registroAcumulado.vidas < 3) {
+            registroAcumulado.vidas += 1;
+          }
           return;
         }
 
@@ -175,15 +177,27 @@ export default function RankingSurvivor() {
         }
 
         registroAcumulado.puntos += puntos;
+        
+        // Si perdió el partido, suma una vida perdida (TOPE DE 3)
         if (perdio) {
-          registroAcumulado.vidas += 1;
+          if (registroAcumulado.vidas < 3) {
+            registroAcumulado.vidas += 1;
+          }
         }
       });
     }
 
+    // 3. NUEVO ORDEN DE CLASIFICACIÓN:
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
-      if (b.puntos !== a.puntos) return b.puntos - a.puntos;
-      if (a.vidas !== b.vidas) return a.vidas - b.vidas;
+      // Primero: Menor cantidad de vidas perdidas (0 es el mejor lugar)
+      if (a.vidas !== b.vidas) {
+        return a.vidas - b.vidas;
+      }
+      // Segundo: Mayor cantidad de puntos totales
+      if (b.puntos !== a.puntos) {
+        return b.puntos - a.puntos;
+      }
+      // Tercero: Orden alfabético por nombre como desempate final
       return a.nombre.localeCompare(b.nombre);
     });
 
@@ -371,10 +385,10 @@ export default function RankingSurvivor() {
                       className="p-2 text-center font-semibold"
                       style={{
                         border: "1px solid #e5e7eb",
-                        color: "#dc2626",
+                        color: fila.vidas >= 3 ? "#dc2626" : "#4b5563",
                       }}
                     >
-                      {fila.vidas}
+                      {fila.vidas} {fila.vidas >= 3 && "💀"}
                     </td>
                   </tr>
                 ))
