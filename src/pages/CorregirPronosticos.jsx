@@ -52,6 +52,8 @@ export default function CorregirPronosticos() {
     try {
       if (!usuarioId || !jornadaId) return;
 
+      console.log("🔄 Cargando pronósticos para usuario:", usuarioId, "jornada:", jornadaId);
+
       const { data: partidos, error: errorPartidos } = await supabase
         .from("partidos")
         .select("*")
@@ -67,6 +69,8 @@ export default function CorregirPronosticos() {
         .eq("jornada_id", jornadaId);
 
       if (errorQuinielas) throw errorQuinielas;
+
+      console.log("📊 Quinielas encontradas:", quinielas?.length || 0);
 
       const { data: survivorRows, error: survivorError } = await supabase
         .from("survivor")
@@ -95,7 +99,7 @@ export default function CorregirPronosticos() {
       }
 
       const resultado = partidos.map((partido) => {
-        const quiniela = quinielas.find(
+        const quiniela = quinielas?.find(
           (q) => Number(q.partido_id) === Number(partido.id)
         );
 
@@ -108,9 +112,10 @@ export default function CorregirPronosticos() {
         };
       });
 
+      console.log("✅ Pronósticos cargados:", resultado.length);
       setPronosticos(resultado);
     } catch (error) {
-      console.error(error);
+      console.error(" Error cargando pronósticos:", error);
       alert(error.message);
     }
   };
@@ -128,34 +133,50 @@ export default function CorregirPronosticos() {
   const guardarCambios = async () => {
     try {
       setGuardando(true);
+      console.log("💾 Iniciando guardado...");
 
       const usuarioObj = usuarios.find(
         (u) => String(u.id) === String(usuarioSeleccionado)
       );
 
+      let cambiosRealizados = 0;
+      let eliminacionesRealizadas = 0;
+
       // ==========================================
-      // 1. PROCESAR QUINIELA (Actualizar, Insertar o BORRAR)
+      // 1. PROCESAR QUINIELA
       // ==========================================
       for (const item of pronosticos) {
         if (item.id) {
           // Si ya existía en la base de datos
-          if (!item.pronostico) {
-            // Si se cambió a "Seleccionar" (vacío), LO BORRAMOS
+          const pronósticoLimpio = (item.pronostico || "").trim();
+          
+          if (!pronósticoLimpio) {
+            // Si se cambió a vacío, LO BORRAMOS
+            console.log("🗑️ Eliminando quiniela ID:", item.id, "Partido:", item.partido_id);
             const { error } = await supabase
               .from("quinielas")
               .delete()
               .eq("id", item.id);
-            if (error) throw error;
+            
+            if (error) {
+              console.error(" Error al eliminar:", error);
+              throw error;
+            }
+            eliminacionesRealizadas++;
           } else {
             // Si tiene un valor, lo actualizamos
+            console.log("✏️ Actualizando quiniela ID:", item.id, "a:", pronósticoLimpio);
             const { error } = await supabase
               .from("quinielas")
-              .update({ pronostico: item.pronostico })
+              .update({ pronostico: pronósticoLimpio })
               .eq("id", item.id);
+            
             if (error) throw error;
+            cambiosRealizados++;
           }
-        } else if (item.pronostico) {
+        } else if (item.pronostico && item.pronostico.trim()) {
           // Si no existía pero ahora se le asignó un valor, lo insertamos
+          console.log("➕ Insertando nueva quiniela para partido:", item.partido_id);
           const { error } = await supabase
             .from("quinielas")
             .insert({
@@ -163,48 +184,67 @@ export default function CorregirPronosticos() {
               usuario: usuarioObj?.email || "",
               jornada_id: Number(jornadaSeleccionada),
               partido_id: item.partido_id,
-              pronostico: item.pronostico,
+              pronostico: item.pronostico.trim(),
             });
+          
           if (error) throw error;
+          cambiosRealizados++;
         }
       }
 
       // ==========================================
-      // 2. PROCESAR SURVIVOR (Actualizar, Insertar o BORRAR)
+      // 2. PROCESAR SURVIVOR
       // ==========================================
       if (survivorId) {
-        if (!equipoSurvivor) {
-          // Si se cambió a "Seleccionar", borramos el survivor
+        const equipoLimpio = (equipoSurvivor || "").trim();
+        
+        if (!equipoLimpio) {
+          // Si se cambió a vacío, borramos el survivor
+          console.log("🗑️ Eliminando survivor ID:", survivorId);
           const { error } = await supabase
             .from("survivor")
             .delete()
             .eq("id", survivorId);
+          
           if (error) throw error;
+          eliminacionesRealizadas++;
         } else {
           // Si tiene valor, actualizamos
+          console.log("✏️ Actualizando survivor ID:", survivorId, "a:", equipoLimpio);
           const { error } = await supabase
             .from("survivor")
-            .update({ equipo: equipoSurvivor })
+            .update({ equipo: equipoLimpio })
             .eq("id", survivorId);
+          
           if (error) throw error;
+          cambiosRealizados++;
         }
-      } else if (equipoSurvivor) {
+      } else if (equipoSurvivor && equipoSurvivor.trim()) {
         // Si no existía pero ahora se le asignó un valor, lo insertamos
+        console.log("➕ Insertando nuevo survivor:", equipoSurvivor);
         const { error } = await supabase
           .from("survivor")
           .insert({
             usuario_id: usuarioSeleccionado,
             usuario: usuarioObj?.email || "",
             jornada_id: Number(jornadaSeleccionada),
-            equipo: equipoSurvivor,
+            equipo: equipoSurvivor.trim(),
           });
+        
         if (error) throw error;
+        cambiosRealizados++;
       }
 
-      alert("Pronósticos y Survivor actualizados correctamente");
+      console.log("✅ Guardado completado. Cambios:", cambiosRealizados, "Eliminaciones:", eliminacionesRealizadas);
+
+      // Forzar recarga completa
+      await new Promise(resolve => setTimeout(resolve, 300));
       await cargarPronosticos(usuarioSeleccionado, jornadaSeleccionada);
+      
+      alert(`Guardado correctamente.\nCambios: ${cambiosRealizados}\nEliminaciones: ${eliminacionesRealizadas}`);
+      
     } catch (error) {
-      console.error(error);
+      console.error("❌ Error al guardar:", error);
       alert("Error al guardar: " + error.message);
     } finally {
       setGuardando(false);
