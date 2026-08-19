@@ -18,14 +18,14 @@ export default function Participantes() {
       .order("nombre_usuario", { ascending: true });
 
     if (error) {
-      console.error(error);
+      console.error("Error al cargar participantes:", error);
+      alert("Error al cargar datos: " + error.message);
       return;
     }
 
-    // Aseguramos que solo_survivor y modificado existan con valores por defecto
     const datosLimpios = (data || []).map(p => ({
       ...p,
-      solo_survivor: p.solo_survivor || false,
+      solo_survivor: p.solo_survivor === true, // Asegura que sea booleano estricto
       modificado: false
     }));
 
@@ -40,7 +40,6 @@ export default function Participantes() {
     }
   };
 
-  // Solo actualiza el estado local y marca como modificado
   const toggleSoloSurvivor = (userId) => {
     setParticipantes(prev => 
       prev.map(p => {
@@ -52,7 +51,6 @@ export default function Participantes() {
     );
   };
 
-  // Función para guardar todos los cambios pendientes en la BD
   const guardarModosDeJuego = async () => {
     const usuariosAModificar = participantes.filter(p => p.modificado);
     
@@ -68,17 +66,29 @@ export default function Participantes() {
     setCargando(true);
     let exitos = 0;
     let fallos = 0;
+    let ultimoError = "";
 
     for (const usuario of usuariosAModificar) {
-      const { error } = await supabase
+      console.log(`Intentando actualizar usuario: ${usuario.nombre_usuario} a solo_survivor: ${usuario.solo_survivor}`);
+      
+      const { data, error } = await supabase
         .from("profiles")
         .update({ solo_survivor: usuario.solo_survivor })
-        .eq("id", usuario.id);
+        .eq("id", usuario.id)
+        .select();
 
+      // DETECCIÓN DE BLOQUEO POR RLS (Permisos)
       if (error) {
-        console.error("Error actualizando", usuario.nombre_usuario, error);
+        console.error("❌ Error de base de datos:", usuario.nombre_usuario, error);
+        ultimoError = error.message;
+        fallos++;
+      } else if (!data || data.length === 0) {
+        // Si no hay error pero data está vacío, Supabase bloqueó la actualización por RLS
+        console.warn("⚠️ Bloqueado por RLS (Permisos):", usuario.nombre_usuario);
+        ultimoError = "Permisos insuficientes (RLS). Supabase bloqueó la actualización. Ejecuta el SQL de permisos en Supabase.";
         fallos++;
       } else {
+        console.log("✅ Actualizado correctamente:", data);
         exitos++;
       }
     }
@@ -86,12 +96,11 @@ export default function Participantes() {
     setCargando(false);
 
     if (fallos === 0) {
-      alert(`✅ ${exitos} cambio(s) guardado(s) correctamente.`);
-      // Quitamos la marca de "modificado" para limpiar la vista
+      alert(`✅ ${exitos} cambio(s) guardado(s) correctamente en la base de datos.`);
       setParticipantes(prev => prev.map(p => ({ ...p, modificado: false })));
     } else {
-      alert(`⚠️ Se guardaron ${exitos} cambios, pero hubo ${fallos} errores. Se recargará la lista.`);
-      await cargarParticipantes();
+      alert(`️ ERROR AL GUARDAR:\n${ultimoError}\n\nSe procesaron ${exitos} éxitos y ${fallos} fallos.`);
+      await cargarParticipantes(); // Recarga para deshacer cambios visuales fallidos
     }
   };
 
@@ -101,10 +110,7 @@ export default function Participantes() {
       return;
     }
 
-    const confirmar = window.confirm(
-      `¿Deseas eliminar completamente ${seleccionados.length} usuario(s)?`
-    );
-
+    const confirmar = window.confirm(`¿Deseas eliminar completamente ${seleccionados.length} usuario(s)?`);
     if (!confirmar) return;
 
     setCargando(true);
@@ -125,15 +131,13 @@ export default function Participantes() {
         );
 
         const resultado = await response.json();
-        console.log("RESPUESTA EDGE:", resultado);
-
         if (!response.ok) {
           alert(resultado.error || "Error eliminando usuario de Authentication");
           setCargando(false);
           return;
         }
       } catch (error) {
-        console.log("Error eliminando auth user:", error);
+        console.error("Error eliminando auth user:", error);
         alert("No fue posible conectar con la Edge Function.");
         setCargando(false);
         return;
@@ -183,9 +187,13 @@ export default function Participantes() {
       <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <div>
           Total participantes: <strong>{participantesFiltrados.length}</strong>
-          {hayCambiosPendientes && (
+          {hayCambiosPendientes ? (
             <span className="ml-3 text-sm text-blue-600 font-semibold animate-pulse">
-              * Hay cambios sin guardar
+              ✅ Hay cambios sin guardar
+            </span>
+          ) : (
+            <span className="ml-3 text-sm text-gray-500 italic">
+              (Marca un checkbox de "Solo Survivor" para activar el botón de guardar)
             </span>
           )}
         </div>
@@ -194,17 +202,26 @@ export default function Participantes() {
           <button
             onClick={guardarModosDeJuego}
             disabled={cargando || !hayCambiosPendientes}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center gap-2 font-semibold"
+            className={`px-4 py-2 rounded transition flex items-center gap-2 font-semibold ${
+              hayCambiosPendientes && !cargando
+                ? "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
+                : "bg-gray-400 text-gray-200 cursor-not-allowed"
+            }`}
+            title={!hayCambiosPendientes ? "Primero marca al menos un checkbox de 'Solo Survivor'" : ""}
           >
-            💾 Guardar Cambios de Modo
+            {cargando ? "⏳ Guardando..." : " Guardar Cambios de Modo"}
           </button>
           
           <button
             onClick={eliminarUsuarios}
             disabled={cargando || seleccionados.length === 0}
-            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+            className={`px-4 py-2 rounded transition ${
+              seleccionados.length > 0 && !cargando
+                ? "bg-red-600 text-white hover:bg-red-700 cursor-pointer"
+                : "bg-gray-400 text-gray-200 cursor-not-allowed"
+            }`}
           >
-            {cargando ? "Procesando..." : "Eliminar Seleccionados"}
+            {cargando ? "⏳ Procesando..." : "🗑️ Eliminar Seleccionados"}
           </button>
         </div>
       </div>
@@ -229,7 +246,7 @@ export default function Participantes() {
             {participantesFiltrados.map((participante) => (
               <tr 
                 key={participante.id} 
-                className={`border-t hover:bg-gray-50 transition ${participante.modificado ? 'bg-blue-50' : ''}`}
+                className={`border-t hover:bg-gray-50 transition ${participante.modificado ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}`}
               >
                 <td className="p-3 text-center">
                   {participante.rol !== "admin" && (
@@ -251,7 +268,7 @@ export default function Participantes() {
                       className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
                     />
                     <span className={`ml-2 text-sm font-medium ${participante.solo_survivor ? 'text-purple-700' : 'text-gray-500'} ${participante.modificado ? 'font-bold text-blue-600' : ''}`}>
-                      {participante.solo_survivor ? "Sí 🦖" : "No"} {participante.modificado && "(Modificado)"}
+                      {participante.solo_survivor ? "Sí 🦖" : "No"} {participante.modificado && "✏️ (Modificado)"}
                     </span>
                   </label>
                 </td>
@@ -263,13 +280,7 @@ export default function Participantes() {
                 <td className="p-3">{participante.banco || "-"}</td>
                 <td className="p-3">{participante.clabe || "-"}</td>
                 <td className="p-3">
-                  <span
-                    className={
-                      participante.rol === "admin"
-                        ? "text-red-600 font-bold"
-                        : "text-blue-600"
-                    }
-                  >
+                  <span className={participante.rol === "admin" ? "text-red-600 font-bold" : "text-blue-600"}>
                     {participante.rol}
                   </span>
                 </td>
@@ -280,7 +291,13 @@ export default function Participantes() {
       </div>
       
       <div className="mt-4 text-sm text-gray-600 bg-blue-50 p-4 rounded border border-blue-200">
-        <strong>💡 Instrucciones:</strong> Marca o desmarca la casilla "Solo Survivor" en los participantes deseados. La fila se marcará en azul. Luego, presiona el botón <strong>"💾 Guardar Cambios de Modo"</strong> para aplicar las modificaciones a la base de datos.
+        <strong> Instrucciones:</strong> 
+        <ol className="list-decimal list-inside mt-2 space-y-1">
+          <li>Marca o desmarca la casilla <strong>"Solo Survivor"</strong> en los participantes deseados.</li>
+          <li>La fila se marcará en <strong>azul</strong> y aparecerá <strong>"✏️ (Modificado)"</strong>.</li>
+          <li>El botón <strong>"💾 Guardar Cambios de Modo"</strong> se activará automáticamente.</li>
+          <li>Haz clic en el botón para guardar los cambios en la base de datos.</li>
+        </ol>
       </div>
     </div>
   );
