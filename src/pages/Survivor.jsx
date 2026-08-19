@@ -1,166 +1,230 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { obtenerHoraMexico } from "../services/horario";
 
-export default function Quiniela() {
-  const navigate = useNavigate();
-  const [partidos, setPartidos] = useState([]);
-  const [pronosticos, setPronosticos] = useState({});
+export default function Survivor() {
+  const [equipos, setEquipos] = useState([]);
+  const [equipoSeleccionado, setEquipoSeleccionado] = useState("");
   const [jornadaActiva, setJornadaActiva] = useState(null);
   const [jornadaCerrada, setJornadaCerrada] = useState(false);
-  const [quinielaGuardada, setQuinielaGuardada] = useState([]);
+  const [historial, setHistorial] = useState([]);
+  const [usoEquipos, setUsoEquipos] = useState([]);
+  const [puntosTotales, setPuntosTotales] = useState(0);
+  const [vidasPerdidas, setVidasPerdidas] = useState(0);
   
-  // ESTADOS PARA LA EXPORTACIÓN DE PDF
-  const [jornadas, setJornadas] = useState([]);
-  const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
-  const [cargandoPDF, setCargandoPDF] = useState(false);
-
-  // ESTADO PARA EL MODAL DE REGLAS
-  const [mostrarModal, setMostrarModal] = useState(false);
+  // Estado para controlar el Popup/Modal de Reglas
+  const [mostrarReglas, setMostrarReglas] = useState(false);
 
   useEffect(() => {
-    cargarDatosIniciales();
+    cargarDatos();
   }, []);
 
-  useEffect(() => {
-    const validarSesion = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+  const cargarDatos = async () => {
+    await cargarJornada();
+    await cargarEquipos();
+    await cargarHistorial();
+    await cargarUsoEquipos();
+  };
 
-      if (!session) {
-        navigate("/");
-      }
-    };
-
-    validarSesion();
-  }, [navigate]);
-
-  const cargarDatosIniciales = async () => {
-    const ahora = await obtenerHoraMexico();
-
-    // 1. Cargar todas las jornadas para el selector de PDF
-    const { data: todasJornadas } = await supabase
-      .from("jornadas")
-      .select("*")
-      .order("id", { ascending: false });
-
-    if (todasJornadas) {
-      // Filtrar únicamente las jornadas que YA CERRARON
-      const cerradas = todasJornadas.filter((j) => {
-        if (!j.fecha_limite) return false;
-        const limiteQ = new Date(j.fecha_limite);
-        const limiteS = j.fecha_limite_survivor
-          ? new Date(j.fecha_limite_survivor)
-          : limiteQ;
-        return ahora > limiteQ && ahora > limiteS;
-      });
-
-      setJornadas(cerradas);
-
-      // Seleccionar por defecto la jornada activa si ya cerró, o la más reciente cerrada
-      if (cerradas.length > 0) {
-        setJornadaSeleccionadaPDF(cerradas[0].id.toString());
-      }
-    }
-
-    // 2. Cargar la jornada activa actual
-    const { data: activa, error: jornadaError } = await supabase
+  const cargarJornada = async () => {
+    const { data } = await supabase
       .from("jornadas")
       .select("*")
       .eq("activa", true)
       .single();
 
-    if (jornadaError || !activa) {
-      console.error("Error cargando jornada activa:", jornadaError);
-      return;
+    if (!data) return;
+
+    setJornadaActiva(data);
+
+    if (data.fecha_limite) {
+      const limite = new Date(data.fecha_limite);
+      const horaMexico = await obtenerHoraMexico();
+      setJornadaCerrada(horaMexico > limite);
     }
 
-    setJornadaActiva(activa);
-
-    // Cargar datos de la jornada activa
-    await cargarMiQuiniela(activa.id);
-    await cargarPartidos(activa.id);
-
-    // Verificar si la jornada activa ya cerró
-    if (activa.fecha_limite) {
-      const limiteQ = new Date(activa.fecha_limite);
-      const limiteS = activa.fecha_limite_survivor
-        ? new Date(activa.fecha_limite_survivor)
-        : limiteQ;
-
-      setJornadaCerrada(ahora > limiteQ && ahora > limiteS);
-    }
+    await cargarSeleccionActual(data.id);
   };
 
-  const cargarPartidos = async (jornadaId) => {
-    if (!jornadaId) return;
-
+  const cargarEquipos = async () => {
     const { data, error } = await supabase
-      .from("partidos")
-      .select("*")
-      .eq("jornada_id", jornadaId);
+      .from("equipos")
+      .select("nombre")
+      .order("nombre", { ascending: true });
 
     if (error) {
-      console.error("Error cargando partidos:", error);
+      console.error("Error cargando equipos:", error);
       return;
     }
 
-    setPartidos(data || []);
+    setEquipos(data.map((e) => e.nombre));
   };
 
-  const cargarMiQuiniela = async (jornadaId) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !jornadaId) return;
+  const cargarSeleccionActual = async (jornadaId) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    const { data, error } = await supabase
-      .from("quinielas")
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("survivor")
       .select("*")
       .eq("usuario_id", user.id)
-      .eq("jornada_id", jornadaId);
+      .eq("jornada_id", jornadaId)
+      .maybeSingle();
 
-    if (error) {
-      console.error("Error cargando quiniela:", error);
-      return;
+    if (data) {
+      setEquipoSeleccionado(data.equipo);
     }
+  };
 
-    setQuinielaGuardada(data || []);
+  const cargarUsoEquipos = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    const nuevosPronosticos = {};
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("survivor")
+      .select("equipo")
+      .eq("usuario_id", user.id);
+
+    const conteo = {};
+
+    // Inicializamos el conteo con los equipos cargados
+    equipos.forEach((equipo) => {
+      conteo[equipo] = 0;
+    });
+
     data?.forEach((item) => {
-      nuevosPronosticos[item.partido_id] = item.pronostico;
+      conteo[item.equipo] = (conteo[item.equipo] || 0) + 1;
     });
-    setPronosticos(nuevosPronosticos);
+
+    const resultado = Object.entries(conteo).map(([equipo, usos]) => ({
+      equipo,
+      usos,
+    }));
+
+    setUsoEquipos(resultado);
   };
 
-  const cerrarSesion = async () => {
-    const { error } = await supabase.auth.signOut();
+  const cargarHistorial = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
+    if (!user) return;
 
-    navigate("/");
-  };
+    const { data: selecciones } = await supabase
+      .from("survivor")
+      .select("*")
+      .eq("usuario_id", user.id)
+      .order("jornada_id", { ascending: true });
 
-  const actualizarPronostico = (partidoId, valor) => {
-    setPronosticos({
-      ...pronosticos,
-      [partidoId]: valor,
-    });
-  };
+    const { data: jornadas } = await supabase
+      .from("jornadas")
+      .select("*")
+      .order("id", { ascending: true });
 
-  const guardarQuiniela = async () => {
+    const { data: partidos } = await supabase.from("partidos").select("*");
     const horaMexico = await obtenerHoraMexico();
-    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!jornadaActiva) {
-      alert("No existe una jornada activa");
-      return;
-    }
+    let total = 0;
+    let vidas = 0;
 
+    const procesado = (jornadas || []).map((jornada) => {
+      // Validamos si esta jornada ya pasó su fecha límite para considerarla cerrada/expirada
+      const esPasadaYCerrada = jornada.fecha_limite ? horaMexico > new Date(jornada.fecha_limite) : false;
+
+      const seleccion = selecciones?.find(
+        (s) => Number(s.jornada_id) === Number(jornada.id)
+      );
+
+      // CASO 1: No seleccionó equipo y la jornada ya cerró/pasó
+      if (!seleccion && esPasadaYCerrada) {
+        vidas++;
+        return {
+          id: `jornada-${jornada.id}`,
+          nombreJornada: jornada.nombre || `Jornada ${jornada.id}`,
+          equipo: "Sin selección",
+          resultado: "❌ No elegible (Perdió vida)",
+          puntos: 0,
+        };
+      }
+
+      // CASO 2: La jornada aún está activa o abierta y no seleccionó nada todavía
+      if (!seleccion) {
+        return {
+          id: `jornada-${jornada.id}`,
+          nombreJornada: jornada.nombre || `Jornada ${jornada.id}`,
+          equipo: "Sin selección",
+          resultado: "Pendiente",
+          puntos: 0,
+        };
+      }
+
+      // CASO 3: Sí tiene selección, calculamos puntos y resultados normales
+      const partido = partidos?.find(
+        (p) =>
+          Number(p.jornada_id) === Number(jornada.id) &&
+          (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
+      );
+
+      let puntos = 0;
+      let resultado = "Pendiente";
+
+      if (partido?.resultado) {
+        if (partido.local === seleccion.equipo) {
+          if (partido.resultado === "L") {
+            puntos = 3;
+            resultado = "✅ Ganó";
+          } else if (partido.resultado === "E") {
+            puntos = 1;
+            resultado = "🤝 Empató";
+          } else if (partido.resultado === "V") {
+            puntos = 0;
+            resultado = "❌ Perdió";
+          }
+        }
+
+        if (partido.visitante === seleccion.equipo) {
+          if (partido.resultado === "V") {
+            puntos = 3;
+            resultado = "✅ Ganó";
+          } else if (partido.resultado === "E") {
+            puntos = 1;
+            resultado = "🤝 Empató";
+          } else if (partido.resultado === "L") {
+            puntos = 0;
+            resultado = "❌ Perdió";
+          }
+        }
+      }
+
+      total += puntos;
+
+      if (resultado === "❌ Perdió") {
+        vidas++;
+      }
+
+      return {
+        ...seleccion,
+        nombreJornada: jornada.nombre || `Jornada ${seleccion.jornada_id}`,
+        puntos,
+        resultado,
+      };
+    });
+
+    setHistorial(procesado);
+    setPuntosTotales(total);
+    setVidasPerdidas(vidas);
+  };
+
+  const guardarSeleccion = async () => {
+    const horaMexico = await obtenerHoraMexico();
     const fechaLimite = new Date(jornadaActiva.fecha_limite);
 
     if (horaMexico > fechaLimite) {
@@ -168,480 +232,234 @@ export default function Quiniela() {
       return;
     }
 
-    const registros = Object.entries(pronosticos).map(([partidoId, valor]) => ({
-      usuario: user.email,
-      usuario_id: user.id,
-      partido_id: Number(partidoId),
-      pronostico: valor,
-      jornada_id: jornadaActiva.id,
-      fecha_envio: horaMexico.toISOString(),
-    }));
+    if (!equipoSeleccionado) {
+      alert("Selecciona un equipo");
+      return;
+    }
 
-    const { error: deleteError } = await supabase
-      .from("quinielas")
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { count } = await supabase
+      .from("survivor")
+      .select("*", { count: "exact", head: true })
+      .eq("usuario_id", user.id)
+      .eq("equipo", equipoSeleccionado);
+
+    const { data: actual } = await supabase
+      .from("survivor")
+      .select("*")
+      .eq("usuario_id", user.id)
+      .eq("jornada_id", jornadaActiva.id)
+      .maybeSingle();
+
+    const usos =
+      actual?.equipo === equipoSeleccionado ? (count || 0) - 1 : count || 0;
+
+    if (usos >= 3) {
+      alert(
+        `Ya no puedes seleccionar ${equipoSeleccionado}. Máximo 3 usos.`
+      );
+      return;
+    }
+
+    await supabase
+      .from("survivor")
       .delete()
       .eq("usuario_id", user.id)
       .eq("jornada_id", jornadaActiva.id);
 
-    if (deleteError) {
-      console.error("Error eliminando quiniela previa:", deleteError);
-      alert(deleteError.message);
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("quinielas")
-      .insert(registros)
-      .select();
+    const { error } = await supabase.from("survivor").insert({
+      usuario_id: user.id,
+      usuario: user.email,
+      jornada_id: jornadaActiva.id,
+      equipo: equipoSeleccionado,
+    });
 
     if (error) {
-      console.error("Error guardando quiniela:", error);
       alert(error.message);
       return;
     }
 
-    setQuinielaGuardada(data || []);
+    alert("Selección guardada correctamente");
 
-    const nuevosPronosticos = {};
-    data?.forEach((item) => {
-      nuevosPronosticos[item.partido_id] = item.pronostico;
-    });
-    setPronosticos(nuevosPronosticos);
-
-    alert("Quiniela guardada correctamente");
-  };
-
-  //---------------------------------------
-  // FUNCIÓN PARA EXPORTAR PDF POR JORNADA
-  //---------------------------------------
-  const exportarPDF = async () => {
-    if (!jornadaSeleccionadaPDF) {
-      alert("Por favor selecciona una jornada para descargar.");
-      return;
-    }
-
-    const jornadaAExportar = jornadas.find(
-      (j) => j.id.toString() === jornadaSeleccionadaPDF
-    );
-
-    try {
-      setCargandoPDF(true);
-
-      const { default: jsPDF } = await import("jspdf");
-      const { default: autoTable } = await import("jspdf-autotable");
-
-      // 1. Obtener Partidos de la jornada seleccionada
-      const { data: partidosData } = await supabase
-        .from("partidos")
-        .select("id, local, visitante, resultado")
-        .eq("jornada_id", jornadaSeleccionadaPDF)
-        .order("id");
-
-      // 2. Obtener Pronósticos de la jornada seleccionada
-      const { data: quinielasData } = await supabase
-        .from("quinielas")
-        .select("usuario_id, partido_id, pronostico")
-        .eq("jornada_id", jornadaSeleccionadaPDF);
-
-      // 3. Obtener Perfiles
-      const { data: perfiles } = await supabase
-        .from("profiles")
-        .select("id, nombre, nombre_usuario, nombre_completo");
-
-      const usuarios = [
-        ...new Set(quinielasData?.map((q) => q.usuario_id) || []),
-      ];
-
-      // Encabezados
-      const columnas = [
-        "Partido",
-        "Resultado",
-        ...usuarios.map((usuarioId) => {
-          const perfil = perfiles?.find((p) => p.id === usuarioId);
-          return (
-            perfil?.nombre_usuario ||
-            perfil?.nombre ||
-            perfil?.nombre_completo ||
-            usuarioId
-          );
-        }),
-      ];
-
-      const aciertos = {};
-      usuarios.forEach((usuarioId) => {
-        aciertos[usuarioId] = 0;
-      });
-
-      // Filas
-      const filas = (partidosData || []).map((partido) => {
-        const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
-
-        usuarios.forEach((usuarioId) => {
-          const pronostico = quinielasData?.find(
-            (q) =>
-              Number(q.partido_id) === Number(partido.id) &&
-              q.usuario_id === usuarioId
-          );
-
-          let valor = "-";
-          if (pronostico) {
-            valor = pronostico.pronostico;
-            if (partido.resultado && pronostico.pronostico === partido.resultado) {
-              aciertos[usuarioId]++;
-            }
-          }
-          fila.push(valor);
-        });
-
-        return fila;
-      });
-
-      // Fila de totales
-      const filaTotales = ["TOTAL", ""];
-      usuarios.forEach((usuarioId) => {
-        filaTotales.push(aciertos[usuarioId]);
-      });
-      filas.push(filaTotales);
-
-      // Generación PDF
-      const doc = new jsPDF("landscape");
-      doc.setFontSize(18);
-      doc.text(
-        `Quinielas - ${jornadaAExportar ? jornadaAExportar.nombre : `Jornada ${jornadaSeleccionadaPDF}`}`,
-        14,
-        15
-      );
-
-      autoTable(doc, {
-        head: [columnas],
-        body: filas,
-        startY: 22,
-        theme: "grid",
-        styles: { fontSize: 8, halign: "center", valign: "middle" },
-        headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: "bold" },
-        didParseCell: (data) => {
-          if (data.section === "body" && data.row.index === filas.length - 1) {
-            data.cell.styles.fillColor = [230, 230, 230];
-            data.cell.styles.fontStyle = "bold";
-            return;
-          }
-          if (data.section !== "body" || data.column.index < 2) return;
-
-          const fila = filas[data.row.index];
-          if (!fila) return;
-
-          const resultado = fila[1];
-          const pronostico = data.cell.raw;
-
-          if (resultado && resultado !== "-" && pronostico === resultado) {
-            data.cell.styles.textColor = [22, 163, 74];
-            data.cell.styles.fontStyle = "bold";
-          }
-        },
-      });
-
-      const nombreArchivo = jornadaAExportar
-        ? `Quinielas_${jornadaAExportar.nombre.replace(/\s+/g, "_")}.pdf`
-        : `Quinielas_Jornada_${jornadaSeleccionadaPDF}.pdf`;
-
-      doc.save(nombreArchivo);
-    } catch (err) {
-      console.error("Error generando PDF:", err);
-      alert("Ocurrió un error al generar el PDF.");
-    } finally {
-      setCargandoPDF(false);
-    }
+    await cargarHistorial();
+    await cargarUsoEquipos();
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen relative">
-      <h1 className="text-3xl font-bold mb-4">Captura tu Quiniela</h1>
+    <div className="max-w-5xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6">Survivor Liga MX</h1>
 
-      {/* BOTÓN DE REGLAS, PREMIOS Y COSTOS */}
-      <button
-        onClick={() => setMostrarModal(true)}
-        className="mb-6 bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md transition duration-200 flex items-center gap-2"
-      >
-        📜 Reglas, Premios y Costos
-      </button>
-
-      <div className="flex flex-wrap gap-3 mb-6 items-center">
-        <Link to="/posiciones" className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition">
-          Ranking General
-        </Link>
-
-        <Link to="/historico" className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded transition">
-          🏆 Histórico
-        </Link>
-
-        <Link to="/perfil" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">
-          Mi Perfil
-        </Link>
-
-        <Link to="/survivor" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition">
-          Survivor
-        </Link>
-
-        <button
-          onClick={cerrarSesion}
-          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition"
+      {/* Enlaces de Navegación y Botón de Reglas */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <Link
+          to="/quiniela"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition"
         >
-          Cerrar Sesión
+          Regresar a Quiniela
+        </Link>
+
+        <Link
+          to="/ranking-survivor"
+          className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded font-medium flex items-center gap-1 transition"
+        >
+          🏆 Ranking Survivor
+        </Link>
+
+        {/* Botón para abrir las Reglas y Premios */}
+        <button
+          onClick={() => setMostrarReglas(true)}
+          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded font-medium flex items-center gap-1 transition"
+        >
+          📜 Reglas y Premios
         </button>
       </div>
 
-      {/* SECCIÓN DE DESCARGA DE QUINIELA GENERAL */}
-      <div className="bg-gray-50 border p-4 rounded-lg mb-6 flex flex-wrap items-center gap-3">
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Descargar Quiniela General (PDF):
-          </label>
-          <select
-            value={jornadaSeleccionadaPDF}
-            onChange={(e) => setJornadaSeleccionadaPDF(e.target.value)}
-            disabled={jornadas.length === 0}
-            className="w-full border rounded p-2 text-gray-800 bg-white"
-          >
-            {jornadas.length === 0 ? (
-              <option value="">Sin jornadas cerradas disponibles</option>
-            ) : (
-              jornadas.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.nombre} {j.id === jornadaActiva?.id ? "(Jornada Actual)" : ""}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-
-        <button
-          onClick={exportarPDF}
-          disabled={jornadas.length === 0 || cargandoPDF}
-          className={`px-4 py-2 rounded text-white self-end flex items-center gap-2 ${
-            jornadas.length > 0 && !cargandoPDF
-              ? "bg-red-600 hover:bg-red-700 cursor-pointer transition"
-              : "bg-gray-400 cursor-not-allowed"
-          }`}
-        >
-          📄 {cargandoPDF ? "Generando..." : "Descargar PDF"}
-        </button>
+      <div className="bg-gray-100 rounded p-4 my-6 border border-gray-200">
+        <p className="font-bold text-lg">🏆 Puntos Totales: {puntosTotales}</p>
+        <p className={`font-bold text-lg mt-2 ${vidasPerdidas >= 3 ? 'text-red-600' : 'text-gray-800'}`}>
+          💀 Vidas Perdidas: {vidasPerdidas} {vidasPerdidas >= 3 && "💀"}
+        </p>
       </div>
+
+      <h2 className="text-xl font-bold mb-3">📊 Uso de Equipos</h2>
+
+      <table className="w-full border mb-8 rounded overflow-hidden">
+        <thead className="bg-gray-200">
+          <tr>
+            <th className="border p-2 text-left">Equipo</th>
+            <th className="border p-2 text-center">Usos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {usoEquipos.map((item) => (
+            <tr key={item.equipo} className="hover:bg-gray-50">
+              <td className="border p-2">{item.equipo}</td>
+              <td className="border p-2 text-center font-semibold">
+                <span className={item.usos >= 3 ? "text-red-600" : "text-gray-700"}>
+                  {item.usos}/3
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       {jornadaActiva && (
-        <p className="mb-4 text-red-600 font-semibold">
-          ⏰ Fecha límite ({jornadaActiva.nombre}):{" "}
-          {new Date(jornadaActiva.fecha_limite).toLocaleString("es-MX")}
-        </p>
-      )}
+        <div className="border rounded p-4 mb-8 bg-white shadow-sm">
+          <h2 className="font-bold text-xl mb-4">{jornadaActiva.nombre}</h2>
 
-      {partidos.map((partido) => (
-        <div key={partido.id} className="border rounded p-4 mb-3">
-          <h3 className="font-semibold">
-            {partido.local} vs {partido.visitante}
-          </h3>
+          <select
+            value={equipoSeleccionado}
+            onChange={(e) => setEquipoSeleccionado(e.target.value)}
+            className="border p-2 rounded w-full max-w-xs mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+          >
+            <option value="">Selecciona un equipo</option>
+            {equipos.map((equipo) => (
+              <option key={equipo} value={equipo}>
+                {equipo}
+              </option>
+            ))}
+          </select>
 
-          <div className="flex gap-4 mt-3">
-            <label className="cursor-pointer flex items-center gap-1">
-              <input
-                type="radio"
-                name={`partido-${partido.id}`}
-                checked={pronosticos[partido.id] === "L"}
-                onChange={() => actualizarPronostico(partido.id, "L")}
-                disabled={jornadaCerrada}
-                className="cursor-pointer"
-              />{" "}
-              Local
-            </label>
-
-            <label className="cursor-pointer flex items-center gap-1">
-              <input
-                type="radio"
-                name={`partido-${partido.id}`}
-                checked={pronosticos[partido.id] === "E"}
-                onChange={() => actualizarPronostico(partido.id, "E")}
-                disabled={jornadaCerrada}
-                className="cursor-pointer"
-              />{" "}
-              Empate
-            </label>
-
-            <label className="cursor-pointer flex items-center gap-1">
-              <input
-                type="radio"
-                name={`partido-${partido.id}`}
-                checked={pronosticos[partido.id] === "V"}
-                onChange={() => actualizarPronostico(partido.id, "V")}
-                disabled={jornadaCerrada}
-                className="cursor-pointer"
-              />{" "}
-              Visitante
-            </label>
-          </div>
-        </div>
-      ))}
-
-      {jornadaCerrada && (
-        <p className="text-red-600 font-bold mt-4">
-          🔒 La jornada activa ya fue cerrada. Puedes descargar la quiniela en el selector superior.
-        </p>
-      )}
-
-      <button
-        disabled={jornadaCerrada}
-        onClick={guardarQuiniela}
-        className={`px-5 py-2 rounded mt-6 text-white font-semibold shadow-md transition ${
-          jornadaCerrada ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
-        }`}
-      >
-        Guardar Quiniela
-      </button>
-
-      {quinielaGuardada.length > 0 && (
-        <div className="mt-10">
-          <h2 className="text-2xl font-bold mb-4">✅ Mis Pronósticos Enviados</h2>
-
-          <div className="overflow-x-auto">
-            <table className="w-full border rounded">
-              <thead className="bg-gray-200">
-                <tr>
-                  <th className="p-2 border">Partido</th>
-                  <th className="p-2 border">Pronóstico</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quinielaGuardada.map((item) => {
-                  const partido = partidos.find(
-                    (p) => String(p.id) === String(item.partido_id)
-                  );
-
-                  return (
-                    <tr key={item.id}>
-                      <td className="p-2 border">
-                        {partido
-                          ? `${partido.local} vs ${partido.visitante}`
-                          : "Partido no encontrado"}
-                      </td>
-                      <td className="p-2 border font-semibold">
-                        {item.pronostico === "L" && "🏠 Local"}
-                        {item.pronostico === "E" && "🤝 Empate"}
-                        {item.pronostico === "V" && "✈️ Visitante"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div>
+            <button
+              onClick={guardarSeleccion}
+              disabled={jornadaCerrada}
+              className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-semibold shadow-md transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              Guardar Selección
+            </button>
           </div>
         </div>
       )}
 
-      {/* ========================================== */}
-      {/* MODAL (POP-UP) DE REGLAS, PREMIOS Y COSTOS */}
-      {/* ========================================== */}
-      {mostrarModal && (
+      <h2 className="text-2xl font-bold mb-4">Historial Survivor</h2>
+
+      <table className="w-full border rounded overflow-hidden">
+        <thead className="bg-gray-200">
+          <tr>
+            <th className="border p-2 text-left">Jornada</th>
+            <th className="border p-2 text-left">Equipo</th>
+            <th className="border p-2 text-center">Resultado</th>
+            <th className="border p-2 text-center">Puntos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {historial.map((item) => (
+            <tr key={item.id} className="hover:bg-gray-50">
+              <td className="border p-2">{item.nombreJornada}</td>
+              <td className="border p-2 font-medium">{item.equipo}</td>
+              <td className="border p-2 text-center">{item.resultado}</td>
+              <td className="border p-2 text-center font-bold">{item.puntos}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* POPUP / MODAL DE REGLAS Y PREMIOS */}
+      {mostrarReglas && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setMostrarModal(false)}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={() => setMostrarReglas(false)}
         >
           <div 
-            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative"
+            className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl relative"
             onClick={(e) => e.stopPropagation()} // Evita cerrar al hacer clic dentro del modal
           >
-            {/* Botón de cerrar */}
+            {/* Botón de cerrar (X) */}
             <button
-              onClick={() => setMostrarModal(false)}
+              onClick={() => setMostrarReglas(false)}
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition"
               aria-label="Cerrar"
             >
               &times;
             </button>
 
-            <div className="p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-green-700 mb-6 text-center border-b pb-3">
-                📜 Reglas, Premios y Costos
-              </h2>
-
-              <div className="space-y-8">
-                {/* Sección 1: Quiniela */}
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    🏆 Pronósticos y Premios (Quiniela)
-                  </h3>
-                  <ul className="list-decimal list-inside space-y-2 text-gray-700 bg-green-50 p-4 rounded-lg border border-green-200">
-                    <li>Premio semanal de <strong>$180.00</strong>.</li>
-                    <li>Ganador de liguilla se lleva <strong>$250.00</strong>.</li>
-                    <li>Se elimina el ganador a 4to lugar.</li>
-                    <li>Primer Lugar gana <strong>$3,620.00</strong>.</li>
-                    <li>Segundo Lugar gana <strong>$1,300.00</strong>.</li>
-                    <li>Tercer Lugar gana <strong>$550.00</strong>.</li>
-                  </ul>
-                  <p className="text-sm text-gray-600 mt-2 italic text-right">
-                    *(Valores calculados sobre 32 jugadores)*
-                  </p>
-                </div>
-
-                {/* Sección 2: Survivor Liga MX */}
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    🦖 Bienvenidos al Survivor Liga MX
-                  </h3>
-                  <ul className="list-disc list-inside space-y-2 text-gray-700 bg-purple-50 p-4 rounded-lg border border-purple-200">
-                    <li>Cada participante puede elegir 3 veces a un mismo equipo durante todo el torneo, un equipo a elegir por Jornada.</li>
-                    <li>Cada jornada el equipo seleccionado puede tener tres resultados: Ganar, Empatar o Perder.</li>
-                    <li>Si Gana obtienes 3 Puntos, si Empata 1 Punto y si Pierde 0 puntos. Cuando pierde tu equipo, tú pierdes 1 Vida.</li>
-                    <li>Solamente tenemos 3 VIDAS en la temporada. Gana el que seleccione mejor.</li>
-                  </ul>
-                  
-                  <h4 className="text-lg font-semibold text-gray-800 mt-4 mb-2 flex items-center gap-2">
-                    💰 Premios Survivor:
-                  </h4>
-                  <ul className="list-decimal list-inside space-y-2 text-gray-700 bg-purple-50 p-4 rounded-lg border border-purple-200">
-                    <li>Primer Lugar gana <strong>$3,030.00</strong></li>
-                    <li>Segundo Lugar gana <strong>$1,550.00</strong></li>
-                    <li>Tercer Lugar gana <strong>$750.00</strong></li>
-                    <li>Cuarto Lugar gana <strong>$360.00</strong></li>
-                    <li>Quinto Lugar gana <strong>$200.00</strong></li>
-                  </ul>
-                  <p className="text-sm text-gray-600 mt-2 italic text-right">
-                    *(Valores calculados sobre 31 participantes)*
-                  </p>
-                </div>
-
-                {/* Sección 3: Reglas Generales */}
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    📋 Reglas Generales del Juego
-                  </h3>
-                  <ul className="list-disc list-inside space-y-3 text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <li>
-                      Cada jornada el participante hará la selección de sus pronósticos: <strong>Local, Empate o Visitante</strong>.
-                    </li>
-                    <li>
-                      Se llevará un <strong>ranking semanal</strong>.
-                    </li>
-                    <li>
-                      Los aciertos semanales se sumarán al acumulado de pronósticos acertados. Al final del torneo de la Liga MX se tendrá a un primer, segundo y tercer lugar, conforme a los aciertos que tengan y usos de equipos.
-                    </li>
-                    <li>
-                      En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>. En ese momento, ya no se podrán elegir pronósticos ni survivor, por lo que, cualquier omisión será responsabilidad única del participante.
-                    </li>
-                  </ul>
-                  <p className="text-center text-lg font-bold text-green-700 mt-4">
-                    ¡Es una quiniela entre amigos! ⚽🍻
-                  </p>
-                </div>
+            <h2 className="text-2xl font-bold mb-4 text-center text-purple-700 border-b pb-3">
+              🦖 Survivor Liga MX
+            </h2>
+            
+            <div className="space-y-4 text-gray-700 text-sm md:text-base leading-relaxed mb-6">
+              {/* Sección de Reglas */}
+              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                  📋 Reglas del Juego
+                </h3>
+                <ul className="list-disc list-inside space-y-2">
+                  <li>Cada participante puede elegir <strong>3 veces a un mismo equipo</strong> durante todo el torneo, un equipo a elegir por Jornada.</li>
+                  <li>Cada jornada el equipo seleccionado puede tener tres resultados: <strong>Ganar, Empatar o Perder</strong>.</li>
+                  <li>Si Gana obtienes 3 Puntos, si Empata 1 Punto y si Pierde 0 puntos. <strong>Cuando pierde tu equipo, tú pierdes 1 Vida</strong>.</li>
+                  <li>Solamente tenemos <strong>3 VIDAS</strong> en la temporada. Gana el que seleccione mejor.</li>
+                </ul>
               </div>
 
-              {/* Botón de cierre inferior */}
-              <div className="mt-8 text-center">
-                <button
-                  onClick={() => setMostrarModal(false)}
-                  className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition"
-                >
-                  Entendido, ¡a jugar!
-                </button>
+              {/* Sección de Premios */}
+              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                  🏆 Premios Survivor
+                </h3>
+                <ul className="list-decimal list-inside space-y-1 ml-1">
+                  <li>Primer Lugar gana <strong>$3,030.00</strong></li>
+                  <li>Segundo Lugar gana <strong>$1,550.00</strong></li>
+                  <li>Tercer Lugar gana <strong>$750.00</strong></li>
+                  <li>Cuarto Lugar gana <strong>$360.00</strong></li>
+                  <li>Quinto Lugar gana <strong>$200.00</strong></li>
+                </ul>
+                <p className="text-xs text-gray-600 mt-3 italic text-right">
+                  *(Valores calculados sobre 31 participantes)*
+                </p>
               </div>
             </div>
+
+            <button
+              onClick={() => setMostrarReglas(false)}
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg transition-colors shadow-md"
+            >
+              ¡Entendido, a sobrevivir!
+            </button>
           </div>
         </div>
       )}
