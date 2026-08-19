@@ -137,11 +137,15 @@ export default function AdminSurvivor() {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
+        // 1. Si no hay selección y la jornada ya cerró, pierde una vida (con tope de 3)
         if (!seleccion && esPasadaYCerrada) {
-          registroAcumulado.vidas += 1;
+          if (registroAcumulado.vidas < 3) {
+            registroAcumulado.vidas += 1;
+          }
           return;
         }
 
+        // Si no hay selección pero la jornada no ha cerrado, no hacemos nada
         if (!seleccion) {
           return;
         }
@@ -168,15 +172,27 @@ export default function AdminSurvivor() {
         }
 
         registroAcumulado.puntos += puntos;
+        
+        // 2. Si perdió el partido, suma una vida perdida (con tope de 3)
         if (perdio) {
-          registroAcumulado.vidas += 1;
+          if (registroAcumulado.vidas < 3) {
+            registroAcumulado.vidas += 1;
+          }
         }
       });
     }
 
+    // 3. NUEVO ORDEN DE CLASIFICACIÓN:
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
-      if (b.puntos !== a.puntos) return b.puntos - a.puntos;
-      if (a.vidas !== b.vidas) return a.vidas - b.vidas;
+      // Primero: Menor cantidad de vidas perdidas (0 es el mejor lugar)
+      if (a.vidas !== b.vidas) {
+        return a.vidas - b.vidas;
+      }
+      // Segundo: Mayor cantidad de puntos totales
+      if (b.puntos !== a.puntos) {
+        return b.puntos - a.puntos;
+      }
+      // Tercero: Orden alfabético por nombre como desempate final
       return a.nombre.localeCompare(b.nombre);
     });
 
@@ -552,10 +568,10 @@ export default function AdminSurvivor() {
                         className="p-2 text-center font-semibold"
                         style={{
                           border: "1px solid #e5e7eb",
-                          color: "#dc2626",
+                          color: fila.vidas >= 3 ? "#dc2626" : "#4b5563",
                         }}
                       >
-                        {fila.vidas}
+                        {fila.vidas} {fila.vidas >= 3 && "💀"}
                       </td>
                     </tr>
                   ))
@@ -677,6 +693,7 @@ export default function AdminSurvivor() {
                           style={{
                             border: "1px solid #e5e7eb",
                             backgroundColor: bgColor,
+                            color: uso.cantidad >= 3 ? "#ffffff" : (uso.cantidad > 0 ? "#000000" : "#9ca3af"),
                           }}
                         >
                           {uso.cantidad}
