@@ -30,7 +30,7 @@ export default function AdminDashboard() {
 
   // Estados para ranking de quinielas
   const [rankingQuinielas, setRankingQuinielas] = useState([]);
-  const [tipoExportacion, setTipoExportacion] = useState("jornada");
+  const [jornadasSecuenciales, setJornadasSecuenciales] = useState([]); // Para mapear J1, J2, J3...
 
   useEffect(() => {
     cargarDashboard();
@@ -109,6 +109,20 @@ export default function AdminDashboard() {
   const calcularRankingQuinielas = async (perfilesData, todasQuinielas, todosPartidos, jornadasData) => {
     const acumulado = {};
 
+    // Crear mapeo secuencial: ID de Supabase -> número secuencial (1, 2, 3, 4...)
+    const mapeoSecuencial = {};
+    const jornadasSec = [];
+    jornadasData.forEach((jornada, index) => {
+      const numSecuencial = index + 1; // J1, J2, J3...
+      mapeoSecuencial[jornada.id] = numSecuencial;
+      jornadasSec.push({
+        idSupabase: jornada.id,
+        numero: numSecuencial,
+        nombre: `J${numSecuencial}`
+      });
+    });
+    setJornadasSecuenciales(jornadasSec);
+
     // Inicializar todos los participantes
     perfilesData.forEach((usuario) => {
       if (esAdmin(usuario)) return;
@@ -122,9 +136,9 @@ export default function AdminDashboard() {
         vidas: 0,
       };
 
-      // Inicializar aciertos por jornada en 0
-      jornadasData.forEach(jornada => {
-        acumulado[usuario.id].aciertosPorJornada[jornada.id] = 0;
+      // Inicializar aciertos por jornada en 0 (usando número secuencial)
+      jornadasSec.forEach(jornadaSec => {
+        acumulado[usuario.id].aciertosPorJornada[jornadaSec.numero] = 0;
       });
     });
 
@@ -137,6 +151,10 @@ export default function AdminDashboard() {
 
       if (!acumulado[usuarioId]) return;
 
+      // Obtener número secuencial de la jornada
+      const numeroSecuencial = mapeoSecuencial[jornadaId];
+      if (!numeroSecuencial) return;
+
       // Buscar el partido y su resultado
       const partido = todosPartidos.find(p => 
         Number(p.id) === Number(partidoId) && 
@@ -144,8 +162,8 @@ export default function AdminDashboard() {
       );
 
       if (partido && partido.resultado && pronostico === partido.resultado) {
-        acumulado[usuarioId].aciertosPorJornada[jornadaId] = 
-          (acumulado[usuarioId].aciertosPorJornada[jornadaId] || 0) + 1;
+        acumulado[usuarioId].aciertosPorJornada[numeroSecuencial] = 
+          (acumulado[usuarioId].aciertosPorJornada[numeroSecuencial] || 0) + 1;
         acumulado[usuarioId].totalAciertos += 1;
       }
     });
@@ -258,9 +276,9 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG) - QUINIELAS
+  // EXPORTAR A IMAGEN (JPEG) - SOLO RANKING GENERAL QUINIELAS
   //---------------------------------------
-  const exportarImagen = async (tipo) => {
+  const exportarImagen = async () => {
     try {
       const contenedorTemp = document.createElement('div');
       contenedorTemp.style.position = 'fixed';
@@ -274,12 +292,7 @@ export default function AdminDashboard() {
       
       // Título
       const titulo = document.createElement('h2');
-      if (tipo === "acumulado") {
-        titulo.textContent = '🏆 Ranking Acumulado General - Quinielas';
-      } else {
-        const jornada = jornadas.find(j => j.id === jornadaSeleccionada);
-        titulo.textContent = `📊 Quiniela - ${jornada?.nombre || 'Jornada'}`;
-      }
+      titulo.textContent = ' Ranking General Acumulado - Quinielas';
       titulo.style.fontSize = '28px';
       titulo.style.fontWeight = 'bold';
       titulo.style.marginBottom = '20px';
@@ -300,18 +313,13 @@ export default function AdminDashboard() {
           <th style="border: 1px solid #9ca3af; padding: 8px; text-align: left; width: 150px;">Usuario</th>
       `;
 
-      if (tipo === "acumulado") {
-        // Mostrar todas las jornadas
-        jornadas.forEach(jornada => {
-          encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 50px;">J${jornada.id}</th>`;
-        });
-        encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db;">TOTAL</th>`;
-      } else {
-        // Solo mostrar la jornada seleccionada
-        const jornada = jornadas.find(j => j.id === jornadaSeleccionada);
-        encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db;">J${jornada?.id || ''}</th>`;
-      }
-
+      // Columnas de jornadas secuenciales (J1, J2, J3...)
+      jornadasSecuenciales.forEach(jornadaSec => {
+        encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 50px;">${jornadaSec.nombre}</th>`;
+      });
+      
+      // Columna TOTAL
+      encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db; font-weight: bold;">TOTAL</th>`;
       encabezadosHTML += `</tr>`;
       thead.innerHTML = encabezadosHTML;
       tabla.appendChild(thead);
@@ -319,16 +327,7 @@ export default function AdminDashboard() {
       // Filas
       const tbody = document.createElement('tbody');
       
-      // Filtrar ranking según tipo
-      let rankingMostrar = rankingQuinielas;
-      if (tipo === "jornada") {
-        // Para jornada individual, mostrar todos los que participaron
-        rankingMostrar = rankingQuinielas.filter(r => 
-          r.aciertosPorJornada[jornadaSeleccionada] > 0 || r.vidas < 3
-        );
-      }
-
-      rankingMostrar.forEach((fila, index) => {
+      rankingQuinielas.forEach((fila, index) => {
         let bgColor = '#ffffff';
         if (fila.vidas >= 3) bgColor = '#ef4444'; // Rojo - eliminado
         else if (fila.vidas === 2) bgColor = '#fbbf24'; // Amarillo
@@ -342,19 +341,14 @@ export default function AdminDashboard() {
           <td style="border: 1px solid #9ca3af; padding: 8px; font-weight: 600;">${fila.nombre}</td>
         `;
 
-        if (tipo === "acumulado") {
-          // Mostrar aciertos por cada jornada
-          jornadas.forEach(jornada => {
-            const aciertos = fila.aciertosPorJornada[jornada.id] || 0;
-            filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center;">${aciertos}</td>`;
-          });
-          // Total
-          filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${fila.totalAciertos}</td>`;
-        } else {
-          // Solo mostrar la jornada seleccionada
-          const aciertos = fila.aciertosPorJornada[jornadaSeleccionada] || 0;
-          filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${aciertos}</td>`;
-        }
+        // Mostrar aciertos por cada jornada secuencial
+        jornadasSecuenciales.forEach(jornadaSec => {
+          const aciertos = fila.aciertosPorJornada[jornadaSec.numero] || 0;
+          filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center;">${aciertos}</td>`;
+        });
+        
+        // Total
+        filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${fila.totalAciertos}</td>`;
 
         filaHTML += `</tr>`;
         tr.innerHTML = filaHTML;
@@ -379,14 +373,7 @@ export default function AdminDashboard() {
 
       const imagenData = canvas.toDataURL("image/jpeg", 0.95);
       const link = document.createElement("a");
-      
-      if (tipo === "acumulado") {
-        link.download = `Ranking_Acumulado_Quinielas.jpg`;
-      } else {
-        const jornada = jornadas.find(j => j.id === jornadaSeleccionada);
-        link.download = `Quiniela_${jornada?.nombre || 'Jornada'}.jpg`;
-      }
-      
+      link.download = `Ranking_General_Quinielas.jpg`;
       link.href = imagenData;
       link.click();
       
@@ -487,20 +474,11 @@ export default function AdminDashboard() {
           ))}
         </select>
 
-        <select
-          value={tipoExportacion}
-          onChange={(e) => setTipoExportacion(e.target.value)}
-          className="border rounded px-3 py-2 bg-white"
-        >
-          <option value="jornada"> Por Jornada</option>
-          <option value="acumulado"> Acumulado General</option>
-        </select>
-
         <button 
-          onClick={() => exportarImagen(tipoExportacion)} 
+          onClick={exportarImagen} 
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
         >
-          📸 Exportar Imagen Quinielas (JPEG)
+          📸 Exportar Ranking General Quinielas (JPEG)
         </button>
 
         <button onClick={exportarPDF} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">📄 Exportar PDF</button>
