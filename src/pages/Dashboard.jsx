@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
+import { obtenerHoraMexico } from "../services/horario";
 
 export default function Dashboard() {
   const [participantes, setParticipantes] = useState(0);
@@ -10,11 +11,9 @@ export default function Dashboard() {
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState("");
   const [jornadaActivaId, setJornadaActivaId] = useState(null);
   
-  // Estados para la gráfica
   const [datosGrafica, setDatosGrafica] = useState([]);
   const [maxRegistros, setMaxRegistros] = useState(1);
   
-  // Estados para lista de ausentes
   const [ausentesQuiniela, setAusentesQuiniela] = useState([]);
   const [ausentesSurvivor, setAusentesSurvivor] = useState([]);
 
@@ -22,35 +21,27 @@ export default function Dashboard() {
     cargarDashboard();
   }, []);
 
+  // Función para identificar al admin (AJUSTA ESTO si tu admin tiene otro formato de email/nombre)
+  const esAdmin = (p) => {
+    const email = (p.email || "").toLowerCase();
+    const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
+    return email.includes("admin") || nombre.includes("admin") || email.includes("root");
+  };
+
   const cargarDashboard = async () => {
+    const ahora = await obtenerHoraMexico();
+
     // 1. Conteos generales
-    const { count: participantesCount } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true });
-
-    const { count: jornadasCount } = await supabase
-      .from("jornadas")
-      .select("*", { count: "exact", head: true });
-
-    const { count: partidosCount } = await supabase
-      .from("partidos")
-      .select("*", { count: "exact", head: true });
+    const { count: participantesCount } = await supabase.from("profiles").select("*", { count: "exact", head: true });
+    const { count: jornadasCount } = await supabase.from("jornadas").select("*", { count: "exact", head: true });
+    const { count: partidosCount } = await supabase.from("partidos").select("*", { count: "exact", head: true });
 
     // 2. Obtener todas las jornadas
-    const { data: jornadasData } = await supabase
-      .from("jornadas")
-      .select("*")
-      .order("id", { ascending: true });
-
+    const { data: jornadasData } = await supabase.from("jornadas").select("*").order("id", { ascending: true });
     setJornadasLista(jornadasData || []);
 
     // 3. Obtener jornada activa
-    const { data: jornadaActiva } = await supabase
-      .from("jornadas")
-      .select("id, nombre")
-      .eq("activa", true)
-      .single();
-
+    const { data: jornadaActiva } = await supabase.from("jornadas").select("id, nombre").eq("activa", true).single();
     if (jornadaActiva) {
       setJornadaSeleccionada(jornadaActiva.id);
       setJornadaActivaId(jornadaActiva.id);
@@ -60,79 +51,149 @@ export default function Dashboard() {
     setJornadas(jornadasCount || 0);
     setPartidos(partidosCount || 0);
 
-    // 4. Obtener TODOS los participantes directamente en una variable (NO en el estado aún)
-    const { data: participantesData } = await supabase
-      .from("profiles")
-      .select("id, nombre, nombre_usuario, email");
-    
+    // 4. Obtener todos los participantes y datos históricos para los filtros
+    const { data: participantesData } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email");
     const listaParticipantes = participantesData || [];
 
-    // 5. Cargar datos para la gráfica
-    await cargarDatosGrafica(jornadasData, jornadaActiva?.id);
-    
-    // 6. Si hay jornada activa, cargar ausentes PASANDO la lista directamente como argumento
-    if (jornadaActiva?.id) {
-      await cargarAusentesJornadaActiva(jornadaActiva.id, listaParticipantes);
+    const { data: todasQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id");
+    const { data: todosSurvivor } = await supabase.from("survivor").select("jornada_id, usuario_id, equipo");
+    const { data: todosPartidos } = await supabase.from("partidos").select("jornada_id, local, visitante, resultado");
+
+    // 5. Procesar datos para la gráfica
+    await cargarDatosGrafica(jornadasData, jornadaActiva?.id, todasQuinielas, todosSurvivor);
+
+    // 6. Calcular ausentes con filtros inteligentes
+    if (jornadaActiva?.id && listaParticipantes.length > 0) {
+      calcularAusentesInteligentes(
+        jornadaActiva.id, 
+        jornadasData, 
+        listaParticipantes, 
+        todasQuinielas, 
+        todosSurvivor, 
+        todosPartidos,
+        ahora
+      );
     }
   };
 
-  const cargarAusentesJornadaActiva = async (jornadaId, listaParticipantes) => {
-    // Obtener quienes SÍ tienen quiniela en esta jornada
-    const { data: quinielasData } = await supabase
-      .from("quinielas")
-      .select("usuario_id")
-      .eq("jornada_id", jornadaId);
+  const calcularAusentesInteligentes = (
+    idJornadaActiva, 
+    jornadasData, 
+    listaParticipantes, 
+    todasQuinielas, 
+    todosSurvivor, 
+    todosPartidos,
+    ahora
+  ) => {
+    // --- PREPARACIÓN DE DATOS ---
+    const jornadasHastaActiva = jornadasData.filter(j => j.id <= idJornadaActiva).length;
     
-    // Obtener quienes SÍ tienen survivor en esta jornada
-    const { data: survivorData } = await supabase
-      .from("survivor")
-      .select("usuario_id")
-      .eq("jornada_id", jornadaId);
-    
-    // Crear sets de usuarios que ya registraron (para búsqueda rápida)
-    const usuariosConQuiniela = new Set(quinielasData?.map(q => q.usuario_id) || []);
-    const usuariosConSurvivor = new Set(survivorData?.map(s => s.usuario_id) || []);
-    
-    // Filtrar quienes NO han registrado (usando la lista que pasamos por argumento)
-    const ausentesQ = listaParticipantes.filter(p => !usuariosConQuiniela.has(p.id));
-    const ausentesS = listaParticipantes.filter(p => !usuariosConSurvivor.has(p.id));
-    
+    // Contadores por usuario
+    const quinielasCount = {};
+    const survivorCount = {};
+    const vidasPerdidas = {};
+
+    // Inicializar contadores
+    listaParticipantes.forEach(p => {
+      quinielasCount[p.id] = 0;
+      survivorCount[p.id] = 0;
+      vidasPerdidas[p.id] = 0;
+    });
+
+    // Contar quinielas y survivor por usuario
+    todasQuinielas?.forEach(q => {
+      if (q.jornada_id <= idJornadaActiva) {
+        quinielasCount[q.usuario_id] = (quinielasCount[q.usuario_id] || 0) + 1;
+      }
+    });
+
+    todosSurvivor?.forEach(s => {
+      if (s.jornada_id <= idJornadaActiva) {
+        survivorCount[s.usuario_id] = (survivorCount[s.usuario_id] || 0) + 1;
+      }
+    });
+
+    // Calcular vidas perdidas en Survivor (Lógica idéntica al Ranking)
+    jornadasData.filter(j => j.id <= idJornadaActiva).forEach(jornada => {
+      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
+
+      listaParticipantes.forEach(usuario => {
+        const seleccion = todosSurvivor?.find(s => s.usuario_id === usuario.id && Number(s.jornada_id) === Number(jornada.id));
+
+        // Caso A: No seleccionó y la jornada cerró
+        if (!seleccion && esPasadaYCerrada) {
+          if (vidasPerdidas[usuario.id] < 3) vidasPerdidas[usuario.id] += 1;
+          return;
+        }
+
+        // Caso B: Sí seleccionó, verificar si perdió
+        if (seleccion) {
+          const partido = todosPartidos?.find(p => 
+            Number(p.jornada_id) === Number(jornada.id) && 
+            (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
+          );
+
+          if (partido?.resultado) {
+            let perdio = false;
+            if (partido.local === seleccion.equipo && partido.resultado === "V") perdio = true;
+            if (partido.visitante === seleccion.equipo && partido.resultado === "L") perdio = true;
+
+            if (perdio && vidasPerdidas[usuario.id] < 3) {
+              vidasPerdidas[usuario.id] += 1;
+            }
+          }
+        }
+      });
+    });
+
+    // --- FILTRADO DE AUSENTES ---
+    const quinielasActivaIds = new Set(todasQuinielas?.filter(q => q.jornada_id === idJornadaActiva).map(q => q.usuario_id) || []);
+    const survivorActivaIds = new Set(todosSurvivor?.filter(s => s.jornada_id === idJornadaActiva).map(s => s.usuario_id) || []);
+
+    // 1. Filtro Quiniela: Faltan en la activa Y no han faltado más de 1 jornada en total
+    const ausentesQ = listaParticipantes.filter(p => {
+      if (esAdmin(p)) return false; // Excluir admin
+      if (!quinielasActivaIds.has(p.id)) {
+        const totalQ = quinielasCount[p.id] || 0;
+        const jornadasFaltadas = jornadasHastaActiva - totalQ;
+        // Si faltó 1 o menos jornadas, sigue participando. Si faltó > 1, está inactivo.
+        return jornadasFaltadas <= 1; 
+      }
+      return false;
+    });
+
+    // 2. Filtro Survivor: Faltan en la activa Y NO están eliminados (vidas < 3)
+    const ausentesS = listaParticipantes.filter(p => {
+      if (esAdmin(p)) return false; // Excluir admin
+      if (!survivorActivaIds.has(p.id)) {
+        const vidas = vidasPerdidas[p.id] || 0;
+        // Solo mostrar si tiene menos de 3 vidas (no está eliminado)
+        // Opcional: Si quieres excluir a los que NUNCA han jugado survivor, agrega: && survivorCount[p.id] > 0
+        return vidas < 3; 
+      }
+      return false;
+    });
+
     setAusentesQuiniela(ausentesQ);
     setAusentesSurvivor(ausentesS);
 
-    // Depuración en consola (puedes borrar esto después si funciona)
-    console.log("Total participantes:", listaParticipantes.length);
-    console.log("Con quiniela:", usuariosConQuiniela.size, "| Ausentes quiniela:", ausentesQ.length);
-    console.log("Con survivor:", usuariosConSurvivor.size, "| Ausentes survivor:", ausentesS.length);
+    console.log("📊 Depuración Ausentes:", {
+      totalParticipantes: listaParticipantes.length,
+      ausentesQuinielaFiltrados: ausentesQ.length,
+      ausentesSurvivorFiltrados: ausentesS.length,
+    });
   };
 
-  const cargarDatosGrafica = async (jornadasData, idJornadaActiva) => {
-    const { data: todasQuinielas } = await supabase
-      .from("quinielas")
-      .select("jornada_id, usuario_id");
-
-    const { data: todosSurvivor } = await supabase
-      .from("survivor")
-      .select("jornada_id, usuario_id");
-
-    if (!todasQuinielas && !todosSurvivor) return;
-
+  const cargarDatosGrafica = async (jornadasData, idJornadaActiva, todasQuinielas, todosSurvivor) => {
     const datosProcesados = (jornadasData || []).map((jornada) => {
-      const quinielasDeEstaJornada = (todasQuinielas || []).filter(
-        (q) => Number(q.jornada_id) === Number(jornada.id)
-      );
-      const usuariosUnicosQuiniela = new Set(quinielasDeEstaJornada.map((q) => q.usuario_id));
-      
-      const survivorDeEstaJornada = (todosSurvivor || []).filter(
-        (s) => Number(s.jornada_id) === Number(jornada.id)
-      );
-      const usuariosUnicosSurvivor = new Set(survivorDeEstaJornada.map((s) => s.usuario_id));
+      const qJornada = (todasQuinielas || []).filter(q => Number(q.jornada_id) === Number(jornada.id));
+      const sJornada = (todosSurvivor || []).filter(s => Number(s.jornada_id) === Number(jornada.id));
       
       return {
         jornada_id: jornada.id,
         nombre: jornada.nombre || `Jornada ${jornada.id}`,
-        quinielas: usuariosUnicosQuiniela.size,
-        survivor: usuariosUnicosSurvivor.size,
+        quinielas: new Set(qJornada.map(q => q.usuario_id)).size,
+        survivor: new Set(sJornada.map(s => s.usuario_id)).size,
         esActiva: jornada.id === idJornadaActiva,
       };
     });
@@ -142,18 +203,13 @@ export default function Dashboard() {
     setMaxRegistros(max);
   };
 
-  // Función auxiliar para obtener el nombre de forma segura
-  const getNombreUsuario = (participante) => {
-    return participante.nombre_usuario || 
-           participante.nombre || 
-           (participante.email ? participante.email.split('@')[0] : 'Usuario') ;
+  const getNombreUsuario = (p) => {
+    return p.nombre_usuario || p.nombre || (p.email ? p.email.split('@')[0] : 'Usuario');
   };
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">
-        📊 Dashboard Administrativo
-      </h1>
+      <h1 className="text-3xl font-bold mb-6 text-gray-800">📊 Dashboard Administrativo</h1>
 
       {/* TARJETAS DE RESUMEN (KPIs) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -161,17 +217,14 @@ export default function Dashboard() {
           <h2 className="text-lg font-medium opacity-90">👥 Participantes</h2>
           <p className="text-4xl font-bold mt-2">{participantes}</p>
         </div>
-
         <div className="bg-green-600 text-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
           <h2 className="text-lg font-medium opacity-90">📅 Jornadas</h2>
           <p className="text-4xl font-bold mt-2">{jornadas}</p>
         </div>
-
         <div className="bg-orange-600 text-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
           <h2 className="text-lg font-medium opacity-90">⚽ Partidos</h2>
           <p className="text-4xl font-bold mt-2">{partidos}</p>
         </div>
-
         <div className="bg-purple-600 text-white p-6 rounded-lg shadow-md hover:shadow-lg transition">
           <h2 className="text-lg font-medium opacity-90">🎯 Jornada Activa</h2>
           <p className="text-xl font-bold mt-2">
@@ -205,36 +258,26 @@ export default function Dashboard() {
               return (
                 <div key={dato.jornada_id} className="flex-1 flex flex-col items-center gap-2 group">
                   <div className="w-full flex gap-1 items-end justify-center h-64">
-                    {/* Barra Quiniela */}
                     <div className="flex-1 flex flex-col items-center relative">
                       <div className="absolute -top-8 bg-blue-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 font-semibold">
                         Q: {dato.quinielas}
                       </div>
                       <div 
-                        className={`w-full rounded-t transition-all duration-500 ease-out ${
-                          dato.esActiva ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-400 hover:bg-blue-500"
-                        }`}
+                        className={`w-full rounded-t transition-all duration-500 ease-out ${dato.esActiva ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-400 hover:bg-blue-500"}`}
                         style={{ height: `${Math.max(quinielaHeight, 2)}%`, minHeight: "4px" }}
                       ></div>
                     </div>
-                    
-                    {/* Barra Survivor */}
                     <div className="flex-1 flex flex-col items-center relative">
                       <div className="absolute -top-8 bg-emerald-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 font-semibold">
                         S: {dato.survivor}
                       </div>
                       <div 
-                        className={`w-full rounded-t transition-all duration-500 ease-out ${
-                          dato.esActiva ? "bg-emerald-600 hover:bg-emerald-700" : "bg-emerald-400 hover:bg-emerald-500"
-                        }`}
+                        className={`w-full rounded-t transition-all duration-500 ease-out ${dato.esActiva ? "bg-emerald-600 hover:bg-emerald-700" : "bg-emerald-400 hover:bg-emerald-500"}`}
                         style={{ height: `${Math.max(survivorHeight, 2)}%`, minHeight: "4px" }}
                       ></div>
                     </div>
                   </div>
-                  
-                  <div className={`text-xs mt-2 text-center font-medium truncate w-full ${
-                    dato.esActiva ? "text-indigo-700 font-bold" : "text-gray-600"
-                  }`}>
+                  <div className={`text-xs mt-2 text-center font-medium truncate w-full ${dato.esActiva ? "text-indigo-700 font-bold" : "text-gray-600"}`}>
                     {dato.nombre}
                   </div>
                 </div>
@@ -263,17 +306,17 @@ export default function Dashboard() {
             {ausentesQuiniela.length > 0 ? (
               <div className="max-h-64 overflow-y-auto pr-2">
                 <ul className="space-y-2">
-                  {ausentesQuiniela.map((participante) => (
-                    <li key={participante.id} className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded text-sm">
+                  {ausentesQuiniela.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded text-sm">
                       <span className="text-red-600 font-bold">•</span>
-                      <span className="text-gray-800 font-medium">{getNombreUsuario(participante)}</span>
+                      <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             ) : (
               <div className="text-center py-8 text-green-600 bg-green-50 rounded border border-green-200">
-                <p className="font-semibold">✅ ¡Todos han registrado su quiniela!</p>
+                <p className="font-semibold">✅ ¡Todos los activos han registrado su quiniela!</p>
               </div>
             )}
           </div>
@@ -292,17 +335,17 @@ export default function Dashboard() {
             {ausentesSurvivor.length > 0 ? (
               <div className="max-h-64 overflow-y-auto pr-2">
                 <ul className="space-y-2">
-                  {ausentesSurvivor.map((participante) => (
-                    <li key={participante.id} className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded text-sm">
+                  {ausentesSurvivor.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded text-sm">
                       <span className="text-orange-600 font-bold">•</span>
-                      <span className="text-gray-800 font-medium">{getNombreUsuario(participante)}</span>
+                      <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             ) : (
               <div className="text-center py-8 text-green-600 bg-green-50 rounded border border-green-200">
-                <p className="font-semibold">✅ ¡Todos han registrado su survivor!</p>
+                <p className="font-semibold">✅ ¡Todos los no eliminados han registrado su survivor!</p>
               </div>
             )}
           </div>
@@ -311,9 +354,7 @@ export default function Dashboard() {
 
       {/* SELECTOR DE JORNADA */}
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <label className="block mb-2 font-semibold text-gray-700">
-          🔍 Consultar jornada específica:
-        </label>
+        <label className="block mb-2 font-semibold text-gray-700">🔍 Consultar jornada específica:</label>
         <select
           value={jornadaSeleccionada}
           onChange={(e) => setJornadaSeleccionada(e.target.value)}
