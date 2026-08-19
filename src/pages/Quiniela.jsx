@@ -29,15 +29,11 @@ export default function Quiniela() {
 
   useEffect(() => {
     const validarSesion = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         navigate("/");
       }
     };
-
     validarSesion();
   }, [navigate]);
 
@@ -67,19 +63,14 @@ export default function Quiniela() {
       .order("id", { ascending: false });
 
     if (todasJornadas) {
-      // Filtrar únicamente las jornadas que YA CERRARON
       const cerradas = todasJornadas.filter((j) => {
         if (!j.fecha_limite) return false;
         const limiteQ = new Date(j.fecha_limite);
-        const limiteS = j.fecha_limite_survivor
-          ? new Date(j.fecha_limite_survivor)
-          : limiteQ;
+        const limiteS = j.fecha_limite_survivor ? new Date(j.fecha_limite_survivor) : limiteQ;
         return ahora > limiteQ && ahora > limiteS;
       });
 
       setJornadas(cerradas);
-
-      // Seleccionar por defecto la jornada activa si ya cerró, o la más reciente cerrada
       if (cerradas.length > 0) {
         setJornadaSeleccionadaPDF(cerradas[0].id.toString());
       }
@@ -98,35 +89,23 @@ export default function Quiniela() {
     }
 
     setJornadaActiva(activa);
-
-    // Cargar datos de la jornada activa
     await cargarMiQuiniela(activa.id);
     await cargarPartidos(activa.id);
 
-    // Verificar si la jornada activa ya cerró
     if (activa.fecha_limite) {
       const limiteQ = new Date(activa.fecha_limite);
-      const limiteS = activa.fecha_limite_survivor
-        ? new Date(activa.fecha_limite_survivor)
-        : limiteQ;
-
+      const limiteS = activa.fecha_limite_survivor ? new Date(activa.fecha_limite_survivor) : limiteQ;
       setJornadaCerrada(ahora > limiteQ && ahora > limiteS);
     }
   };
 
   const cargarPartidos = async (jornadaId) => {
     if (!jornadaId) return;
-
-    const { data, error } = await supabase
-      .from("partidos")
-      .select("*")
-      .eq("jornada_id", jornadaId);
-
+    const { data, error } = await supabase.from("partidos").select("*").eq("jornada_id", jornadaId);
     if (error) {
       console.error("Error cargando partidos:", error);
       return;
     }
-
     setPartidos(data || []);
   };
 
@@ -146,7 +125,6 @@ export default function Quiniela() {
     }
 
     setQuinielaGuardada(data || []);
-
     const nuevosPronosticos = {};
     data?.forEach((item) => {
       nuevosPronosticos[item.partido_id] = item.pronostico;
@@ -156,24 +134,18 @@ export default function Quiniela() {
 
   const cerrarSesion = async () => {
     const { error } = await supabase.auth.signOut();
-
     if (error) {
       alert(error.message);
       return;
     }
-
     navigate("/");
   };
 
   const actualizarPronostico = (partidoId, valor) => {
-    setPronosticos({
-      ...pronosticos,
-      [partidoId]: valor,
-    });
+    setPronosticos({ ...pronosticos, [partidoId]: valor });
   };
 
   const guardarQuiniela = async () => {
-    // VALIDACIÓN DE SEGURIDAD: Bloquear si es solo survivor
     if (esSoloSurvivor) {
       alert("⚠️ Tu cuenta está configurada solo para jugar Survivor. No puedes guardar quinielas.");
       return;
@@ -187,9 +159,7 @@ export default function Quiniela() {
       return;
     }
 
-    const fechaLimite = new Date(jornadaActiva.fecha_limite);
-
-    if (horaMexico > fechaLimite) {
+    if (horaMexico > new Date(jornadaActiva.fecha_limite)) {
       alert("La jornada ya fue cerrada");
       return;
     }
@@ -215,10 +185,7 @@ export default function Quiniela() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("quinielas")
-      .insert(registros)
-      .select();
+    const { data, error } = await supabase.from("quinielas").insert(registros).select();
 
     if (error) {
       console.error("Error guardando quiniela:", error);
@@ -227,7 +194,6 @@ export default function Quiniela() {
     }
 
     setQuinielaGuardada(data || []);
-
     const nuevosPronosticos = {};
     data?.forEach((item) => {
       nuevosPronosticos[item.partido_id] = item.pronostico;
@@ -237,78 +203,54 @@ export default function Quiniela() {
     alert("Quiniela guardada correctamente");
   };
 
-  //---------------------------------------
-  // FUNCIÓN PARA EXPORTAR PDF POR JORNADA
-  //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionadaPDF) {
       alert("Por favor selecciona una jornada para descargar.");
       return;
     }
 
-    const jornadaAExportar = jornadas.find(
-      (j) => j.id.toString() === jornadaSeleccionadaPDF
-    );
+    const jornadaAExportar = jornadas.find((j) => j.id.toString() === jornadaSeleccionadaPDF);
 
     try {
       setCargandoPDF(true);
-
       const { default: jsPDF } = await import("jspdf");
       const { default: autoTable } = await import("jspdf-autotable");
 
-      // 1. Obtener Partidos de la jornada seleccionada
       const { data: partidosData } = await supabase
         .from("partidos")
         .select("id, local, visitante, resultado")
         .eq("jornada_id", jornadaSeleccionadaPDF)
         .order("id");
 
-      // 2. Obtener Pronósticos de la jornada seleccionada
       const { data: quinielasData } = await supabase
         .from("quinielas")
         .select("usuario_id, partido_id, pronostico")
         .eq("jornada_id", jornadaSeleccionadaPDF);
 
-      // 3. Obtener Perfiles
       const { data: perfiles } = await supabase
         .from("profiles")
         .select("id, nombre, nombre_usuario, nombre_completo");
 
-      const usuarios = [
-        ...new Set(quinielasData?.map((q) => q.usuario_id) || []),
-      ];
+      const usuarios = [...new Set(quinielasData?.map((q) => q.usuario_id) || [])];
 
-      // Encabezados
       const columnas = [
         "Partido",
         "Resultado",
         ...usuarios.map((usuarioId) => {
           const perfil = perfiles?.find((p) => p.id === usuarioId);
-          return (
-            perfil?.nombre_usuario ||
-            perfil?.nombre ||
-            perfil?.nombre_completo ||
-            usuarioId
-          );
+          return perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
         }),
       ];
 
       const aciertos = {};
-      usuarios.forEach((usuarioId) => {
-        aciertos[usuarioId] = 0;
-      });
+      usuarios.forEach((usuarioId) => { aciertos[usuarioId] = 0; });
 
-      // Filas
       const filas = (partidosData || []).map((partido) => {
         const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
-
         usuarios.forEach((usuarioId) => {
           const pronostico = quinielasData?.find(
-            (q) =>
-              Number(q.partido_id) === Number(partido.id) &&
-              q.usuario_id === usuarioId
+            (q) => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
           );
-
           let valor = "-";
           if (pronostico) {
             valor = pronostico.pronostico;
@@ -318,25 +260,15 @@ export default function Quiniela() {
           }
           fila.push(valor);
         });
-
         return fila;
       });
 
-      // Fila de totales
-      const filaTotales = ["TOTAL", ""];
-      usuarios.forEach((usuarioId) => {
-        filaTotales.push(aciertos[usuarioId]);
-      });
+      const filaTotales = ["TOTAL", "", ...usuarios.map((usuarioId) => aciertos[usuarioId])];
       filas.push(filaTotales);
 
-      // Generación PDF
       const doc = new jsPDF("landscape");
       doc.setFontSize(18);
-      doc.text(
-        `Quinielas - ${jornadaAExportar ? jornadaAExportar.nombre : `Jornada ${jornadaSeleccionadaPDF}`}`,
-        14,
-        15
-      );
+      doc.text(`Quinielas - ${jornadaAExportar ? jornadaAExportar.nombre : `Jornada ${jornadaSeleccionadaPDF}`}`, 14, 15);
 
       autoTable(doc, {
         head: [columnas],
@@ -352,14 +284,9 @@ export default function Quiniela() {
             return;
           }
           if (data.section !== "body" || data.column.index < 2) return;
-
           const fila = filas[data.row.index];
           if (!fila) return;
-
-          const resultado = fila[1];
-          const pronostico = data.cell.raw;
-
-          if (resultado && resultado !== "-" && pronostico === resultado) {
+          if (fila[1] !== "-" && fila[1] !== null && data.cell.raw === fila[1]) {
             data.cell.styles.textColor = [22, 163, 74];
             data.cell.styles.fontStyle = "bold";
           }
@@ -379,7 +306,6 @@ export default function Quiniela() {
     }
   };
 
-  // Si aún está cargando el perfil, mostramos un indicador
   if (cargandoPerfil) {
     return (
       <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen flex items-center justify-center">
@@ -392,7 +318,6 @@ export default function Quiniela() {
     <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen relative">
       <h1 className="text-3xl font-bold mb-4">Captura tu Quiniela</h1>
 
-      {/* BOTÓN DE REGLAS, PREMIOS Y COSTOS */}
       <button
         onClick={() => setMostrarModal(true)}
         className="mb-6 bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md transition duration-200 flex items-center gap-2"
@@ -401,60 +326,33 @@ export default function Quiniela() {
       </button>
 
       <div className="flex flex-wrap gap-3 mb-6 items-center">
-        <Link to="/posiciones" className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition">
-          Ranking General
-        </Link>
-
-        <Link to="/historico" className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded transition">
-          🏆 Histórico
-        </Link>
-
-        <Link to="/perfil" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">
-          Mi Perfil
-        </Link>
-
-        <Link to="/survivor" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition">
-          Survivor
-        </Link>
-
-        <button
-          onClick={cerrarSesion}
-          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition"
-        >
-          Cerrar Sesión
-        </button>
+        <Link to="/posiciones" className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition">Ranking General</Link>
+        <Link to="/historico" className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded transition">🏆 Histórico</Link>
+        <Link to="/perfil" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">Mi Perfil</Link>
+        <Link to="/survivor" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition">Survivor</Link>
+        <button onClick={cerrarSesion} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition">Cerrar Sesión</button>
       </div>
 
-      {/* ========================================== */}
-      {/* VALIDACIÓN: USUARIO SOLO SURVIVOR */}
-      {/* ========================================== */}
       {esSoloSurvivor ? (
         <div className="bg-purple-50 border-l-4 border-purple-600 text-purple-800 p-6 rounded-lg shadow-md mb-8">
-          <h2 className="text-2xl font-bold mb-3 flex items-center gap-2">
-            🦖 Modo Solo Survivor Activado
-          </h2>
+          <h2 className="text-2xl font-bold mb-3 flex items-center gap-2">🦖 Modo Solo Survivor Activado</h2>
           <p className="mb-4 text-lg">
             Tu cuenta está configurada por el administrador para participar <strong>únicamente en el juego de Survivor</strong>. 
             No tienes permitido realizar selecciones de quiniela.
           </p>
-          <Link 
-            to="/survivor" 
-            className="inline-block bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg shadow transition"
-          >
+          <Link to="/survivor" className="inline-block bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg shadow transition">
             Ir a hacer mi selección de Survivor →
           </Link>
         </div>
       ) : (
-        /* ========================================== */}
-        {/* INTERFAZ NORMAL DE QUINIELA */}
-        {/* ========================================== */}
         <>
-          {/* SECCIÓN DE DESCARGA DE QUINIELA GENERAL */}
+          {/* ========================================== */}
+          {/* INTERFAZ NORMAL DE QUINIELA */}
+          {/* ========================================== */}
+          
           <div className="bg-gray-50 border p-4 rounded-lg mb-6 flex flex-wrap items-center gap-3">
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descargar Quiniela General (PDF):
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Descargar Quiniela General (PDF):</label>
               <select
                 value={jornadaSeleccionadaPDF}
                 onChange={(e) => setJornadaSeleccionadaPDF(e.target.value)}
@@ -472,14 +370,11 @@ export default function Quiniela() {
                 )}
               </select>
             </div>
-
             <button
               onClick={exportarPDF}
               disabled={jornadas.length === 0 || cargandoPDF}
               className={`px-4 py-2 rounded text-white self-end flex items-center gap-2 ${
-                jornadas.length > 0 && !cargandoPDF
-                  ? "bg-red-600 hover:bg-red-700 cursor-pointer transition"
-                  : "bg-gray-400 cursor-not-allowed"
+                jornadas.length > 0 && !cargandoPDF ? "bg-red-600 hover:bg-red-700 cursor-pointer transition" : "bg-gray-400 cursor-not-allowed"
               }`}
             >
               📄 {cargandoPDF ? "Generando..." : "Descargar PDF"}
@@ -488,61 +383,29 @@ export default function Quiniela() {
 
           {jornadaActiva && (
             <p className="mb-4 text-red-600 font-semibold">
-              ⏰ Fecha límite ({jornadaActiva.nombre}):{" "}
-              {new Date(jornadaActiva.fecha_limite).toLocaleString("es-MX")}
+              ⏰ Fecha límite ({jornadaActiva.nombre}): {new Date(jornadaActiva.fecha_limite).toLocaleString("es-MX")}
             </p>
           )}
 
           {partidos.map((partido) => (
             <div key={partido.id} className="border rounded p-4 mb-3">
-              <h3 className="font-semibold">
-                {partido.local} vs {partido.visitante}
-              </h3>
-
+              <h3 className="font-semibold">{partido.local} vs {partido.visitante}</h3>
               <div className="flex gap-4 mt-3">
                 <label className="cursor-pointer flex items-center gap-1">
-                  <input
-                    type="radio"
-                    name={`partido-${partido.id}`}
-                    checked={pronosticos[partido.id] === "L"}
-                    onChange={() => actualizarPronostico(partido.id, "L")}
-                    disabled={jornadaCerrada}
-                    className="cursor-pointer"
-                  />{" "}
-                  Local
+                  <input type="radio" name={`partido-${partido.id}`} checked={pronosticos[partido.id] === "L"} onChange={() => actualizarPronostico(partido.id, "L")} disabled={jornadaCerrada} className="cursor-pointer" /> Local
                 </label>
-
                 <label className="cursor-pointer flex items-center gap-1">
-                  <input
-                    type="radio"
-                    name={`partido-${partido.id}`}
-                    checked={pronosticos[partido.id] === "E"}
-                    onChange={() => actualizarPronostico(partido.id, "E")}
-                    disabled={jornadaCerrada}
-                    className="cursor-pointer"
-                  />{" "}
-                  Empate
+                  <input type="radio" name={`partido-${partido.id}`} checked={pronosticos[partido.id] === "E"} onChange={() => actualizarPronostico(partido.id, "E")} disabled={jornadaCerrada} className="cursor-pointer" /> Empate
                 </label>
-
                 <label className="cursor-pointer flex items-center gap-1">
-                  <input
-                    type="radio"
-                    name={`partido-${partido.id}`}
-                    checked={pronosticos[partido.id] === "V"}
-                    onChange={() => actualizarPronostico(partido.id, "V")}
-                    disabled={jornadaCerrada}
-                    className="cursor-pointer"
-                  />{" "}
-                  Visitante
+                  <input type="radio" name={`partido-${partido.id}`} checked={pronosticos[partido.id] === "V"} onChange={() => actualizarPronostico(partido.id, "V")} disabled={jornadaCerrada} className="cursor-pointer" /> Visitante
                 </label>
               </div>
             </div>
           ))}
 
           {jornadaCerrada && (
-            <p className="text-red-600 font-bold mt-4">
-              🔒 La jornada activa ya fue cerrada. Puedes descargar la quiniela en el selector superior.
-            </p>
+            <p className="text-red-600 font-bold mt-4">🔒 La jornada activa ya fue cerrada. Puedes descargar la quiniela en el selector superior.</p>
           )}
 
           <button
@@ -558,7 +421,6 @@ export default function Quiniela() {
           {quinielaGuardada.length > 0 && (
             <div className="mt-10">
               <h2 className="text-2xl font-bold mb-4">✅ Mis Pronósticos Enviados</h2>
-
               <div className="overflow-x-auto">
                 <table className="w-full border rounded">
                   <thead className="bg-gray-200">
@@ -569,17 +431,10 @@ export default function Quiniela() {
                   </thead>
                   <tbody>
                     {quinielaGuardada.map((item) => {
-                      const partido = partidos.find(
-                        (p) => String(p.id) === String(item.partido_id)
-                      );
-
+                      const partido = partidos.find((p) => String(p.id) === String(item.partido_id));
                       return (
                         <tr key={item.id}>
-                          <td className="p-2 border">
-                            {partido
-                              ? `${partido.local} vs ${partido.visitante}`
-                              : "Partido no encontrado"}
-                          </td>
+                          <td className="p-2 border">{partido ? `${partido.local} vs ${partido.visitante}` : "Partido no encontrado"}</td>
                           <td className="p-2 border font-semibold">
                             {item.pronostico === "L" && "🏠 Local"}
                             {item.pronostico === "E" && "🤝 Empate"}
@@ -596,38 +451,15 @@ export default function Quiniela() {
         </>
       )}
 
-      {/* ========================================== */}
-      {/* MODAL (POP-UP) DE REGLAS, PREMIOS Y COSTOS */}
-      {/* ========================================== */}
       {mostrarModal && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setMostrarModal(false)}
-        >
-          <div 
-            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative"
-            onClick={(e) => e.stopPropagation()} // Evita cerrar al hacer clic dentro del modal
-          >
-            {/* Botón de cerrar */}
-            <button
-              onClick={() => setMostrarModal(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition"
-              aria-label="Cerrar"
-            >
-              &times;
-            </button>
-
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setMostrarModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setMostrarModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition" aria-label="Cerrar">&times;</button>
             <div className="p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-green-700 mb-6 text-center border-b pb-3">
-                📜 Reglas, Premios y Costos
-              </h2>
-
+              <h2 className="text-2xl font-bold text-green-700 mb-6 text-center border-b pb-3">📜 Reglas, Premios y Costos</h2>
               <div className="space-y-6">
-                {/* Sección de Pronósticos / Premios */}
                 <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    🏆 Pronósticos y Premios
-                  </h3>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">🏆 Pronósticos y Premios</h3>
                   <ul className="list-decimal list-inside space-y-2 text-gray-700 bg-green-50 p-4 rounded-lg border border-green-200">
                     <li>Premio semanal de <strong>$180.00</strong>.</li>
                     <li>Ganador de liguilla se lleva <strong>$250.00</strong>.</li>
@@ -636,44 +468,21 @@ export default function Quiniela() {
                     <li>Segundo Lugar gana <strong>$1,300.00</strong>.</li>
                     <li>Tercer Lugar gana <strong>$550.00</strong>.</li>
                   </ul>
-                  <p className="text-sm text-gray-600 mt-2 italic text-right">
-                    *(Valores calculados sobre 32 jugadores)*
-                  </p>
+                  <p className="text-sm text-gray-600 mt-2 italic text-right">*(Valores calculados sobre 32 jugadores)*</p>
                 </div>
-
-                {/* Sección de Reglas */}
                 <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    📋 Reglas del Juego
-                  </h3>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">📋 Reglas del Juego</h3>
                   <ul className="list-disc list-inside space-y-3 text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <li>
-                      Cada jornada el participante hará la selección de sus pronósticos: <strong>Local, Empate o Visitante</strong>.
-                    </li>
-                    <li>
-                      Se llevará un <strong>ranking semanal</strong>.
-                    </li>
-                    <li>
-                      Los aciertos semanales se sumarán al acumulado de pronósticos acertados. Al final del torneo de la Liga MX se tendrá a un primer, segundo y tercer lugar, conforme a los aciertos que tengan y usos de equipos.
-                    </li>
-                    <li>
-                      En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>. En ese momento, ya no se podrán elegir pronósticos ni survivor, por lo que, cualquier omisión será responsabilidad única del participante.
-                    </li>
+                    <li>Cada jornada el participante hará la selección de sus pronósticos: <strong>Local, Empate o Visitante</strong>.</li>
+                    <li>Se llevará un <strong>ranking semanal</strong>.</li>
+                    <li>Los aciertos semanales se sumarán al acumulado de pronósticos acertados. Al final del torneo de la Liga MX se tendrá a un primer, segundo y tercer lugar, conforme a los aciertos que tengan y usos de equipos.</li>
+                    <li>En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>. En ese momento, ya no se podrán elegir pronósticos ni survivor, por lo que, cualquier omisión será responsabilidad única del participante.</li>
                   </ul>
-                  <p className="text-center text-lg font-bold text-green-700 mt-4">
-                    ¡Es una quiniela entre amigos! ⚽🍻
-                  </p>
+                  <p className="text-center text-lg font-bold text-green-700 mt-4">¡Es una quiniela entre amigos! ⚽🍻</p>
                 </div>
               </div>
-
-              {/* Botón de cierre inferior */}
               <div className="mt-8 text-center">
-                <button
-                  onClick={() => setMostrarModal(false)}
-                  className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition"
-                >
-                  Entendido, ¡a jugar!
-                </button>
+                <button onClick={() => setMostrarModal(false)} className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition">Entendido, ¡a jugar!</button>
               </div>
             </div>
           </div>
