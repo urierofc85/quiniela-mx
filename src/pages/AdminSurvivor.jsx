@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "../services/supabase";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -88,12 +88,11 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING (AJUSTADA CON JORNADAS CERRADAS)
+  // LÓGICA DEL RANKING
   //=========================================
   const calcularRanking = async () => {
     const horaMexico = await obtenerHoraMexico();
 
-    // Filtramos jornadas a evaluar según lo seleccionado en el combo
     const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
       return Number(j.id) === Number(jornadaSeleccionada);
@@ -101,7 +100,6 @@ export default function AdminSurvivor() {
 
     const acumulado = {};
 
-    // Inicializamos el acumulado para todos los perfiles existentes
     rawPerfiles.forEach((usuario) => {
       const nombre =
         usuario?.nombre_usuario ||
@@ -118,13 +116,11 @@ export default function AdminSurvivor() {
       };
     });
 
-    // Procesamos cada jornada elegible
     for (const jornada of jornadasAProcesar) {
       const esPasadaYCerrada = jornada.fecha_limite
         ? horaMexico > new Date(jornada.fecha_limite)
         : false;
 
-      // Obtenemos selecciones de esta jornada
       const eleccionesJornada = rawSurvivor.filter(
         (s) => Number(s.jornada_id) === Number(jornada.id)
       );
@@ -137,23 +133,19 @@ export default function AdminSurvivor() {
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
-        // Si estamos viendo una jornada individual, guardamos su equipo elegido específico
         if (jornadaSeleccionada !== "general") {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
-        // CASO A: No seleccionó y la jornada ya cerró -> Pierde 1 vida
         if (!seleccion && esPasadaYCerrada) {
           registroAcumulado.vidas += 1;
           return;
         }
 
-        // CASO B: No seleccionó y la jornada sigue abierta -> No afecta
         if (!seleccion) {
           return;
         }
 
-        // CASO C: Sí seleccionó, calculamos puntos y resultados
         const partido = rawPartidos.find(
           (p) =>
             Number(p.jornada_id) === Number(jornada.id) &&
@@ -223,6 +215,53 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
+  // CALCULAR USOS POR EQUIPO (OPTIMIZADO CON USEMEMO)
+  //=========================================
+  const datosUsosEquipo = useMemo(() => {
+    const usuarios = rawPerfiles.map((u) => ({
+      id: u.id,
+      nombre: u.nombre_usuario || u.nombre || u.nombre_completo || "Sin nombre",
+    }));
+
+    const equiposLigaMx = rawPartidos
+      .reduce((acc, p) => {
+        if (p.local && !acc.includes(p.local)) acc.push(p.local);
+        if (p.visitante && !acc.includes(p.visitante)) acc.push(p.visitante);
+        return acc;
+      }, [])
+      .sort((a, b) => a.localeCompare(b));
+
+    const conteo = {};
+    rawSurvivor.forEach((registro) => {
+      const usuarioId = registro.usuario_id;
+      const equipoElegido = registro.equipo;
+      if (!conteo[usuarioId]) {
+        conteo[usuarioId] = {};
+      }
+      if (!conteo[usuarioId][equipoElegido]) {
+        conteo[usuarioId][equipoElegido] = 0;
+      }
+      conteo[usuarioId][equipoElegido]++;
+    });
+
+    const resultado = equiposLigaMx.map((equipo) => {
+      const usosPorUsuario = usuarios.map((usuario) => {
+        const cantidad = conteo[usuario.id]?.[equipo] || 0;
+        return {
+          usuario_id: usuario.id,
+          cantidad,
+        };
+      });
+      return {
+        equipo,
+        usosPorUsuario,
+      };
+    });
+
+    return { usuarios, resultado };
+  }, [rawPerfiles, rawPartidos, rawSurvivor]);
+
+  //=========================================
   // FUNCIONES PARA EXPORTAR IMAGEN JPG
   //=========================================
   const esperarRender = () =>
@@ -253,57 +292,10 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // CALCULAR USOS POR EQUIPO
-  //=========================================
-  const calcularUsosPorEquipo = () => {
-    const usuarios = rawPerfiles.map((u) => ({
-      id: u.id,
-      nombre: u.nombre_usuario || u.nombre || u.nombre_completo || "Sin nombre",
-    }));
-
-    const equiposLigaMx = rawPartidos
-      .reduce((acc, p) => {
-        if (p.local && !acc.includes(p.local)) acc.push(p.local);
-        if (p.visitante && !acc.includes(p.visitante)) acc.push(p.visitante);
-        return acc;
-      }, [])
-      .sort((a, b) => a.localeCompare(b));
-
-    const conteo = {};
-    rawSurvivor.forEach((registro) => {
-      const usuarioId = registro.usuario_id;
-      const equipoElegido = registro.equipo;
-      if (!conteo[usuarioId]) {
-        conteo[usuarioId] = {};
-      }
-      if (!conteo[usuarioId][equipoElegido]) {
-        conteo[usuarioId][equipoElegido] = 0;
-      }
-      conteo[usuarioId][equipoElegido]++;
-    });
-
-    const resultadoPorEquipo = equiposLigaMx.map((equipo) => {
-      const usosPorUsuario = usuarios.map((usuario) => {
-        const cantidad = conteo[usuario.id]?.[equipo] || 0;
-        return {
-          usuario_id: usuario.id,
-          cantidad,
-        };
-      });
-      return {
-        equipo,
-        usosPorUsuario,
-      };
-    });
-
-    return { usuarios, resultado: resultadoPorEquipo };
-  };
-
-  //=========================================
-  // EXPORTAR USOS POR EQUIPO EN PDF (Nativo / Ajustable)
+  // EXPORTAR USOS POR EQUIPO EN PDF
   //=========================================
   const exportarTablaUsosPDF = () => {
-    const { usuarios, resultado } = calcularUsosPorEquipo();
+    const { usuarios, resultado } = datosUsosEquipo;
 
     if (usuarios.length === 0 || resultado.length === 0) {
       alert("No hay datos para exportar.");
@@ -415,7 +407,6 @@ export default function AdminSurvivor() {
           </optgroup>
         </select>
 
-        {/* Botón para exportar tabla principal */}
         <button
           onClick={() =>
             exportarJPG(
@@ -431,7 +422,6 @@ export default function AdminSurvivor() {
           🖼️ Exportar Tabla (JPG)
         </button>
 
-        {/* Botón para exportar Elecciones */}
         {jornadaSeleccionada !== "general" && (
           <button
             onClick={() =>
@@ -447,7 +437,6 @@ export default function AdminSurvivor() {
           </button>
         )}
 
-        {/* Botón para exportar Usos por Equipo en PDF */}
         <button
           onClick={exportarTablaUsosPDF}
           className="px-4 py-2 rounded text-white font-medium cursor-pointer"
@@ -655,53 +644,47 @@ export default function AdminSurvivor() {
               <thead>
                 <tr style={{ backgroundColor: "#f3f4f6", color: "#374151" }}>
                   <th className="p-2 text-left" style={{ border: "1px solid #e5e7eb" }}>Equipo</th>
-                  {(() => {
-                    const { usuarios } = calcularUsosPorEquipo();
-                    return usuarios.map((usuario) => (
-                      <th
-                        key={usuario.id}
-                        className="p-2 text-center"
-                        style={{ border: "1px solid #e5e7eb" }}
-                      >
-                        {usuario.nombre}
-                      </th>
-                    ));
-                  })()}
+                  {datosUsosEquipo.usuarios.map((usuario) => (
+                    <th
+                      key={usuario.id}
+                      className="p-2 text-center"
+                      style={{ border: "1px solid #e5e7eb" }}
+                    >
+                      {usuario.nombre}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {(() => {
-                  const { resultado } = calcularUsosPorEquipo();
-                  return resultado.map((fila) => (
-                    <tr key={fila.equipo}>
-                      <td
-                        className="p-2 font-medium"
-                        style={{ border: "1px solid #e5e7eb" }}
-                      >
-                        {fila.equipo}
-                      </td>
-                      {fila.usosPorUsuario.map((uso) => {
-                        let bgColor = "#ffffff";
-                        if (uso.cantidad === 1) bgColor = "#22c55e";
-                        else if (uso.cantidad === 2) bgColor = "#facc15";
-                        else if (uso.cantidad >= 3) bgColor = "#ef4444";
+                {datosUsosEquipo.resultado.map((fila) => (
+                  <tr key={fila.equipo}>
+                    <td
+                      className="p-2 font-medium"
+                      style={{ border: "1px solid #e5e7eb" }}
+                    >
+                      {fila.equipo}
+                    </td>
+                    {fila.usosPorUsuario.map((uso) => {
+                      let bgColor = "#ffffff";
+                      if (uso.cantidad === 1) bgColor = "#22c55e";
+                      else if (uso.cantidad === 2) bgColor = "#facc15";
+                      else if (uso.cantidad >= 3) bgColor = "#ef4444";
 
-                        return (
-                          <td
-                            key={uso.usuario_id}
-                            className="p-2 text-center font-semibold"
-                            style={{
-                              border: "1px solid #e5e7eb",
-                              backgroundColor: bgColor,
-                            }}
-                          >
-                            {uso.cantidad}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ));
-                })()}
+                      return (
+                        <td
+                          key={uso.usuario_id}
+                          className="p-2 text-center font-semibold"
+                          style={{
+                            border: "1px solid #e5e7eb",
+                            backgroundColor: bgColor,
+                          }}
+                        >
+                          {uso.cantidad}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
