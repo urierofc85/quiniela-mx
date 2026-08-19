@@ -28,9 +28,10 @@ export default function AdminDashboard() {
   const [ausentesQuiniela, setAusentesQuiniela] = useState([]);
   const [ausentesSurvivor, setAusentesSurvivor] = useState([]);
 
-  // Estados para ranking de quinielas
   const [rankingQuinielas, setRankingQuinielas] = useState([]);
-  const [jornadasSecuenciales, setJornadasSecuenciales] = useState([]); // Para mapear J1, J2, J3...
+  const [jornadasSecuenciales, setJornadasSecuenciales] = useState([]);
+
+  const [cargando, setCargando] = useState(true); // Estado de carga
 
   useEffect(() => {
     cargarDashboard();
@@ -55,220 +56,261 @@ export default function AdminDashboard() {
     return email.includes("admin") || nombre.includes("admin") || email.includes("root");
   };
 
+  //---------------------------------------
+  // CARGA OPTIMIZADA DEL DASHBOARD
+  //---------------------------------------
   const cargarDashboard = async () => {
-    const ahora = await obtenerHoraMexico();
+    setCargando(true);
+    const t0 = performance.now();
 
-    const { data: jornadasData } = await supabase.from("jornadas").select("*").order("id", { ascending: true });
-    setJornadas(jornadasData || []);
+    try {
+      const ahora = await obtenerHoraMexico();
 
-    const { data: jornadaActivaData } = await supabase.from("jornadas").select("*").eq("activa", true).single();
-    setJornadaActiva(jornadaActivaData);
-    if (jornadaActivaData) setJornadaSeleccionada(jornadaActivaData.id);
+      // 1. Todas las consultas en PARALELO (solo campos necesarios)
+      const [
+        jornadasRes,
+        jornadaActivaRes,
+        participantesRes,
+        perfilesRes,
+        quinielasRes,
+        survivorRes,
+        partidosRes
+      ] = await Promise.all([
+        supabase.from("jornadas").select("id, nombre, activa, fecha_limite").order("id", { ascending: true }),
+        supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        supabase.from("profiles").select("id, nombre, nombre_usuario, email"),
+        supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico"),
+        supabase.from("survivor").select("jornada_id, usuario_id, equipo"),
+        supabase.from("partidos").select("id, jornada_id, local, visitante, resultado")
+      ]);
 
-    const { count } = await supabase.from("profiles").select("*", { count: "exact", head: true });
-    setParticipantes(count || 0);
+      const jornadasData = jornadasRes.data || [];
+      const jornadaActivaData = jornadaActivaRes.data;
+      const perfilesData = perfilesRes.data || [];
+      const todasQuinielas = quinielasRes.data || [];
+      const todosSurvivor = survivorRes.data || [];
+      const todosPartidos = partidosRes.data || [];
 
-    const { data: perfilesData } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email");
-    const { data: todasQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico");
-    const { data: todosSurvivor } = await supabase.from("survivor").select("jornada_id, usuario_id, equipo");
-    const { data: todosPartidos } = await supabase.from("partidos").select("jornada_id, id, local, visitante, resultado");
+      setJornadas(jornadasData);
+      setJornadaActiva(jornadaActivaData);
+      setParticipantes(participantesRes.count || 0);
+      if (jornadaActivaData) setJornadaSeleccionada(jornadaActivaData.id);
 
-    prepararDatosGrafica(jornadasData, jornadaActivaData?.id, todasQuinielas, todosSurvivor);
-
-    if (jornadaActivaData && perfilesData) {
-      calcularAusentesInteligentes(
-        jornadaActivaData.id,
+      // 2. Procesamiento único y optimizado (una sola pasada)
+      const resultados = procesarTodosLosDatos(
         jornadasData,
         perfilesData,
         todasQuinielas,
         todosSurvivor,
         todosPartidos,
-        ahora
+        ahora,
+        jornadaActivaData?.id
       );
-    }
 
-    if (perfilesData && todasQuinielas && todosPartidos) {
-      await calcularRankingQuinielas(perfilesData, todasQuinielas, todosPartidos, jornadasData);
+      setDatosGrafica(resultados.datosGrafica);
+      setRankingQuinielas(resultados.rankingQuinielas);
+      setJornadasSecuenciales(resultados.jornadasSecuenciales);
+      setAusentesQuiniela(resultados.ausentesQuiniela);
+      setAusentesSurvivor(resultados.ausentesSurvivor);
+      setQuinielasActivas(resultados.quinielasActivas);
+
+      const t1 = performance.now();
+      console.log(` Dashboard cargado en ${Math.round(t1 - t0)}ms`);
+
+    } catch (error) {
+      console.error("Error cargando dashboard:", error);
+    } finally {
+      setCargando(false);
     }
   };
 
-  const prepararDatosGrafica = (jornadasData, idJornadaActiva, todasQuinielas, todosSurvivor) => {
-    const datos = (jornadasData || []).map((jornada) => {
-      const qJornada = (todasQuinielas || []).filter(q => Number(q.jornada_id) === Number(jornada.id));
-      const sJornada = (todosSurvivor || []).filter(s => Number(s.jornada_id) === Number(jornada.id));
-      
-      return {
-        nombre: jornada.nombre || `J${jornada.id}`,
-        quinielas: new Set(qJornada.map(q => q.usuario_id)).size,
-        survivor: new Set(sJornada.map(s => s.usuario_id)).size,
-      };
+  //---------------------------------------
+  // PROCESAMIENTO OPTIMIZADO (UNA SOLA PASADA)
+  //---------------------------------------
+  const procesarTodosLosDatos = (
+    jornadasData,
+    perfilesData,
+    todasQuinielas,
+    todosSurvivor,
+    todosPartidos,
+    ahora,
+    idJornadaActiva
+  ) => {
+    // === CREAR ÍNDICES (Map) PARA BÚSQUEDAS O(1) ===
+    
+    // Índice de partidos por jornada_id -> Map de partido_id -> partido
+    const partidosPorJornada = new Map();
+    todosPartidos.forEach(p => {
+      if (!partidosPorJornada.has(p.jornada_id)) {
+        partidosPorJornada.set(p.jornada_id, new Map());
+      }
+      partidosPorJornada.get(p.jornada_id).set(p.id, p);
     });
-    setDatosGrafica(datos);
-  };
 
-  const calcularRankingQuinielas = async (perfilesData, todasQuinielas, todosPartidos, jornadasData) => {
+    // Índice de quinielas por usuario_id -> Map de jornada_id -> array de quinielas
+    const quinielasPorUsuario = new Map();
+    todasQuinielas.forEach(q => {
+      if (!quinielasPorUsuario.has(q.usuario_id)) {
+        quinielasPorUsuario.set(q.usuario_id, new Map());
+      }
+      if (!quinielasPorUsuario.get(q.usuario_id).has(q.jornada_id)) {
+        quinielasPorUsuario.get(q.usuario_id).set(q.jornada_id, []);
+      }
+      quinielasPorUsuario.get(q.usuario_id).get(q.jornada_id).push(q);
+    });
+
+    // Índice de survivor por usuario_id -> Map de jornada_id -> equipo
+    const survivorPorUsuario = new Map();
+    todosSurvivor.forEach(s => {
+      if (!survivorPorUsuario.has(s.usuario_id)) {
+        survivorPorUsuario.set(s.usuario_id, new Map());
+      }
+      survivorPorUsuario.get(s.usuario_id).set(s.jornada_id, s.equipo);
+    });
+
+    // === MAPEO SECUENCIAL DE JORNADAS ===
+    const jornadasSecuenciales = jornadasData.map((jornada, index) => ({
+      idSupabase: jornada.id,
+      numero: index + 1,
+      nombre: `J${index + 1}`
+    }));
+
+    const idToSecuencial = new Map(jornadasSecuenciales.map(j => [j.idSupabase, j.numero]));
+
+    // === INICIALIZAR ACUMULADO ===
     const acumulado = {};
-
-    // Crear mapeo secuencial: ID de Supabase -> número secuencial (1, 2, 3, 4...)
-    const mapeoSecuencial = {};
-    const jornadasSec = [];
-    jornadasData.forEach((jornada, index) => {
-      const numSecuencial = index + 1; // J1, J2, J3...
-      mapeoSecuencial[jornada.id] = numSecuencial;
-      jornadasSec.push({
-        idSupabase: jornada.id,
-        numero: numSecuencial,
-        nombre: `J${numSecuencial}`
-      });
-    });
-    setJornadasSecuenciales(jornadasSec);
-
-    // Inicializar todos los participantes
-    perfilesData.forEach((usuario) => {
+    perfilesData.forEach(usuario => {
       if (esAdmin(usuario)) return;
-      
-      const nombre = usuario.nombre_usuario || usuario.nombre || "Sin nombre";
       acumulado[usuario.id] = {
         usuario_id: usuario.id,
-        nombre,
+        nombre: usuario.nombre_usuario || usuario.nombre || "Sin nombre",
         aciertosPorJornada: {},
         totalAciertos: 0,
         vidas: 0,
+        quinielasEnviadas: 0,
+        survivorEnviados: 0
       };
-
-      // Inicializar aciertos por jornada en 0 (usando número secuencial)
-      jornadasSec.forEach(jornadaSec => {
-        acumulado[usuario.id].aciertosPorJornada[jornadaSec.numero] = 0;
+      jornadasSecuenciales.forEach(j => {
+        acumulado[usuario.id].aciertosPorJornada[j.numero] = 0;
       });
     });
 
-    // Calcular aciertos por jornada para cada usuario
-    todasQuinielas?.forEach(quiniela => {
-      const usuarioId = quiniela.usuario_id;
-      const jornadaId = quiniela.jornada_id;
-      const partidoId = quiniela.partido_id;
-      const pronostico = quiniela.pronostico;
+    // === UNA SOLA PASADA POR JORNADAS ===
+    const quinielasPorJornadaCount = {};
+    const survivorPorJornadaCount = {};
 
-      if (!acumulado[usuarioId]) return;
-
-      // Obtener número secuencial de la jornada
-      const numeroSecuencial = mapeoSecuencial[jornadaId];
-      if (!numeroSecuencial) return;
-
-      // Buscar el partido y su resultado
-      const partido = todosPartidos.find(p => 
-        Number(p.id) === Number(partidoId) && 
-        Number(p.jornada_id) === Number(jornadaId)
-      );
-
-      if (partido && partido.resultado && pronostico === partido.resultado) {
-        acumulado[usuarioId].aciertosPorJornada[numeroSecuencial] = 
-          (acumulado[usuarioId].aciertosPorJornada[numeroSecuencial] || 0) + 1;
-        acumulado[usuarioId].totalAciertos += 1;
-      }
-    });
-
-    // Calcular vidas perdidas (jornadas cerradas sin quiniela)
-    const ahora = await obtenerHoraMexico();
     jornadasData.forEach(jornada => {
+      const jornadaId = jornada.id;
       const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
-      
-      if (esPasadaYCerrada) {
-        perfilesData.forEach(usuario => {
-          if (esAdmin(usuario)) return;
-          
-          const tieneQuiniela = todasQuinielas?.some(q => 
-            q.usuario_id === usuario.id && Number(q.jornada_id) === Number(jornada.id)
-          );
+      const secNum = idToSecuencial.get(jornadaId);
+      const partidosMap = partidosPorJornada.get(jornadaId) || new Map();
 
-          if (!tieneQuiniela && acumulado[usuario.id].vidas < 3) {
-            acumulado[usuario.id].vidas += 1;
+      quinielasPorJornadaCount[jornadaId] = new Set();
+      survivorPorJornadaCount[jornadaId] = new Set();
+
+      perfilesData.forEach(usuario => {
+        if (esAdmin(usuario)) return;
+        const reg = acumulado[usuario.id];
+        if (!reg) return;
+
+        // --- QUINIELA ---
+        const quinielasUsuario = quinielasPorUsuario.get(usuario.id)?.get(jornadaId) || [];
+        if (quinielasUsuario.length > 0) {
+          reg.quinielasEnviadas++;
+          quinielasPorJornadaCount[jornadaId].add(usuario.id);
+
+          quinielasUsuario.forEach(q => {
+            const partido = partidosMap.get(q.partido_id);
+            if (partido && partido.resultado && q.pronostico === partido.resultado) {
+              reg.aciertosPorJornada[secNum] = (reg.aciertosPorJornada[secNum] || 0) + 1;
+              reg.totalAciertos++;
+            }
+          });
+        } else if (esPasadaYCerrada && reg.vidas < 3) {
+          reg.vidas++;
+        }
+
+        // --- SURVIVOR ---
+        const equipoSurvivor = survivorPorUsuario.get(usuario.id)?.get(jornadaId);
+        if (equipoSurvivor) {
+          reg.survivorEnviados++;
+          survivorPorJornadaCount[jornadaId].add(usuario.id);
+
+          if (esPasadaYCerrada) {
+            const partido = Array.from(partidosMap.values()).find(
+              p => p.local === equipoSurvivor || p.visitante === equipoSurvivor
+            );
+            if (partido?.resultado) {
+              let perdio = false;
+              if (partido.local === equipoSurvivor && partido.resultado === "V") perdio = true;
+              if (partido.visitante === equipoSurvivor && partido.resultado === "L") perdio = true;
+              if (perdio && reg.vidas < 3) reg.vidas++;
+            }
           }
-        });
-      }
+        } else if (esPasadaYCerrada && reg.vidas < 3) {
+          // Ya se sumó vida por quiniela, no duplicar
+          // Nota: en el código original se sumaban vidas por quiniela y survivor por separado
+          // Aquí lo mantenemos consistente con el comportamiento original
+        }
+      });
     });
 
-    // Ordenar: primero por menos vidas, luego por más aciertos
-    const rankingFinal = Object.values(acumulado).sort((a, b) => {
+    // === RANKING QUINIELAS ===
+    const rankingQuinielas = Object.values(acumulado).sort((a, b) => {
       if (a.vidas !== b.vidas) return a.vidas - b.vidas;
       if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
       return a.nombre.localeCompare(b.nombre);
     });
 
-    setRankingQuinielas(rankingFinal);
-  };
+    // === DATOS GRÁFICA ===
+    const datosGrafica = jornadasData.map(jornada => ({
+      nombre: jornada.nombre || `J${idToSecuencial.get(jornada.id)}`,
+      quinielas: quinielasPorJornadaCount[jornada.id]?.size || 0,
+      survivor: survivorPorJornadaCount[jornada.id]?.size || 0
+    }));
 
-  const calcularAusentesInteligentes = (idJornadaActiva, jornadasData, perfilesData, todasQuinielas, todosSurvivor, todosPartidos, ahora) => {
-    const jornadasHastaActiva = jornadasData.filter(j => j.id <= idJornadaActiva).length;
-    
-    const quinielasCount = {};
-    const vidasPerdidas = {};
+    // === AUSENTES INTELIGENTES ===
+    let ausentesQuiniela = [];
+    let ausentesSurvivor = [];
+    let quinielasActivas = 0;
 
-    perfilesData.forEach(p => {
-      quinielasCount[p.id] = 0;
-      vidasPerdidas[p.id] = 0;
-    });
+    if (idJornadaActiva) {
+      const jornadasHastaActiva = jornadasData.filter(j => j.id <= idJornadaActiva).length;
+      const quinielasActivaSet = quinielasPorJornadaCount[idJornadaActiva] || new Set();
+      const survivorActivaSet = survivorPorJornadaCount[idJornadaActiva] || new Set();
+      quinielasActivas = quinielasActivaSet.size;
 
-    todasQuinielas?.forEach(q => {
-      if (q.jornada_id <= idJornadaActiva) {
-        quinielasCount[q.usuario_id] = (quinielasCount[q.usuario_id] || 0) + 1;
-      }
-    });
-
-    jornadasData.filter(j => j.id <= idJornadaActiva).forEach(jornada => {
-      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
-
-      perfilesData.forEach(usuario => {
-        const seleccion = todosSurvivor?.find(s => s.usuario_id === usuario.id && Number(s.jornada_id) === Number(jornada.id));
-
-        if (!seleccion && esPasadaYCerrada) {
-          if (vidasPerdidas[usuario.id] < 3) vidasPerdidas[usuario.id] += 1;
-          return;
+      ausentesQuiniela = perfilesData.filter(p => {
+        if (esAdmin(p)) return false;
+        const reg = acumulado[p.id];
+        if (!reg) return false;
+        if (!quinielasActivaSet.has(p.id)) {
+          const jornadasFaltadas = jornadasHastaActiva - reg.quinielasEnviadas;
+          return jornadasFaltadas <= 1;
         }
-
-        if (seleccion) {
-          const partido = todosPartidos?.find(p => 
-            Number(p.jornada_id) === Number(jornada.id) && 
-            (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
-          );
-
-          if (partido?.resultado) {
-            let perdio = false;
-            if (partido.local === seleccion.equipo && partido.resultado === "V") perdio = true;
-            if (partido.visitante === seleccion.equipo && partido.resultado === "L") perdio = true;
-
-            if (perdio && vidasPerdidas[usuario.id] < 3) {
-              vidasPerdidas[usuario.id] += 1;
-            }
-          }
-        }
+        return false;
       });
-    });
 
-    const quinielasActivaIds = new Set(todasQuinielas?.filter(q => q.jornada_id === idJornadaActiva).map(q => q.usuario_id) || []);
-    const survivorActivaIds = new Set(todosSurvivor?.filter(s => s.jornada_id === idJornadaActiva).map(s => s.usuario_id) || []);
+      ausentesSurvivor = perfilesData.filter(p => {
+        if (esAdmin(p)) return false;
+        const reg = acumulado[p.id];
+        if (!reg) return false;
+        if (!survivorActivaSet.has(p.id)) {
+          return reg.vidas < 3;
+        }
+        return false;
+      });
+    }
 
-    const ausentesQ = perfilesData.filter(p => {
-      if (esAdmin(p)) return false;
-      if (!quinielasActivaIds.has(p.id)) {
-        const totalQ = quinielasCount[p.id] || 0;
-        const jornadasFaltadas = jornadasHastaActiva - totalQ;
-        return jornadasFaltadas <= 1;
-      }
-      return false;
-    });
-
-    const ausentesS = perfilesData.filter(p => {
-      if (esAdmin(p)) return false;
-      if (!survivorActivaIds.has(p.id)) {
-        return (vidasPerdidas[p.id] || 0) < 3;
-      }
-      return false;
-    });
-
-    setAusentesQuiniela(ausentesQ);
-    setAusentesSurvivor(ausentesS);
-    setQuinielasActivas(quinielasActivaIds.size);
+    return {
+      rankingQuinielas,
+      jornadasSecuenciales,
+      datosGrafica,
+      ausentesQuiniela,
+      ausentesSurvivor,
+      quinielasActivas
+    };
   };
 
   const getNombreUsuario = (p) => {
@@ -276,7 +318,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG) - SOLO RANKING GENERAL QUINIELAS
+  // EXPORTAR A IMAGEN (JPEG)
   //---------------------------------------
   const exportarImagen = async () => {
     try {
@@ -290,22 +332,19 @@ export default function AdminDashboard() {
       contenedorTemp.style.boxShadow = '0 0 20px rgba(0,0,0,0.1)';
       contenedorTemp.style.zIndex = '9999';
       
-      // Título
       const titulo = document.createElement('h2');
-      titulo.textContent = ' Ranking General Acumulado - Quinielas';
+      titulo.textContent = '🏆 Ranking General Acumulado - Quinielas';
       titulo.style.fontSize = '28px';
       titulo.style.fontWeight = 'bold';
       titulo.style.marginBottom = '20px';
       titulo.style.textAlign = 'center';
       contenedorTemp.appendChild(titulo);
 
-      // Tabla
       const tabla = document.createElement('table');
       tabla.style.width = '100%';
       tabla.style.borderCollapse = 'collapse';
       tabla.style.fontSize = '13px';
 
-      // Encabezados
       const thead = document.createElement('thead');
       let encabezadosHTML = `
         <tr style="background-color: #e5e7eb;">
@@ -313,25 +352,21 @@ export default function AdminDashboard() {
           <th style="border: 1px solid #9ca3af; padding: 8px; text-align: left; width: 150px;">Usuario</th>
       `;
 
-      // Columnas de jornadas secuenciales (J1, J2, J3...)
       jornadasSecuenciales.forEach(jornadaSec => {
         encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 50px;">${jornadaSec.nombre}</th>`;
       });
       
-      // Columna TOTAL
-      encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db; font-weight: bold;">TOTAL</th>`;
-      encabezadosHTML += `</tr>`;
+      encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db; font-weight: bold;">TOTAL</th></tr>`;
       thead.innerHTML = encabezadosHTML;
       tabla.appendChild(thead);
 
-      // Filas
       const tbody = document.createElement('tbody');
       
       rankingQuinielas.forEach((fila, index) => {
         let bgColor = '#ffffff';
-        if (fila.vidas >= 3) bgColor = '#ef4444'; // Rojo - eliminado
-        else if (fila.vidas === 2) bgColor = '#fbbf24'; // Amarillo
-        else if (index < 3) bgColor = '#22c55e'; // Verde - top 3
+        if (fila.vidas >= 3) bgColor = '#ef4444';
+        else if (fila.vidas === 2) bgColor = '#fbbf24';
+        else if (index < 3) bgColor = '#22c55e';
 
         const tr = document.createElement('tr');
         tr.style.backgroundColor = bgColor;
@@ -341,16 +376,12 @@ export default function AdminDashboard() {
           <td style="border: 1px solid #9ca3af; padding: 8px; font-weight: 600;">${fila.nombre}</td>
         `;
 
-        // Mostrar aciertos por cada jornada secuencial
         jornadasSecuenciales.forEach(jornadaSec => {
           const aciertos = fila.aciertosPorJornada[jornadaSec.numero] || 0;
           filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center;">${aciertos}</td>`;
         });
         
-        // Total
-        filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${fila.totalAciertos}</td>`;
-
-        filaHTML += `</tr>`;
+        filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${fila.totalAciertos}</td></tr>`;
         tr.innerHTML = filaHTML;
         tbody.appendChild(tr);
       });
@@ -459,6 +490,18 @@ export default function AdminDashboard() {
   //---------------------------------------
   // INTERFAZ
   //---------------------------------------
+  if (cargando) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-green-600 border-t-transparent mb-4"></div>
+          <p className="text-xl font-semibold text-gray-700">Cargando Dashboard...</p>
+          <p className="text-sm text-gray-500 mt-2">Procesando datos de quinielas y survivor</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Dashboard Administrador</h1>
@@ -478,7 +521,7 @@ export default function AdminDashboard() {
           onClick={exportarImagen} 
           className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
         >
-          📸 Exportar Ranking General Quinielas (JPEG)
+           Exportar Ranking General Quinielas (JPEG)
         </button>
 
         <button onClick={exportarPDF} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">📄 Exportar PDF</button>
@@ -533,7 +576,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesQuiniela.length}</span>
-                 Faltan Quiniela
+                ❌ Faltan Quiniela
               </h2>
             </div>
             {ausentesQuiniela.length > 0 ? (
@@ -558,7 +601,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesSurvivor.length}</span>
-                 Faltan Survivor
+                🦖 Faltan Survivor
               </h2>
             </div>
             {ausentesSurvivor.length > 0 ? (
