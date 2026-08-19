@@ -12,7 +12,6 @@ export default function Participantes() {
   }, []);
 
   const cargarParticipantes = async () => {
-    // Agregamos 'solo_survivor' a la consulta
     const { data, error } = await supabase
       .from("profiles")
       .select("id, nombre_usuario, nombre_completo, email, telefono, banco, clabe, rol, solo_survivor")
@@ -23,7 +22,14 @@ export default function Participantes() {
       return;
     }
 
-    setParticipantes(data || []);
+    // Aseguramos que solo_survivor y modificado existan con valores por defecto
+    const datosLimpios = (data || []).map(p => ({
+      ...p,
+      solo_survivor: p.solo_survivor || false,
+      modificado: false
+    }));
+
+    setParticipantes(datosLimpios);
   };
 
   const toggleSeleccion = (id) => {
@@ -34,29 +40,58 @@ export default function Participantes() {
     }
   };
 
-  // Función para activar/desactivar el modo "Solo Survivor"
-  const toggleSoloSurvivor = async (userId, currentStatus) => {
-    const nuevoEstado = !currentStatus;
-    
-    // 1. Actualización optimista en la UI (para que se sienta instantáneo)
+  // Solo actualiza el estado local y marca como modificado
+  const toggleSoloSurvivor = (userId) => {
     setParticipantes(prev => 
-      prev.map(p => p.id === userId ? { ...p, solo_survivor: nuevoEstado } : p)
+      prev.map(p => {
+        if (p.id === userId) {
+          return { ...p, solo_survivor: !p.solo_survivor, modificado: true };
+        }
+        return p;
+      })
     );
+  };
 
-    // 2. Guardar en la base de datos
-    const { error } = await supabase
-      .from("profiles")
-      .update({ solo_survivor: nuevoEstado })
-      .eq("id", userId);
+  // Función para guardar todos los cambios pendientes en la BD
+  const guardarModosDeJuego = async () => {
+    const usuariosAModificar = participantes.filter(p => p.modificado);
+    
+    if (usuariosAModificar.length === 0) {
+      alert("No hay cambios pendientes por guardar.");
+      return;
+    }
 
-    if (error) {
-      console.error("Error actualizando modo de juego:", error);
-      alert("Error al actualizar. Verifica que la columna 'solo_survivor' exista en la tabla profiles.");
-      
-      // Revertir el cambio en la UI si falló
-      setParticipantes(prev => 
-        prev.map(p => p.id === userId ? { ...p, solo_survivor: currentStatus } : p)
-      );
+    if (!window.confirm(`¿Estás seguro de guardar los cambios de modo de juego para ${usuariosAModificar.length} usuario(s)?`)) {
+      return;
+    }
+
+    setCargando(true);
+    let exitos = 0;
+    let fallos = 0;
+
+    for (const usuario of usuariosAModificar) {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ solo_survivor: usuario.solo_survivor })
+        .eq("id", usuario.id);
+
+      if (error) {
+        console.error("Error actualizando", usuario.nombre_usuario, error);
+        fallos++;
+      } else {
+        exitos++;
+      }
+    }
+
+    setCargando(false);
+
+    if (fallos === 0) {
+      alert(`✅ ${exitos} cambio(s) guardado(s) correctamente.`);
+      // Quitamos la marca de "modificado" para limpiar la vista
+      setParticipantes(prev => prev.map(p => ({ ...p, modificado: false })));
+    } else {
+      alert(`⚠️ Se guardaron ${exitos} cambios, pero hubo ${fallos} errores. Se recargará la lista.`);
+      await cargarParticipantes();
     }
   };
 
@@ -131,6 +166,8 @@ export default function Participantes() {
     );
   });
 
+  const hayCambiosPendientes = participantes.some(p => p.modificado);
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">👥 Participantes</h1>
@@ -143,18 +180,33 @@ export default function Participantes() {
         className="border p-2 rounded w-full mb-4"
       />
 
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <div>
           Total participantes: <strong>{participantesFiltrados.length}</strong>
+          {hayCambiosPendientes && (
+            <span className="ml-3 text-sm text-blue-600 font-semibold animate-pulse">
+              * Hay cambios sin guardar
+            </span>
+          )}
         </div>
 
-        <button
-          onClick={eliminarUsuarios}
-          disabled={cargando}
-          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-        >
-          {cargando ? "Eliminando..." : "Eliminar Seleccionados"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={guardarModosDeJuego}
+            disabled={cargando || !hayCambiosPendientes}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center gap-2 font-semibold"
+          >
+            💾 Guardar Cambios de Modo
+          </button>
+          
+          <button
+            onClick={eliminarUsuarios}
+            disabled={cargando || seleccionados.length === 0}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+          >
+            {cargando ? "Procesando..." : "Eliminar Seleccionados"}
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto border rounded shadow">
@@ -175,7 +227,10 @@ export default function Participantes() {
 
           <tbody>
             {participantesFiltrados.map((participante) => (
-              <tr key={participante.id} className="border-t hover:bg-gray-50 transition">
+              <tr 
+                key={participante.id} 
+                className={`border-t hover:bg-gray-50 transition ${participante.modificado ? 'bg-blue-50' : ''}`}
+              >
                 <td className="p-3 text-center">
                   {participante.rol !== "admin" && (
                     <input
@@ -187,17 +242,16 @@ export default function Participantes() {
                   )}
                 </td>
                 
-                {/* NUEVA COLUMNA: SOLO SURVIVOR */}
                 <td className="p-3 text-center">
                   <label className="inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={participante.solo_survivor || false}
-                      onChange={() => toggleSoloSurvivor(participante.id, participante.solo_survivor)}
+                      onChange={() => toggleSoloSurvivor(participante.id)}
                       className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
                     />
-                    <span className={`ml-2 text-sm font-medium ${participante.solo_survivor ? 'text-purple-700' : 'text-gray-500'}`}>
-                      {participante.solo_survivor ? "Sí 🦖" : "No"}
+                    <span className={`ml-2 text-sm font-medium ${participante.solo_survivor ? 'text-purple-700' : 'text-gray-500'} ${participante.modificado ? 'font-bold text-blue-600' : ''}`}>
+                      {participante.solo_survivor ? "Sí 🦖" : "No"} {participante.modificado && "(Modificado)"}
                     </span>
                   </label>
                 </td>
@@ -226,7 +280,7 @@ export default function Participantes() {
       </div>
       
       <div className="mt-4 text-sm text-gray-600 bg-blue-50 p-4 rounded border border-blue-200">
-        <strong>💡 Nota para el desarrollo:</strong> Ahora que los usuarios pueden marcarse como "Solo Survivor", recuerda agregar una validación en tu página de <strong>Quiniela</strong> que consulte este campo (`solo_survivor`) y muestre un mensaje o deshabilite los inputs si es `true`.
+        <strong>💡 Instrucciones:</strong> Marca o desmarca la casilla "Solo Survivor" en los participantes deseados. La fila se marcará en azul. Luego, presiona el botón <strong>"💾 Guardar Cambios de Modo"</strong> para aplicar las modificaciones a la base de datos.
       </div>
     </div>
   );
