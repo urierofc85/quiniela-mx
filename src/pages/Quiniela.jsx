@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
-import { Link, useNavigate,} from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { obtenerHoraMexico } from "../services/horario";
 
 export default function Quiniela() {
@@ -16,26 +16,26 @@ export default function Quiniela() {
   const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
   const [cargandoPDF, setCargandoPDF] = useState(false);
 
+  // ESTADO PARA EL MODAL DE REGLAS
+  const [mostrarModal, setMostrarModal] = useState(false);
+
   useEffect(() => {
     cargarDatosIniciales();
   }, []);
+
   useEffect(() => {
+    const validarSesion = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-  const validarSesion = async () => {
+      if (!session) {
+        navigate("/");
+      }
+    };
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      navigate("/");
-    }
-
-  };
-
-  validarSesion();
-
-}, [navigate]);
+    validarSesion();
+  }, [navigate]);
 
   const cargarDatosIniciales = async () => {
     const ahora = await obtenerHoraMexico();
@@ -133,18 +133,18 @@ export default function Quiniela() {
     });
     setPronosticos(nuevosPronosticos);
   };
-const cerrarSesion = async () => {
 
-  const { error } =
-    await supabase.auth.signOut();
+  const cerrarSesion = async () => {
+    const { error } = await supabase.auth.signOut();
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-  navigate("/");
-};
+    navigate("/");
+  };
+
   const actualizarPronostico = (partidoId, valor) => {
     setPronosticos({
       ...pronosticos,
@@ -354,62 +354,41 @@ const cerrarSesion = async () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen">
-      <h1 className="text-3xl font-bold mb-6">Captura tu Quiniela</h1>
+    <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen relative">
+      <h1 className="text-3xl font-bold mb-4">Captura tu Quiniela</h1>
+
+      {/* BOTÓN DE REGLAS, PREMIOS Y COSTOS */}
+      <button
+        onClick={() => setMostrarModal(true)}
+        className="mb-6 bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md transition duration-200 flex items-center gap-2"
+      >
+        📜 Reglas, Premios y Costos
+      </button>
 
       <div className="flex flex-wrap gap-3 mb-6 items-center">
+        <Link to="/posiciones" className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition">
+          Ranking General
+        </Link>
 
-  <Link
-    to="/posiciones"
-    className="bg-orange-600 text-white px-4 py-2 rounded"
-  >
-    Ranking General
-  </Link>
+        <Link to="/historico" className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded transition">
+          🏆 Histórico
+        </Link>
 
-  <Link
-  to="/historico"
-  className="
-    bg-yellow-600
-    text-white
-    px-4
-    py-2
-    rounded
-  "
->
-  🏆 Histórico
-</Link>
+        <Link to="/perfil" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">
+          Mi Perfil
+        </Link>
 
-  <Link
-    to="/perfil"
-    className="bg-blue-600 text-white px-4 py-2 rounded"
-  >
-    Mi Perfil
-  </Link>
+        <Link to="/survivor" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition">
+          Survivor
+        </Link>
 
-  <Link
-    to="/survivor"
-    className="bg-purple-600 text-white px-4 py-2 rounded"
-  >
-    Survivor
-  </Link>
-
-  <button
-    onClick={cerrarSesion}
-    className="
-      bg-red-600
-      text-white
-      px-4
-      py-2
-      rounded
-      hover:bg-red-700
-      transition
-    "
-  >
-    Cerrar Sesión
-  </button>
-
-</div>
-
+        <button
+          onClick={cerrarSesion}
+          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition"
+        >
+          Cerrar Sesión
+        </button>
+      </div>
 
       {/* SECCIÓN DE DESCARGA DE QUINIELA GENERAL */}
       <div className="bg-gray-50 border p-4 rounded-lg mb-6 flex flex-wrap items-center gap-3">
@@ -440,7 +419,7 @@ const cerrarSesion = async () => {
           disabled={jornadas.length === 0 || cargandoPDF}
           className={`px-4 py-2 rounded text-white self-end flex items-center gap-2 ${
             jornadas.length > 0 && !cargandoPDF
-              ? "bg-red-600 hover:bg-red-700 cursor-pointer"
+              ? "bg-red-600 hover:bg-red-700 cursor-pointer transition"
               : "bg-gray-400 cursor-not-allowed"
           }`}
         >
@@ -462,35 +441,38 @@ const cerrarSesion = async () => {
           </h3>
 
           <div className="flex gap-4 mt-3">
-            <label className="cursor-pointer">
+            <label className="cursor-pointer flex items-center gap-1">
               <input
                 type="radio"
                 name={`partido-${partido.id}`}
                 checked={pronosticos[partido.id] === "L"}
                 onChange={() => actualizarPronostico(partido.id, "L")}
                 disabled={jornadaCerrada}
+                className="cursor-pointer"
               />{" "}
               Local
             </label>
 
-            <label className="cursor-pointer">
+            <label className="cursor-pointer flex items-center gap-1">
               <input
                 type="radio"
                 name={`partido-${partido.id}`}
                 checked={pronosticos[partido.id] === "E"}
                 onChange={() => actualizarPronostico(partido.id, "E")}
                 disabled={jornadaCerrada}
+                className="cursor-pointer"
               />{" "}
               Empate
             </label>
 
-            <label className="cursor-pointer">
+            <label className="cursor-pointer flex items-center gap-1">
               <input
                 type="radio"
                 name={`partido-${partido.id}`}
                 checked={pronosticos[partido.id] === "V"}
                 onChange={() => actualizarPronostico(partido.id, "V")}
                 disabled={jornadaCerrada}
+                className="cursor-pointer"
               />{" "}
               Visitante
             </label>
@@ -507,7 +489,7 @@ const cerrarSesion = async () => {
       <button
         disabled={jornadaCerrada}
         onClick={guardarQuiniela}
-        className={`px-5 py-2 rounded mt-6 text-white ${
+        className={`px-5 py-2 rounded mt-6 text-white font-semibold shadow-md transition ${
           jornadaCerrada ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
         }`}
       >
@@ -549,6 +531,90 @@ const cerrarSesion = async () => {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* MODAL (POP-UP) DE REGLAS, PREMIOS Y COSTOS */}
+      {/* ========================================== */}
+      {mostrarModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setMostrarModal(false)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative"
+            onClick={(e) => e.stopPropagation()} // Evita cerrar al hacer clic dentro del modal
+          >
+            {/* Botón de cerrar */}
+            <button
+              onClick={() => setMostrarModal(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition"
+              aria-label="Cerrar"
+            >
+              &times;
+            </button>
+
+            <div className="p-6 md:p-8">
+              <h2 className="text-2xl font-bold text-green-700 mb-6 text-center border-b pb-3">
+                📜 Reglas, Premios y Costos
+              </h2>
+
+              <div className="space-y-6">
+                {/* Sección de Pronósticos / Premios */}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    🏆 Pronósticos y Premios
+                  </h3>
+                  <ul className="list-decimal list-inside space-y-2 text-gray-700 bg-green-50 p-4 rounded-lg border border-green-200">
+                    <li>Premio semanal de <strong>$180.00</strong>.</li>
+                    <li>Ganador de liguilla se lleva <strong>$250.00</strong>.</li>
+                    <li>Se elimina el ganador a 4to lugar.</li>
+                    <li>Primer Lugar gana <strong>$3,620.00</strong>.</li>
+                    <li>Segundo Lugar gana <strong>$1,300.00</strong>.</li>
+                    <li>Tercer Lugar gana <strong>$550.00</strong>.</li>
+                  </ul>
+                  <p className="text-sm text-gray-600 mt-2 italic text-right">
+                    *(Valores calculados sobre 32 jugadores)*
+                  </p>
+                </div>
+
+                {/* Sección de Reglas */}
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    📋 Reglas del Juego
+                  </h3>
+                  <ul className="list-disc list-inside space-y-3 text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <li>
+                      Cada jornada el participante hará la selección de sus pronósticos: <strong>Local, Empate o Visitante</strong>.
+                    </li>
+                    <li>
+                      Se llevará un <strong>ranking semanal</strong>.
+                    </li>
+                    <li>
+                      Los aciertos semanales se sumarán al acumulado de pronósticos acertados. Al final del torneo de la Liga MX se tendrá a un primer, segundo y tercer lugar, conforme a los aciertos que tengan y usos de equipos.
+                    </li>
+                    <li>
+                      En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>. En ese momento, ya no se podrán elegir pronósticos ni survivor, por lo que, cualquier omisión será responsabilidad única del participante.
+                    </li>
+                  </ul>
+                  <p className="text-center text-lg font-bold text-green-700 mt-4">
+                    ¡Es una quiniela entre amigos! ⚽🍻
+                  </p>
+                </div>
+              </div>
+
+              {/* Botón de cierre inferior */}
+              <div className="mt-8 text-center">
+                <button
+                  onClick={() => setMostrarModal(false)}
+                  className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition"
+                >
+                  Entendido, ¡a jugar!
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
