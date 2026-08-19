@@ -11,14 +11,11 @@ export default function Quiniela() {
   const [jornadaCerrada, setJornadaCerrada] = useState(false);
   const [quinielaGuardada, setQuinielaGuardada] = useState([]);
   
-  // ESTADOS PARA LA EXPORTACIÓN DE PDF
   const [jornadas, setJornadas] = useState([]);
   const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
   const [cargandoPDF, setCargandoPDF] = useState(false);
-
-  // ESTADO PARA EL MODAL DE REGLAS
   const [mostrarModal, setMostrarModal] = useState(false);
-
+  
   // NUEVO ESTADO: Validar si el usuario solo juega Survivor
   const [esSoloSurvivor, setEsSoloSurvivor] = useState(false);
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
@@ -41,17 +38,27 @@ export default function Quiniela() {
     setCargandoPerfil(true);
     const ahora = await obtenerHoraMexico();
 
-    // 0. VERIFICAR SI EL USUARIO ES SOLO SURVIVOR
+    // 0. VERIFICAR SI EL USUARIO ES SOLO SURVIVOR (VALIDACIÓN ROBUSTA)
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data: perfil } = await supabase
+      const { data: perfil, error: errorPerfil } = await supabase
         .from("profiles")
         .select("solo_survivor")
         .eq("id", user.id)
         .single();
       
-      if (perfil) {
-        setEsSoloSurvivor(perfil.solo_survivor || false);
+      if (errorPerfil) {
+        console.error("Error al obtener perfil:", errorPerfil);
+      } else {
+        // Validación estricta: solo es true si el valor es EXACTAMENTE true
+        const esSolo = perfil?.solo_survivor === true;
+        console.log(" Validación Solo Survivor:", {
+          usuario: user.email,
+          valorEnBD: perfil?.solo_survivor,
+          tipoDato: typeof perfil?.solo_survivor,
+          esSoloSurvivor: esSolo
+        });
+        setEsSoloSurvivor(esSolo);
       }
     }
     setCargandoPerfil(false);
@@ -146,8 +153,11 @@ export default function Quiniela() {
   };
 
   const guardarQuiniela = async () => {
-    if (esSoloSurvivor) {
-      alert("⚠️ Tu cuenta está configurada solo para jugar Survivor. No puedes guardar quinielas.");
+    // VALIDACIÓN DE SEGURIDAD ROBUSTA
+    console.log(" Intentando guardar quiniela. esSoloSurvivor:", esSoloSurvivor);
+    
+    if (esSoloSurvivor === true) {
+      alert("️ Tu cuenta está configurada solo para jugar Survivor. No puedes guardar quinielas.\n\nPor favor, ve a la sección de Survivor para hacer tu selección.");
       return;
     }
 
@@ -327,7 +337,7 @@ export default function Quiniela() {
 
       <div className="flex flex-wrap gap-3 mb-6 items-center">
         <Link to="/posiciones" className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition">Ranking General</Link>
-        <Link to="/historico" className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded transition">🏆 Histórico</Link>
+        <Link to="/historico" className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded transition"> Histórico</Link>
         <Link to="/perfil" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">Mi Perfil</Link>
         <Link to="/survivor" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition">Survivor</Link>
         <button onClick={cerrarSesion} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition">Cerrar Sesión</button>
@@ -346,10 +356,6 @@ export default function Quiniela() {
         </div>
       ) : (
         <>
-          {/* ========================================== */}
-          {/* INTERFAZ NORMAL DE QUINIELA */}
-          {/* ========================================== */}
-          
           <div className="bg-gray-50 border p-4 rounded-lg mb-6 flex flex-wrap items-center gap-3">
             <div className="flex-1 min-w-[200px]">
               <label className="block text-sm font-medium text-gray-700 mb-1">Descargar Quiniela General (PDF):</label>
@@ -436,7 +442,7 @@ export default function Quiniela() {
                         <tr key={item.id}>
                           <td className="p-2 border">{partido ? `${partido.local} vs ${partido.visitante}` : "Partido no encontrado"}</td>
                           <td className="p-2 border font-semibold">
-                            {item.pronostico === "L" && "🏠 Local"}
+                            {item.pronostico === "L" && " Local"}
                             {item.pronostico === "E" && "🤝 Empate"}
                             {item.pronostico === "V" && "✈️ Visitante"}
                           </td>
