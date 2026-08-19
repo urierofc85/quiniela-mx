@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../services/supabase";
 import { obtenerHoraMexico } from "../services/horario";
+import html2canvas from "html2canvas";
 import {
   BarChart,
   Bar,
@@ -30,6 +31,12 @@ export default function AdminDashboard() {
   const [ausentesQuiniela, setAusentesQuiniela] = useState([]);
   const [ausentesSurvivor, setAusentesSurvivor] = useState([]);
 
+  // Estados para ranking acumulado
+  const [rankingAcumulado, setRankingAcumulado] = useState([]);
+
+  // Estado para tipo de exportación
+  const [tipoExportacion, setTipoExportacion] = useState("jornada"); // "jornada" o "acumulado"
+
   useEffect(() => {
     cargarDashboard();
   }, []);
@@ -47,7 +54,7 @@ export default function AdminDashboard() {
     window.location.replace("/");
   };
 
-  // Función para identificar al admin (AJUSTA si tu admin tiene otro email/nombre)
+  // Función para identificar al admin
   const esAdmin = (p) => {
     const email = (p.email || "").toLowerCase();
     const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
@@ -74,7 +81,7 @@ export default function AdminDashboard() {
     const { data: todosSurvivor } = await supabase.from("survivor").select("jornada_id, usuario_id, equipo");
     const { data: todosPartidos } = await supabase.from("partidos").select("jornada_id, local, visitante, resultado");
 
-    // 3. Preparar datos para la gráfica (Reemplaza a participacion_jornadas)
+    // 3. Preparar datos para la gráfica
     prepararDatosGrafica(jornadasData, jornadaActivaData?.id, todasQuinielas, todosSurvivor);
 
     // 4. Calcular ausentes con filtros inteligentes
@@ -88,6 +95,11 @@ export default function AdminDashboard() {
         todosPartidos,
         ahora
       );
+    }
+
+    // 5. Calcular ranking acumulado
+    if (perfilesData && todasQuinielas && todosPartidos) {
+      await calcularRankingAcumulado(perfilesData, todasQuinielas, todosPartidos, jornadasData);
     }
   };
 
@@ -105,6 +117,85 @@ export default function AdminDashboard() {
     setDatosGrafica(datos);
   };
 
+  const calcularRankingAcumulado = async (perfilesData, todasQuinielas, todosPartidos, jornadasData) => {
+    const ahora = await obtenerHoraMexico();
+    const acumulado = {};
+
+    // Inicializar todos los participantes
+    perfilesData.forEach((usuario) => {
+      if (esAdmin(usuario)) return; // Excluir admin
+      
+      const nombre = usuario.nombre_usuario || usuario.nombre || "Sin nombre";
+      acumulado[usuario.id] = {
+        usuario_id: usuario.id,
+        nombre,
+        puntos: 0,
+        vidas: 0,
+        aciertos: 0,
+      };
+    });
+
+    // Procesar cada jornada
+    jornadasData.forEach((jornada) => {
+      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
+      const eleccionesJornada = todasQuinielas.filter(s => Number(s.jornada_id) === Number(jornada.id));
+
+      perfilesData.forEach((usuario) => {
+        if (esAdmin(usuario)) return;
+        
+        const seleccion = eleccionesJornada.find(s => s.usuario_id === usuario.id);
+        const registroAcumulado = acumulado[usuario.id];
+        if (!registroAcumulado) return;
+
+        // Si no seleccionó y la jornada cerró
+        if (!seleccion && esPasadaYCerrada) {
+          if (registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
+          return;
+        }
+
+        if (!seleccion) return;
+
+        // Buscar partido y calcular puntos
+        const partido = todosPartidos.find(p => 
+          Number(p.jornada_id) === Number(jornada.id) &&
+          (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
+        );
+
+        if (!partido || !partido.resultado) return;
+
+        let puntos = 0;
+        let perdio = false;
+
+        if (partido.local === seleccion.equipo) {
+          if (partido.resultado === "L") puntos = 3;
+          else if (partido.resultado === "E") puntos = 1;
+          else if (partido.resultado === "V") perdio = true;
+        } else if (partido.visitante === seleccion.equipo) {
+          if (partido.resultado === "V") puntos = 3;
+          else if (partido.resultado === "E") puntos = 1;
+          else if (partido.resultado === "L") perdio = true;
+        }
+
+        registroAcumulado.puntos += puntos;
+        if (partido.resultado === seleccion.pronostico) {
+          registroAcumulado.aciertos += 1;
+        }
+        if (perdio && registroAcumulado.vidas < 3) {
+          registroAcumulado.vidas += 1;
+        }
+      });
+    });
+
+    // Ordenar: primero por menos vidas, luego por más puntos
+    const rankingFinal = Object.values(acumulado).sort((a, b) => {
+      if (a.vidas !== b.vidas) return a.vidas - b.vidas;
+      if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+      return a.nombre.localeCompare(b.nombre);
+    });
+
+    setRankingAcumulado(rankingFinal);
+  };
+
   const calcularAusentesInteligentes = (idJornadaActiva, jornadasData, perfilesData, todasQuinielas, todosSurvivor, todosPartidos, ahora) => {
     const jornadasHastaActiva = jornadasData.filter(j => j.id <= idJornadaActiva).length;
     
@@ -116,14 +207,12 @@ export default function AdminDashboard() {
       vidasPerdidas[p.id] = 0;
     });
 
-    // Contar quinielas
     todasQuinielas?.forEach(q => {
       if (q.jornada_id <= idJornadaActiva) {
         quinielasCount[q.usuario_id] = (quinielasCount[q.usuario_id] || 0) + 1;
       }
     });
 
-    // Contar vidas perdidas en Survivor
     jornadasData.filter(j => j.id <= idJornadaActiva).forEach(jornada => {
       const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
 
@@ -157,18 +246,16 @@ export default function AdminDashboard() {
     const quinielasActivaIds = new Set(todasQuinielas?.filter(q => q.jornada_id === idJornadaActiva).map(q => q.usuario_id) || []);
     const survivorActivaIds = new Set(todosSurvivor?.filter(s => s.jornada_id === idJornadaActiva).map(s => s.usuario_id) || []);
 
-    // FILTRO QUINIELA: Falta en la activa Y no ha faltado más de 1 jornada en total
     const ausentesQ = perfilesData.filter(p => {
       if (esAdmin(p)) return false;
       if (!quinielasActivaIds.has(p.id)) {
         const totalQ = quinielasCount[p.id] || 0;
         const jornadasFaltadas = jornadasHastaActiva - totalQ;
-        return jornadasFaltadas <= 1; // Si faltó 2 o más, ya se considera inactivo
+        return jornadasFaltadas <= 1;
       }
       return false;
     });
 
-    // FILTRO SURVIVOR: Falta en la activa Y NO está eliminado (vidas < 3)
     const ausentesS = perfilesData.filter(p => {
       if (esAdmin(p)) return false;
       if (!survivorActivaIds.has(p.id)) {
@@ -179,8 +266,6 @@ export default function AdminDashboard() {
 
     setAusentesQuiniela(ausentesQ);
     setAusentesSurvivor(ausentesS);
-
-    // Actualizar contador de quinielas de la jornada activa para las tarjetas
     setQuinielasActivas(quinielasActivaIds.size);
   };
 
@@ -189,7 +274,46 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR PDF (Sin cambios, tu lógica era correcta)
+  // EXPORTAR A IMAGEN (JPEG)
+  //---------------------------------------
+  const exportarImagen = async (tipo) => {
+    const elementoId = tipo === "acumulado" ? "tabla-ranking-acumulado" : "tabla-quiniela-jornada";
+    const elemento = document.getElementById(elementoId);
+    
+    if (!elemento) {
+      alert("No hay datos para exportar");
+      return;
+    }
+
+    try {
+      const canvas = await html2canvas(elemento, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        logging: false,
+        useCORS: true,
+      });
+
+      const imagenData = canvas.toDataURL("image/jpeg", 0.95);
+      const link = document.createElement("a");
+      
+      if (tipo === "acumulado") {
+        link.download = `Ranking_Acumulado_General.jpg`;
+      } else {
+        const jornada = jornadas.find(j => j.id === jornadaSeleccionada);
+        link.download = `Quiniela_${jornada?.nombre || 'Jornada'}.jpg`;
+      }
+      
+      link.href = imagenData;
+      link.click();
+      
+    } catch (error) {
+      console.error("Error al exportar:", error);
+      alert("Error al generar la imagen");
+    }
+  };
+
+  //---------------------------------------
+  // EXPORTAR PDF (Detallado por partido)
   //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
@@ -279,7 +403,24 @@ export default function AdminDashboard() {
           ))}
         </select>
 
+        <select
+          value={tipoExportacion}
+          onChange={(e) => setTipoExportacion(e.target.value)}
+          className="border rounded px-3 py-2 bg-white"
+        >
+          <option value="jornada"> Por Jornada</option>
+          <option value="acumulado">🏆 Acumulado General</option>
+        </select>
+
+        <button 
+          onClick={() => exportarImagen(tipoExportacion)} 
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+        >
+          📸 Exportar Imagen (JPEG)
+        </button>
+
         <button onClick={exportarPDF} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">📄 Exportar PDF</button>
+        
         <Link to="/admin" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">Crear Jornada</Link>
         <Link to="/partidos" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Crear Partidos</Link>
         <Link to="/admin/resultados" className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 transition">Capturar Resultados</Link>
@@ -305,7 +446,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* GRÁFICA DINÁMICA (Reemplaza a participacion_jornadas) */}
+      {/* GRÁFICA DINÁMICA */}
       <div className="bg-white rounded shadow p-6 mb-8">
         <h2 className="text-xl font-bold mb-4">Participación por Jornada</h2>
         <div style={{ width: '100%', height: 300 }}>
@@ -321,6 +462,55 @@ export default function AdminDashboard() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      {/* TABLA DE QUINIELA POR JORNADA (Oculta pero exportable) */}
+      <div id="tabla-quiniela-jornada" className="bg-white rounded shadow p-6 mb-8" style={{ display: 'none' }}>
+        <h2 className="text-2xl font-bold mb-4 text-center">
+          Quiniela - {jornadas.find(j => j.id === jornadaSeleccionada)?.nombre || 'Jornada'}
+        </h2>
+        {/* Aquí iría tu tabla de quiniela por jornada si la tienes */}
+      </div>
+
+      {/* TABLA DE RANKING ACUMULADO (Oculta pero exportable) */}
+      <div id="tabla-ranking-acumulado" className="bg-white rounded shadow p-6 mb-8" style={{ display: 'none' }}>
+        <h2 className="text-2xl font-bold mb-4 text-center"> Ranking Acumulado General</h2>
+        <table className="w-full border-collapse border border-gray-300">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border border-gray-300 px-4 py-2 text-left">Pos</th>
+              <th className="border border-gray-300 px-4 py-2 text-left">Participante</th>
+              <th className="border border-gray-300 px-4 py-2 text-center">Puntos</th>
+              <th className="border border-gray-300 px-4 py-2 text-center">Aciertos</th>
+              <th className="border border-gray-300 px-4 py-2 text-center">Vidas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rankingAcumulado.map((fila, index) => {
+              let bgColor = "bg-white";
+              if (fila.vidas >= 3) bgColor = "bg-red-200";
+              else if (fila.vidas === 2) bgColor = "bg-yellow-200";
+              else if (fila.vidas <= 1 && index < 5) bgColor = "bg-green-100";
+
+              return (
+                <tr key={fila.usuario_id} className={bgColor}>
+                  <td className="border border-gray-300 px-4 py-2 font-bold">
+                    {index === 0 && "🥇 "}
+                    {index === 1 && "🥈 "}
+                    {index === 2 && "🥉 "}
+                    {index + 1}
+                  </td>
+                  <td className="border border-gray-300 px-4 py-2 font-semibold">{fila.nombre}</td>
+                  <td className="border border-gray-300 px-4 py-2 text-center font-bold">{fila.puntos}</td>
+                  <td className="border border-gray-300 px-4 py-2 text-center">{fila.aciertos}</td>
+                  <td className="border border-gray-300 px-4 py-2 text-center font-bold" style={{ color: fila.vidas >= 3 ? '#dc2626' : 'inherit' }}>
+                    {fila.vidas} {fila.vidas >= 3 && "💀"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {/* SECCIÓN DE AUSENTES EN JORNADA ACTIVA */}
