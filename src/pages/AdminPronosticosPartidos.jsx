@@ -2,38 +2,35 @@ import { useEffect, useState } from "react";
 import { supabase } from "../services/supabase";
 
 export default function AdminPronosticosPartidos() {
-  const [equipos, setEquipos] = useState([]);
   const [partidos, setPartidos] = useState([]);
   const [generando, setGenerando] = useState(false);
 
   useEffect(() => {
-    cargarEquipos();
     cargarPartidos();
   }, []);
 
-  const cargarEquipos = async () => {
-    const { data } = await supabase
-      .from("pronosticos_equipos")
-      .select("*")
-      .order("equipo");
-
-    setEquipos(data || []);
-  };
-
   const cargarPartidos = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("pronosticos_partidos")
       .select("*")
       .order("fecha_partido", { ascending: true });
 
-    // FILTRO: Solo mostrar partidos de hoy en adelante (oculta los pasados)
-    const hoyStr = new Date().toISOString().split("T")[0]; // Formato "YYYY-MM-DD"
+    if (error) {
+      console.error("❌ Error cargando partidos:", error);
+      return;
+    }
+
+    console.log("📊 Total partidos en BD:", data?.length);
+
+    // Filtro de fecha tolerante: extrae solo YYYY-MM-DD por si la BD guarda la hora
+    const hoyStr = new Date().toISOString().split("T")[0]; 
     
     const partidosVigentes = (data || []).filter((p) => {
-      // Asumimos que fecha_partido viene en formato "YYYY-MM-DD"
-      return p.fecha_partido >= hoyStr;
+      const fechaPartido = p.fecha_partido ? String(p.fecha_partido).split("T")[0] : "";
+      return fechaPartido >= hoyStr;
     });
 
+    console.log("✅ Partidos vigentes (hoy o futuros) a mostrar:", partidosVigentes.length);
     setPartidos(partidosVigentes);
   };
 
@@ -57,6 +54,7 @@ export default function AdminPronosticosPartidos() {
   const generarPronosticos = async () => {
     try {
       setGenerando(true);
+      console.log("🚀 Iniciando generación de pronósticos para", partidos.length, "partidos...");
 
       const normalizar = (texto = "") =>
         texto
@@ -65,12 +63,12 @@ export default function AdminPronosticosPartidos() {
           .toLowerCase()
           .trim();
 
-      const { data: equiposData, error } = await supabase
+      const { data: equiposData, error: errorEquipos } = await supabase
         .from("pronosticos_equipos")
         .select("*");
 
-      if (error) {
-        alert(error.message);
+      if (errorEquipos) {
+        alert("Error cargando equipos: " + errorEquipos.message);
         return;
       }
 
@@ -79,9 +77,7 @@ export default function AdminPronosticosPartidos() {
         mapaEquipos[normalizar(equipo.equipo)] = equipo;
       });
 
-      const alias = {
-        guadalajara: "chivas",
-      };
+      const alias = { guadalajara: "chivas" };
 
       const obtenerEquipo = (nombre) => {
         const clave = normalizar(nombre);
@@ -95,7 +91,7 @@ export default function AdminPronosticosPartidos() {
         const visitaEquipo = obtenerEquipo(partido.visita);
 
         if (!localEquipo || !visitaEquipo) {
-          console.log("Equipo no encontrado en base de datos:", partido.local, "vs", partido.visita);
+          console.warn(`⚠️ Equipo no encontrado en BD: ${partido.local} vs ${partido.visita}`);
           continue;
         }
 
@@ -119,22 +115,15 @@ export default function AdminPronosticosPartidos() {
 
         let empateFactor =
           (Number(localEquipo.pct_hist_local_empata || 0) +
-            Number(visitaEquipo.pct_hist_visita_empata || 0)) /
-          2;
+            Number(visitaEquipo.pct_hist_visita_empata || 0)) / 2;
 
-        if (diferencia < 5) {
-          empateFactor *= 2;
-        } else if (diferencia < 10) {
-          empateFactor *= 1.5;
-        } else if (diferencia < 15) {
-          empateFactor *= 1.2;
-        }
+        if (diferencia < 5) empateFactor *= 2;
+        else if (diferencia < 10) empateFactor *= 1.5;
+        else if (diferencia < 15) empateFactor *= 1.2;
 
         const total = scoreLocal + scoreVisita + empateFactor;
 
-        if (total <= 0) {
-          continue;
-        }
+        if (total <= 0) continue;
 
         const probLocal = Number(((scoreLocal / total) * 100).toFixed(2));
         const probEmpate = Number(((empateFactor / total) * 100).toFixed(2));
@@ -143,13 +132,11 @@ export default function AdminPronosticosPartidos() {
         let pronostico = "EMPATE";
         const maximo = Math.max(probLocal, probEmpate, probVisita);
 
-        if (maximo === probLocal) {
-          pronostico = "LOCAL";
-        } else if (maximo === probVisita) {
-          pronostico = "VISITA";
-        }
+        if (maximo === probLocal) pronostico = "LOCAL";
+        else if (maximo === probVisita) pronostico = "VISITA";
 
-        const { error: updateError } = await supabase
+        // Actualizar en BD y usar .select() para verificar qué se guardó
+        const { data: updateData, error: updateError } = await supabase
           .from("pronosticos_partidos")
           .update({
             score_local: Number(scoreLocal.toFixed(2)),
@@ -160,21 +147,24 @@ export default function AdminPronosticosPartidos() {
             prob_visita: probVisita,
             pronostico: pronostico,
           })
-          .eq("id", partido.id);
+          .eq("id", partido.id)
+          .select(); // <-- Esto nos devuelve el registro actualizado para verificar
 
         if (updateError) {
-          console.error("Error actualizando partido", partido.id, updateError);
+          console.error(`❌ Error actualizando partido ${partido.id}:`, updateError);
         } else {
+          console.log(`✅ Partido ${partido.id} actualizado:`, updateData[0]);
           partidosProcesados++;
         }
       }
 
-      // Recargar la lista para mostrar los nuevos datos inmediatamente
+      // Forzar recarga fresca desde la BD
+      console.log("🔄 Recargando lista de partidos...");
       await cargarPartidos();
 
-      alert(`✅ Pronósticos generados correctamente para ${partidosProcesados} partidos.`);
+      alert(`✅ Pronósticos generados y guardados correctamente para ${partidosProcesados} partidos.`);
     } catch (error) {
-      console.error(error);
+      console.error("💥 Error crítico al generar pronósticos:", error);
       alert("Error al generar pronósticos: " + error.message);
     } finally {
       setGenerando(false);
@@ -186,7 +176,7 @@ export default function AdminPronosticosPartidos() {
       <h1 className="text-3xl font-bold mb-6">⚽ Administración de Partidos y Pronósticos</h1>
 
       <div className="bg-white shadow rounded p-5">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
           <h2 className="text-xl font-bold">Partidos Registrados (Próximos)</h2>
           <button
             onClick={generarPronosticos}
@@ -212,7 +202,7 @@ export default function AdminPronosticosPartidos() {
                 key={partido.id}
                 className="flex flex-col md:flex-row justify-between items-start md:items-center border rounded p-4 hover:bg-gray-50 transition"
               >
-                <div className="mb-3 md:mb-0">
+                <div className="mb-3 md:mb-0 flex-1">
                   <div className="text-lg font-bold text-gray-800">
                     {partido.local} <span className="text-gray-400 mx-2">vs</span> {partido.visita}
                   </div>
@@ -221,30 +211,36 @@ export default function AdminPronosticosPartidos() {
                   </div>
                 </div>
 
-                {/* CONDICIÓN CORREGIDA: Se muestra si existe el pronóstico, sin depender de que sea > 0 */}
-                {partido.pronostico && (
-                  <div className="bg-gray-100 p-3 rounded-lg text-sm min-w-[200px]">
-                    <div className="flex justify-between mb-1">
-                      <span>🏠 Local:</span>
-                      <span className="font-semibold">{partido.prob_local}%</span>
+                {/* BLOQUE DE PREDICCIÓN: Siempre visible, cambia su contenido según haya datos o no */}
+                <div className="bg-gray-50 p-3 rounded-lg text-sm min-w-[220px] border border-gray-200 mb-3 md:mb-0 md:mx-4">
+                  {partido.pronostico ? (
+                    <>
+                      <div className="flex justify-between mb-1">
+                        <span>🏠 Local:</span>
+                        <span className="font-semibold">{partido.prob_local}%</span>
+                      </div>
+                      <div className="flex justify-between mb-1">
+                        <span>🤝 Empate:</span>
+                        <span className="font-semibold">{partido.prob_empate}%</span>
+                      </div>
+                      <div className="flex justify-between mb-2">
+                        <span>✈️ Visita:</span>
+                        <span className="font-semibold">{partido.prob_visita}%</span>
+                      </div>
+                      <div className="border-t pt-2 mt-2 font-bold text-center text-blue-700 bg-blue-50 rounded">
+                        ✅ {partido.pronostico}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center text-gray-500 py-3">
+                      ⏳ Pendiente de generar
                     </div>
-                    <div className="flex justify-between mb-1">
-                      <span>🤝 Empate:</span>
-                      <span className="font-semibold">{partido.prob_empate}%</span>
-                    </div>
-                    <div className="flex justify-between mb-2">
-                      <span>✈️ Visita:</span>
-                      <span className="font-semibold">{partido.prob_visita}%</span>
-                    </div>
-                    <div className="border-t pt-2 mt-2 font-bold text-center text-blue-700 bg-blue-50 rounded">
-                      ✅ Pronóstico: {partido.pronostico}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 <button
                   onClick={() => eliminarPartido(partido.id)}
-                  className="mt-3 md:mt-0 md:ml-4 bg-red-100 text-red-600 hover:bg-red-200 px-3 py-2 rounded text-sm font-semibold transition"
+                  className="bg-red-100 text-red-600 hover:bg-red-200 px-3 py-2 rounded text-sm font-semibold transition"
                 >
                   🗑️ Eliminar
                 </button>
