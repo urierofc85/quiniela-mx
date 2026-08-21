@@ -50,7 +50,6 @@ export default function AdminDashboard() {
     window.location.replace("/");
   };
 
-  // Función robusta para identificar al admin
   const esAdmin = (p) => {
     const rol = (p.rol || "").toLowerCase();
     const email = (p.email || "").toLowerCase();
@@ -80,7 +79,7 @@ export default function AdminDashboard() {
         supabase.from("jornadas").select("id, nombre, activa, fecha_limite").order("id", { ascending: true }),
         supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
         supabase.from("profiles").select("*", { count: "exact", head: true }),
-        supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol"),
+        supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor"),
         supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico"),
         supabase.from("survivor").select("jornada_id, usuario_id, equipo"),
         supabase.from("partidos").select("id, jornada_id, local, visitante, resultado")
@@ -126,7 +125,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO OPTIMIZADO Y CORREGIDO
+  // PROCESAMIENTO OPTIMIZADO
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -143,6 +142,18 @@ export default function AdminDashboard() {
       nombre: `J${index + 1}`
     }));
 
+    // === IDENTIFICAR QUIÉNES JUEGAN SURVIVOR ===
+    // Criterio: está marcado como "solo_survivor" en profiles O tiene historial en tabla survivor
+    const usuariosConPicksSurvivor = new Set(
+      (todosSurvivor || []).map(s => s.usuario_id)
+    );
+
+    const usuariosQueJueganSurvivor = new Set(
+      perfilesData
+        .filter(p => p.solo_survivor === true || usuariosConPicksSurvivor.has(p.id))
+        .map(p => p.id)
+    );
+
     const acumulado = {};
     perfilesData.forEach(usuario => {
       if (esAdmin(usuario)) return;
@@ -153,7 +164,8 @@ export default function AdminDashboard() {
         vidas: 0,
         quinielasEnviadas: 0,
         survivorEnviados: 0,
-        aciertosPorJornada: {}
+        aciertosPorJornada: {},
+        soloSurvivor: usuario.solo_survivor === true
       };
       jornadasSecuenciales.forEach(j => {
         acumulado[usuario.id].aciertosPorJornada[j.numero] = 0;
@@ -180,7 +192,12 @@ export default function AdminDashboard() {
         const reg = acumulado[usuario.id];
         if (!reg) return;
 
+        const esJugadorSurvivor = usuariosQueJueganSurvivor.has(usuario.id);
+
         // --- QUINIELA ---
+        // Si el usuario es SOLO survivor, no lo contamos en quiniela
+        if (reg.soloSurvivor) return;
+
         const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
         if (quinielasUsuario.length > 0) {
           reg.quinielasEnviadas++;
@@ -192,11 +209,12 @@ export default function AdminDashboard() {
               reg.totalAciertos++;
             }
           });
-        } else if (esPasadaYCerrada && reg.vidas < 3) {
-          reg.vidas++; // Esto solo afecta al cálculo de Survivor
         }
 
         // --- SURVIVOR ---
+        // Solo procesamos survivor si el usuario realmente juega survivor
+        if (!esJugadorSurvivor) return;
+
         const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
         if (seleccionSurvivor && seleccionSurvivor.equipo) {
           reg.survivorEnviados++;
@@ -211,16 +229,19 @@ export default function AdminDashboard() {
             }
           }
         } else if (esPasadaYCerrada && reg.vidas < 3) {
+          // Solo suma vida si es jugador de survivor y la jornada cerró sin pick
           reg.vidas++;
         }
       });
     });
 
-    const rankingQuinielas = Object.values(acumulado).sort((a, b) => {
-      if (a.vidas !== b.vidas) return a.vidas - b.vidas;
-      if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
-      return a.nombre.localeCompare(b.nombre);
-    });
+    const rankingQuinielas = Object.values(acumulado)
+      .filter(u => !u.soloSurvivor) // Excluir a los solo-survivor del ranking de quiniela
+      .sort((a, b) => {
+        if (a.vidas !== b.vidas) return a.vidas - b.vidas;
+        if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
+        return a.nombre.localeCompare(b.nombre);
+      });
 
     const datosGrafica = jornadasData.map(jornada => {
       const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornada.id)?.numero;
@@ -231,7 +252,7 @@ export default function AdminDashboard() {
       };
     });
 
-    // === AUSENTES CON MOTIVO EXPLICATIVO (LÓGICA SEPARADA Y CORREGIDA) ===
+    // === AUSENTES QUINIELA ===
     let ausentesQuiniela = [];
     let ausentesSurvivor = [];
     let quinielasActivas = 0;
@@ -248,26 +269,23 @@ export default function AdminDashboard() {
       
       quinielasActivas = quinielasActivaSet.size;
 
-      // 1. AUSENTES QUINIELA: SIN concepto de "vidas" o "eliminados"
+      // AUSENTES QUINIELA: Solo usuarios que NO son solo-survivor
       ausentesQuiniela = perfilesData
         .filter(p => {
-          if (esAdmin(p)) return false; // Filtro estricto de administrador
+          if (esAdmin(p)) return false;
+          if (p.solo_survivor === true) return false; // Excluir a los solo-survivor
           const reg = acumulado[p.id];
           if (!reg) return false;
-          return !quinielasActivaSet.has(p.id); // Solo los que NO enviaron en esta jornada
+          return !quinielasActivaSet.has(p.id);
         })
         .map(p => {
           const reg = acumulado[p.id];
           let motivo = "Falta en jornada actual";
           let tipo = "normal";
           
-          // En quiniela, evaluamos inactividad por falta de envíos históricos
           const jornadasFaltadas = jornadasHastaActiva - reg.quinielasEnviadas;
           
-          if (reg.quinielasEnviadas === 0 && reg.survivorEnviados > 0) {
-            motivo = "Solo juega Survivor";
-            tipo = "solo-survivor";
-          } else if (jornadasFaltadas > 1) {
+          if (jornadasFaltadas > 1) {
             motivo = `Inactivo (faltó ${jornadasFaltadas} jornadas)`;
             tipo = "inactivo";
           }
@@ -275,13 +293,15 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // 2. AUSENTES SURVIVOR: Aquí SÍ aplican las vidas
+      // AUSENTES SURVIVOR: Solo usuarios que SÍ juegan survivor
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
-          const reg = acumulado[p.id];
-          if (!reg) return false;
-          return !survivorActivaSet.has(p.id);
+          // Solo incluir si juega survivor (marcado en profiles o con historial)
+          if (!usuariosQueJueganSurvivor.has(p.id)) return false;
+          // Si ya hizo su pick esta jornada, no es faltante
+          if (survivorActivaSet.has(p.id)) return false;
+          return true;
         })
         .map(p => {
           const reg = acumulado[p.id];
@@ -302,7 +322,9 @@ export default function AdminDashboard() {
           const reg = acumulado[p.id] || {};
           return {
             Usuario: p.nombre_usuario || p.email,
-            Rol: p.rol || "usuario",
+            SoloSurvivor: p.solo_survivor === true ? "SÍ" : "NO",
+            TienePicksSurvivor: usuariosConPicksSurvivor.has(p.id) ? "SÍ" : "NO",
+            JuegaSurvivor: usuariosQueJueganSurvivor.has(p.id) ? "SÍ" : "NO",
             VidasSurvivor: reg.vidas || 0,
             QuinielasEnviadas: reg.quinielasEnviadas || 0,
             SurvivorEnviados: reg.survivorEnviados || 0,
@@ -540,7 +562,7 @@ export default function AdminDashboard() {
         <Link to="/partidos" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Crear Partidos</Link>
         <Link to="/admin/resultados" className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 transition">Capturar Resultados</Link>
         <Link to="/posiciones" className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition">Ranking</Link>
-        <Link to="/admin-survivor" className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 transition">🏆 Admin Survivor</Link>
+        <Link to="/admin-survivor" className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 transition"> Admin Survivor</Link>
         <Link to="/acceso-pronosticos" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700 transition">🔒 Pronósticos Privados</Link>
         <button onClick={cerrarSesion} className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 transition">🚪 Cerrar Sesión</button>
       </div>
@@ -600,9 +622,7 @@ export default function AdminDashboard() {
                         <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
                       </div>
                       <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                        p.tipo === 'solo-survivor' ? 'bg-purple-100 text-purple-700' : 
-                        p.tipo === 'inactivo' ? 'bg-gray-200 text-gray-700' : 
-                        'bg-yellow-100 text-yellow-800'
+                        p.tipo === 'inactivo' ? 'bg-gray-200 text-gray-700' : 'bg-yellow-100 text-yellow-800'
                       }`}>
                         {p.motivo}
                       </span>
@@ -635,8 +655,7 @@ export default function AdminDashboard() {
                         <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
                       </div>
                       <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                        p.tipo === 'eliminado' ? 'bg-red-100 text-red-700' : 
-                        'bg-yellow-100 text-yellow-800'
+                        p.tipo === 'eliminado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800'
                       }`}>
                         {p.motivo}
                       </span>
