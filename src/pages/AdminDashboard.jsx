@@ -125,7 +125,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO OPTIMIZADO (CORREGIDO: String() en lugar de Number())
+  // PROCESAMIENTO OPTIMIZADO CON DEBUG MEJORADO
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -182,7 +182,6 @@ export default function AdminDashboard() {
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
-      // ✅ CORRECCIÓN: Usar String() en lugar de Number() para funcionar con UUIDs
       const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId));
       const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
       const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
@@ -202,7 +201,6 @@ export default function AdminDashboard() {
           reg.quinielasEnviadas++;
           quinielasPorJornadaCount[jornadaId].add(usuario.id);
           quinielasUsuario.forEach(q => {
-            // ✅ CORRECCIÓN: String() para IDs de partidos
             const partido = partidosDeJornada.find(p => String(p.id) === String(q.partido_id));
             if (partido && partido.resultado && q.pronostico === partido.resultado) {
               if (secNum) reg.aciertosPorJornada[secNum] = (reg.aciertosPorJornada[secNum] || 0) + 1;
@@ -250,7 +248,7 @@ export default function AdminDashboard() {
       };
     });
 
-    // === AUSENTES (CORREGIDO: String() para comparación de IDs) ===
+    // === AUSENTES CON DEBUG MEJORADO ===
     let ausentesQuiniela = [];
     let ausentesSurvivor = [];
     let quinielasActivas = 0;
@@ -258,7 +256,6 @@ export default function AdminDashboard() {
     if (idJornadaActiva) {
       const jornadasHastaActiva = jornadasData.filter(j => String(j.id) === String(idJornadaActiva) || j.id <= idJornadaActiva).length;
       
-      // ✅ CORRECCIÓN CRÍTICA: String() para que funcione con UUIDs
       const quinielasActivaSet = new Set(
         todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva)).map(q => q.usuario_id)
       );
@@ -268,12 +265,33 @@ export default function AdminDashboard() {
       
       quinielasActivas = quinielasActivaSet.size;
 
-      // Debug en consola para verificar
-      console.log("🔍 Debug - IDs de jornada activa:", idJornadaActiva);
+      // === DEBUG MEJORADO ===
+      console.log("🔍 Debug - IDs de jornada activa:", idJornadaActiva, "tipo:", typeof idJornadaActiva);
       console.log("🔍 Debug - quinielasActivaSet size:", quinielasActivaSet.size);
-      console.log("🔍 Debug - survivorActivaSet size:", survivorActivaSet.size);
+      console.log(" Debug - survivorActivaSet size:", survivorActivaSet.size);
       console.log("🔍 Debug - Total quinielas en BD:", todasQuinielas.length);
-      console.log("🔍 Debug - Ejemplos de jornada_id en quinielas:", todasQuinielas.slice(0, 3).map(q => q.jornada_id));
+      
+      // Mostrar tipo de dato de jornada_id en las primeras 10 quinielas
+      console.log("🔍 Debug - Ejemplos de jornada_id en quinielas:", 
+        todasQuinielas.slice(0, 10).map(q => ({ id: q.jornada_id, tipo: typeof q.jornada_id }))
+      );
+
+      // Contar cuántas quinielas hay para cada jornada
+      const conteoPorJornada = {};
+      todasQuinielas.forEach(q => {
+        const jId = String(q.jornada_id);
+        conteoPorJornada[jId] = (conteoPorJornada[jId] || 0) + 1;
+      });
+      console.log("🔍 Debug - Quinielas por jornada (top 10):", 
+        Object.entries(conteoPorJornada).sort((a, b) => b[1] - a[1]).slice(0, 10)
+      );
+
+      // Verificar específicamente la jornada activa
+      const quinielasJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva));
+      console.log(`🔍 Debug - Quinielas para jornada ${idJornadaActiva}:`, quinielasJornadaActiva.length);
+      console.log("🔍 Debug - Usuarios únicos en jornada activa:", 
+        new Set(quinielasJornadaActiva.map(q => q.usuario_id)).size
+      );
 
       // AUSENTES QUINIELA
       ausentesQuiniela = perfilesData
@@ -320,7 +338,7 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // Tabla de depuración
+      // Tabla de depuración completa
       console.table(
         perfilesData.filter(p => !esAdmin(p)).map(p => {
           const reg = acumulado[p.id] || {};
@@ -612,7 +630,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesQuiniela.length}</span>
-                ❌ Faltan Quiniela
+                 Faltan Quiniela
               </h2>
             </div>
             {ausentesQuiniela.length > 0 ? (
@@ -645,7 +663,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesSurvivor.length}</span>
-                🦖 Faltan Survivor
+                 Faltan Survivor
               </h2>
             </div>
             {ausentesSurvivor.length > 0 ? (
