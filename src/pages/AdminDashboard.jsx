@@ -58,10 +58,10 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // CARGA BLINDADA DEL DASHBOARD
+  // CARGA DEL DASHBOARD CON PAGINACIÓN AUTOMÁTICA (SOLUCIÓN DEFINITIVA)
   //---------------------------------------
   const cargarDashboard = async () => {
-    console.log("🚀 VERSIÓN BLINDADA CON ORDER DESC Y RANGE 5000");
+    console.log("🚀 VERSIÓN CON PAGINACIÓN AUTOMÁTICA (SIN LÍMITE DE 1000)");
     
     setCargando(true);
     const t0 = performance.now();
@@ -69,43 +69,59 @@ export default function AdminDashboard() {
     try {
       const ahora = await obtenerHoraMexico();
 
-      const [
-        jornadasRes,
-        jornadaActivaRes,
-        participantesRes,
-        perfilesRes,
-        quinielasRes,
-        survivorRes,
-        partidosRes
-      ] = await Promise.all([
+      // Función auxiliar para obtener TODAS las filas, sin importar el límite de 1000 de Supabase
+      const fetchAllRows = async (tableName, columns) => {
+        let allData = [];
+        let from = 0;
+        let to = 999;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from(tableName)
+            .select(columns)
+            .order("id", { ascending: false })
+            .range(from, to);
+
+          if (error) {
+            console.error(`Error fetching ${tableName}:`, error);
+            break;
+          }
+
+          if (!data || data.length === 0) {
+            hasMore = false;
+          } else {
+            allData = [...allData, ...data];
+            // Si recibimos menos de 1000, significa que ya no hay más datos
+            if (data.length < 1000) {
+              hasMore = false;
+            } else {
+              from += 1000;
+              to += 1000;
+            }
+          }
+        }
+        return allData;
+      };
+
+      // 1. Consultas simples (no tienen límite porque son pocas filas o usamos count/head)
+      const [jornadasRes, jornadaActivaRes, participantesRes, perfilesRes] = await Promise.all([
         supabase.from("jornadas").select("id, nombre, activa, fecha_limite").order("id", { ascending: true }),
         supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
         supabase.from("profiles").select("*", { count: "exact", head: true }),
-        supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor"),
-        
-        // ✅ SOLUCIÓN: Ordenar de más reciente a más antiguo + rango amplio
-        supabase.from("quinielas")
-          .select("jornada_id, usuario_id, partido_id, pronostico", { count: "exact" })
-          .order("id", { ascending: false }) 
-          .range(0, 5000),
-          
-        supabase.from("survivor")
-          .select("jornada_id, usuario_id, equipo")
-          .order("id", { ascending: false })
-          .range(0, 5000),
-          
-        supabase.from("partidos")
-          .select("id, jornada_id, local, visitante, resultado")
-          .order("id", { ascending: false })
-          .range(0, 5000)
+        supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor")
+      ]);
+
+      // 2. Consultas masivas usando la paginación automática
+      const [todasQuinielas, todosSurvivor, todosPartidos] = await Promise.all([
+        fetchAllRows("quinielas", "jornada_id, usuario_id, partido_id, pronostico"),
+        fetchAllRows("survivor", "jornada_id, usuario_id, equipo"),
+        fetchAllRows("partidos", "id, jornada_id, local, visitante, resultado")
       ]);
 
       const jornadasData = jornadasRes.data || [];
       const jornadaActivaData = jornadaActivaRes.data;
       const perfilesData = perfilesRes.data || [];
-      const todasQuinielas = quinielasRes.data || [];
-      const todosSurvivor = survivorRes.data || [];
-      const todosPartidos = partidosRes.data || [];
 
       setJornadas(jornadasData);
       setJornadaActiva(jornadaActivaData);
@@ -131,8 +147,7 @@ export default function AdminDashboard() {
 
       const t1 = performance.now();
       console.log(`⚡ Dashboard cargado en ${Math.round(t1 - t0)}ms`);
-      console.log("🔍 Total de filas que dice Supabase que existen:", quinielasRes.count);
-      console.log("🔍 Total de filas que REALMENTE llegaron al navegador:", todasQuinielas.length);
+      console.log("🔍 Total real de filas de quinielas cargadas:", todasQuinielas.length);
 
     } catch (error) {
       console.error("Error cargando dashboard:", error);
@@ -279,6 +294,9 @@ export default function AdminDashboard() {
       const survivorActivaSet = new Set(survivorDeJornadaActiva.filter(s => s.equipo).map(s => s.usuario_id));
       
       quinielasActivas = quinielasActivaSet.size;
+
+      console.log("🔍 Debug - Quinielas filtradas para jornada activa:", quinielasDeJornadaActiva.length);
+      console.log("🔍 Debug - Usuarios únicos en jornada activa:", quinielasActivaSet.size);
 
       ausentesQuiniela = perfilesData
         .filter(p => {
