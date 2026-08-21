@@ -125,7 +125,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO OPTIMIZADO (USANDO LÓGICA DEL PDF)
+  // PROCESAMIENTO OPTIMIZADO (CORREGIDO: usa número secuencial)
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -141,6 +141,12 @@ export default function AdminDashboard() {
       numero: index + 1,
       nombre: `J${index + 1}`
     }));
+
+    // Encontrar el número secuencial de la jornada activa
+    const jornadaActivaSecNum = jornadasSecuenciales.find(j => j.idSupabase === idJornadaActiva)?.numero;
+    
+    console.log("🔍 Debug - Jornada activa ID Supabase:", idJornadaActiva);
+    console.log("🔍 Debug - Jornada activa número secuencial:", jornadaActivaSecNum);
 
     // === IDENTIFICAR QUIÉNES JUEGAN SURVIVOR ===
     const usuariosConPicksSurvivor = new Set(
@@ -176,15 +182,19 @@ export default function AdminDashboard() {
 
     jornadasData.forEach(jornada => {
       const jornadaId = jornada.id;
-      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
       const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornadaId)?.numero;
+      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
 
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
       const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId));
-      const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
-      const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
+      
+      // ✅ CORRECCIÓN: Filtrar quinielas por número secuencial (no por ID de Supabase)
+      const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(secNum));
+      const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(secNum));
+
+      console.log(`🔍 Debug - Jornada ${jornada.nombre} (ID: ${jornadaId}, Sec: ${secNum}): ${quinielasDeJornada.length} quinielas, ${survivorDeJornada.length} survivor`);
 
       perfilesData.forEach(usuario => {
         if (esAdmin(usuario)) return;
@@ -248,27 +258,26 @@ export default function AdminDashboard() {
       };
     });
 
-    // === AUSENTES (USANDO LÓGICA IDÉNTICA AL PDF) ===
+    // === AUSENTES (CORREGIDO: usa número secuencial) ===
     let ausentesQuiniela = [];
     let ausentesSurvivor = [];
     let quinielasActivas = 0;
 
-    if (idJornadaActiva) {
-      const jornadasHastaActiva = jornadasData.filter(j => String(j.id) === String(idJornadaActiva) || j.id <= idJornadaActiva).length;
+    if (idJornadaActiva && jornadaActivaSecNum) {
+      const jornadasHastaActiva = jornadaActivaSecNum;
       
-      // ✅ LÓGICA IDÉNTICA AL PDF: Filtrar y crear Set de usuarios únicos
-      const quinielasDeJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva));
+      // ✅ CORRECCIÓN: Filtrar por número secuencial de la jornada activa
+      const quinielasDeJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaActivaSecNum));
       const quinielasActivaSet = new Set(quinielasDeJornadaActiva.map(q => q.usuario_id));
       
-      const survivorDeJornadaActiva = todosSurvivor.filter(s => String(s.jornada_id) === String(idJornadaActiva));
+      const survivorDeJornadaActiva = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaActivaSecNum));
       const survivorActivaSet = new Set(survivorDeJornadaActiva.filter(s => s.equipo).map(s => s.usuario_id));
       
       quinielasActivas = quinielasActivaSet.size;
 
-      console.log("🔍 Debug - Jornada activa ID:", idJornadaActiva);
-      console.log("🔍 Debug - Total quinielas en jornada activa:", quinielasDeJornadaActiva.length);
+      console.log("🔍 Debug - Quinielas en jornada activa (por sec num):", quinielasDeJornadaActiva.length);
       console.log("🔍 Debug - Usuarios únicos en quiniela activa:", quinielasActivaSet.size);
-      console.log("🔍 Debug - Total survivor en jornada activa:", survivorDeJornadaActiva.length);
+      console.log(" Debug - Survivor en jornada activa (por sec num):", survivorDeJornadaActiva.length);
       console.log("🔍 Debug - Usuarios únicos en survivor activo:", survivorActivaSet.size);
 
       // AUSENTES QUINIELA
@@ -364,7 +373,7 @@ export default function AdminDashboard() {
       contenedorTemp.style.zIndex = '9999';
       
       const titulo = document.createElement('h2');
-      titulo.textContent = ' Ranking General Acumulado - Quinielas';
+      titulo.textContent = '🏆 Ranking General Acumulado - Quinielas';
       titulo.style.fontSize = '28px';
       titulo.style.fontWeight = 'bold';
       titulo.style.marginBottom = '20px';
@@ -446,7 +455,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR PDF - SIN CAMBIOS (COMO ESTABA)
+  // EXPORTAR PDF - SIN CAMBIOS
   //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
