@@ -78,7 +78,7 @@ export default function AdminDashboard() {
         supabase.from("jornadas").select("id, nombre, activa, fecha_limite").order("id", { ascending: true }),
         supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
         supabase.from("profiles").select("*", { count: "exact", head: true }),
-        supabase.from("profiles").select("id, nombre, nombre_usuario, email"),
+        supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol"),
         supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico"),
         supabase.from("survivor").select("jornada_id, usuario_id, equipo"),
         supabase.from("partidos").select("id, jornada_id, local, visitante, resultado")
@@ -115,7 +115,6 @@ export default function AdminDashboard() {
 
       const t1 = performance.now();
       console.log(`⚡ Dashboard cargado en ${Math.round(t1 - t0)}ms`);
-      console.log("📊 Ausentes Survivor:", resultados.ausentesSurvivor.length, "usuarios");
 
     } catch (error) {
       console.error("Error cargando dashboard:", error);
@@ -125,7 +124,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO OPTIMIZADO Y CORREGIDO
+  // PROCESAMIENTO OPTIMIZADO Y CON DEPURACIÓN
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -136,14 +135,12 @@ export default function AdminDashboard() {
     ahora,
     idJornadaActiva
   ) => {
-    // 1. MAPEO SECUENCIAL DE JORNADAS
     const jornadasSecuenciales = jornadasData.map((jornada, index) => ({
       idSupabase: jornada.id,
       numero: index + 1,
       nombre: `J${index + 1}`
     }));
 
-    // 2. INICIALIZAR ACUMULADO
     const acumulado = {};
     perfilesData.forEach(usuario => {
       if (esAdmin(usuario)) return;
@@ -164,7 +161,6 @@ export default function AdminDashboard() {
     const quinielasPorJornadaCount = {};
     const survivorPorJornadaCount = {};
 
-    // 3. PROCESAR CADA JORNADA
     jornadasData.forEach(jornada => {
       const jornadaId = jornada.id;
       const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
@@ -173,7 +169,6 @@ export default function AdminDashboard() {
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
-      // Índices locales para esta jornada (evita problemas de tipos string/number)
       const partidosDeJornada = todosPartidos.filter(p => Number(p.jornada_id) === Number(jornadaId));
       const quinielasDeJornada = todasQuinielas.filter(q => Number(q.jornada_id) === Number(jornadaId));
       const survivorDeJornada = todosSurvivor.filter(s => Number(s.jornada_id) === Number(jornadaId));
@@ -188,7 +183,6 @@ export default function AdminDashboard() {
         if (quinielasUsuario.length > 0) {
           reg.quinielasEnviadas++;
           quinielasPorJornadaCount[jornadaId].add(usuario.id);
-
           quinielasUsuario.forEach(q => {
             const partido = partidosDeJornada.find(p => Number(p.id) === Number(q.partido_id));
             if (partido && partido.resultado && q.pronostico === partido.resultado) {
@@ -205,36 +199,27 @@ export default function AdminDashboard() {
         if (seleccionSurvivor && seleccionSurvivor.equipo) {
           reg.survivorEnviados++;
           survivorPorJornadaCount[jornadaId].add(usuario.id);
-
           if (esPasadaYCerrada) {
-            const partido = partidosDeJornada.find(
-              p => p.local === seleccionSurvivor.equipo || p.visitante === seleccionSurvivor.equipo
-            );
+            const partido = partidosDeJornada.find(p => p.local === seleccionSurvivor.equipo || p.visitante === seleccionSurvivor.equipo);
             if (partido?.resultado) {
               let perdio = false;
               if (partido.local === seleccionSurvivor.equipo && partido.resultado === "V") perdio = true;
               if (partido.visitante === seleccionSurvivor.equipo && partido.resultado === "L") perdio = true;
-              
-              if (perdio && reg.vidas < 3) {
-                reg.vidas++;
-              }
+              if (perdio && reg.vidas < 3) reg.vidas++;
             }
           }
         } else if (esPasadaYCerrada && reg.vidas < 3) {
-          // Si no seleccionó survivor y la jornada cerró -> pierde 1 vida
           reg.vidas++;
         }
       });
     });
 
-    // 4. RANKING QUINIELAS
     const rankingQuinielas = Object.values(acumulado).sort((a, b) => {
       if (a.vidas !== b.vidas) return a.vidas - b.vidas;
       if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
       return a.nombre.localeCompare(b.nombre);
     });
 
-    // 5. DATOS GRÁFICA
     const datosGrafica = jornadasData.map(jornada => {
       const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornada.id)?.numero;
       return {
@@ -244,7 +229,7 @@ export default function AdminDashboard() {
       };
     });
 
-    // 6. AUSENTES INTELIGENTES (LÓGICA CORREGIDA Y SEGURA)
+    // === AUSENTES CON MOTIVO EXPLICATIVO (NUEVA LÓGICA) ===
     let ausentesQuiniela = [];
     let ausentesSurvivor = [];
     let quinielasActivas = 0;
@@ -252,7 +237,6 @@ export default function AdminDashboard() {
     if (idJornadaActiva) {
       const jornadasHastaActiva = jornadasData.filter(j => Number(j.id) <= Number(idJornadaActiva)).length;
       
-      // Sets directos y seguros para la jornada activa
       const quinielasActivaSet = new Set(
         todasQuinielas.filter(q => Number(q.jornada_id) === Number(idJornadaActiva)).map(q => q.usuario_id)
       );
@@ -262,39 +246,65 @@ export default function AdminDashboard() {
       
       quinielasActivas = quinielasActivaSet.size;
 
-      ausentesQuiniela = perfilesData.filter(p => {
-        if (esAdmin(p)) return false;
-        const reg = acumulado[p.id];
-        if (!reg) return false;
-        if (reg.vidas >= 3) return false; // Eliminados no aparecen
-        if (!quinielasActivaSet.has(p.id)) {
-          const jornadasFaltadas = jornadasHastaActiva - reg.quinielasEnviadas;
-          return jornadasFaltadas <= 1; // Si faltó más de 1, se considera inactivo
-        }
-        return false;
-      });
+      // 1. AUSENTES QUINIELA: Mostramos a TODOS los que no enviaron, pero con un motivo
+      ausentesQuiniela = perfilesData
+        .filter(p => {
+          if (esAdmin(p)) return false;
+          const reg = acumulado[p.id];
+          if (!reg) return false;
+          return !quinielasActivaSet.has(p.id); // No envió en esta jornada
+        })
+        .map(p => {
+          const reg = acumulado[p.id];
+          let motivo = "Falta en jornada actual";
+          let tipo = "normal";
+          
+          if (reg.vidas >= 3) {
+            motivo = "Eliminado (3 vidas)";
+            tipo = "eliminado";
+          } else {
+            const jornadasFaltadas = jornadasHastaActiva - reg.quinielasEnviadas;
+            if (jornadasFaltadas > 1) {
+              motivo = `Inactivo (faltó ${jornadasFaltadas} jornadas)`;
+              tipo = "inactivo";
+            }
+          }
+          return { ...p, motivo, tipo };
+        });
 
-      ausentesSurvivor = perfilesData.filter(p => {
-        if (esAdmin(p)) return false;
-        const reg = acumulado[p.id];
-        if (!reg) return false;
-        
-        // Si ya fue eliminado (3 vidas), no mostrar
-        if (reg.vidas >= 3) return false;
+      // 2. AUSENTES SURVIVOR: Mostramos a TODOS los que no enviaron, con motivo
+      ausentesSurvivor = perfilesData
+        .filter(p => {
+          if (esAdmin(p)) return false;
+          const reg = acumulado[p.id];
+          if (!reg) return false;
+          return !survivorActivaSet.has(p.id);
+        })
+        .map(p => {
+          const reg = acumulado[p.id];
+          let motivo = "Falta en jornada actual";
+          let tipo = "normal";
+          
+          if (reg.vidas >= 3) {
+            motivo = "Eliminado (3 vidas)";
+            tipo = "eliminado";
+          }
+          return { ...p, motivo, tipo };
+        });
 
-        // Si no tiene selección válida en la jornada activa, es ausente
-        if (!survivorActivaSet.has(p.id)) {
-          return true;
-        }
-        return false;
-      });
-      
-      console.log("🔍 Depuración Ausentes Survivor:", {
-        totalUsuarios: perfilesData.length,
-        conSeleccionActiva: survivorActivaSet.size,
-        eliminados: perfilesData.filter(p => acumulado[p.id]?.vidas >= 3).length,
-        ausentesFinales: ausentesSurvivor.length
-      });
+      // === TABLA DE DEPURACIÓN EN CONSOLA ===
+      console.table(
+        perfilesData.filter(p => !esAdmin(p)).map(p => {
+          const reg = acumulado[p.id] || {};
+          return {
+            Usuario: p.nombre_usuario || p.email,
+            Vidas: reg.vidas || 0,
+            QuinielasEnviadas: reg.quinielasEnviadas || 0,
+            FaltaQuinielaHoy: !quinielasActivaSet.has(p.id) ? "SÍ" : "NO",
+            FaltaSurvivorHoy: !survivorActivaSet.has(p.id) ? "SÍ" : "NO"
+          };
+        })
+      );
     }
 
     return {
@@ -566,6 +576,7 @@ export default function AdminDashboard() {
       {/* SECCIÓN DE AUSENTES EN JORNADA ACTIVA */}
       {jornadaActiva && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* AUSENTES QUINIELA */}
           <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -577,20 +588,31 @@ export default function AdminDashboard() {
               <div className="max-h-64 overflow-y-auto pr-2">
                 <ul className="space-y-2">
                   {ausentesQuiniela.map((p) => (
-                    <li key={p.id} className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded text-sm">
-                      <span className="text-red-600 font-bold">•</span>
-                      <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
+                    <li key={p.id} className="flex items-center justify-between p-2 border rounded text-sm bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-600 font-bold">•</span>
+                        <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
+                      </div>
+                      {/* BADGE DE MOTIVO */}
+                      <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                        p.tipo === 'eliminado' ? 'bg-red-100 text-red-700' : 
+                        p.tipo === 'inactivo' ? 'bg-gray-200 text-gray-700' : 
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {p.motivo}
+                      </span>
                     </li>
                   ))}
                 </ul>
               </div>
             ) : (
               <div className="text-center py-8 text-green-600 bg-green-50 rounded border border-green-200">
-                <p className="font-semibold">✅ ¡Todos los activos han registrado su quiniela!</p>
+                <p className="font-semibold">✅ ¡Todos han registrado su quiniela!</p>
               </div>
             )}
           </div>
 
+          {/* AUSENTES SURVIVOR */}
           <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -602,9 +624,18 @@ export default function AdminDashboard() {
               <div className="max-h-64 overflow-y-auto pr-2">
                 <ul className="space-y-2">
                   {ausentesSurvivor.map((p) => (
-                    <li key={p.id} className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded text-sm">
-                      <span className="text-orange-600 font-bold">•</span>
-                      <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
+                    <li key={p.id} className="flex items-center justify-between p-2 border rounded text-sm bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-600 font-bold">•</span>
+                        <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
+                      </div>
+                      {/* BADGE DE MOTIVO */}
+                      <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                        p.tipo === 'eliminado' ? 'bg-red-100 text-red-700' : 
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {p.motivo}
+                      </span>
                     </li>
                   ))}
                 </ul>
