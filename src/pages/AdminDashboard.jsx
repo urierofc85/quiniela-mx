@@ -61,13 +61,16 @@ export default function AdminDashboard() {
   // CARGA OPTIMIZADA DEL DASHBOARD
   //---------------------------------------
   const cargarDashboard = async () => {
+    // 🚨 MENSAJE DE PRUEBA PARA SABER SI ESTE CÓDIGO SE CARGÓ 🚨
+    console.log("🚨🚨🚨 PRUEBA CON RANGE 400000 ACTIVADA 🚨🚨🚨");
+    
     setCargando(true);
     const t0 = performance.now();
 
     try {
       const ahora = await obtenerHoraMexico();
 
-      // ✅ CORRECCIÓN: Agregamos .range(0, 10000) para evitar el límite de 1000 filas de Supabase
+      // ✅ CAMBIO SOLICITADO: .range(0, 400000)
       const [
         jornadasRes,
         jornadaActivaRes,
@@ -81,9 +84,9 @@ export default function AdminDashboard() {
         supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
         supabase.from("profiles").select("*", { count: "exact", head: true }),
         supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor"),
-        supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico").range(0, 10000),
-        supabase.from("survivor").select("jornada_id, usuario_id, equipo").range(0, 10000),
-        supabase.from("partidos").select("id, jornada_id, local, visitante, resultado").range(0, 10000)
+        supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico").range(0, 400000),
+        supabase.from("survivor").select("jornada_id, usuario_id, equipo").range(0, 400000),
+        supabase.from("partidos").select("id, jornada_id, local, visitante, resultado").range(0, 400000)
       ]);
 
       const jornadasData = jornadasRes.data || [];
@@ -632,7 +635,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="text-center py-8 text-green-600 bg-green-50 rounded border border-green-200">
-                <p className="font-semibold">✅ ¡Todos los no eliminados han registrado su survivor, Suerte!</p>
+                <p className="font-semibold">✅ ¡Todos los no eliminados han registrado su survivor!</p>
               </div>
             )}
           </div>
