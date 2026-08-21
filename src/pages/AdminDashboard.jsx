@@ -632,7 +632,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="text-center py-8 text-green-600 bg-green-50 rounded border border-green-200">
-                <p className="font-semibold">✅ ¡Todos los no eliminados han registrado su survivor!</p>
+                <p className="font-semibold">✅ ¡Todos los no eliminados han registrado su survivor, Suerte!</p>
               </div>
             )}
           </div>
