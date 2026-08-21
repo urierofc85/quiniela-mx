@@ -57,9 +57,6 @@ export default function AdminDashboard() {
     return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
   };
 
-  //---------------------------------------
-  // CARGA OPTIMIZADA DEL DASHBOARD
-  //---------------------------------------
   const cargarDashboard = async () => {
     setCargando(true);
     const t0 = performance.now();
@@ -124,9 +121,6 @@ export default function AdminDashboard() {
     }
   };
 
-  //---------------------------------------
-  // PROCESAMIENTO OPTIMIZADO (CORREGIDO: usa número secuencial)
-  //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
     perfilesData,
@@ -142,13 +136,6 @@ export default function AdminDashboard() {
       nombre: `J${index + 1}`
     }));
 
-    // Encontrar el número secuencial de la jornada activa
-    const jornadaActivaSecNum = jornadasSecuenciales.find(j => j.idSupabase === idJornadaActiva)?.numero;
-    
-    console.log("🔍 Debug - Jornada activa ID Supabase:", idJornadaActiva);
-    console.log("🔍 Debug - Jornada activa número secuencial:", jornadaActivaSecNum);
-
-    // === IDENTIFICAR QUIÉNES JUEGAN SURVIVOR ===
     const usuariosConPicksSurvivor = new Set(
       (todosSurvivor || []).map(s => s.usuario_id)
     );
@@ -188,13 +175,10 @@ export default function AdminDashboard() {
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
+      // ✅ CORRECCIÓN: Filtrar por ID de Supabase (no por número secuencial)
       const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId));
-      
-      // ✅ CORRECCIÓN: Filtrar quinielas por número secuencial (no por ID de Supabase)
-      const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(secNum));
-      const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(secNum));
-
-      console.log(`🔍 Debug - Jornada ${jornada.nombre} (ID: ${jornadaId}, Sec: ${secNum}): ${quinielasDeJornada.length} quinielas, ${survivorDeJornada.length} survivor`);
+      const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
+      const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
 
       perfilesData.forEach(usuario => {
         if (esAdmin(usuario)) return;
@@ -258,29 +242,28 @@ export default function AdminDashboard() {
       };
     });
 
-    // === AUSENTES (CORREGIDO: usa número secuencial) ===
     let ausentesQuiniela = [];
     let ausentesSurvivor = [];
     let quinielasActivas = 0;
 
-    if (idJornadaActiva && jornadaActivaSecNum) {
-      const jornadasHastaActiva = jornadaActivaSecNum;
+    if (idJornadaActiva) {
+      const jornadaActivaSecNum = jornadasSecuenciales.find(j => j.idSupabase === idJornadaActiva)?.numero;
+      const jornadasHastaActiva = jornadaActivaSecNum || 0;
       
-      // ✅ CORRECCIÓN: Filtrar por número secuencial de la jornada activa
-      const quinielasDeJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaActivaSecNum));
+      // ✅ CORRECCIÓN: Filtrar por ID de Supabase de la jornada activa
+      const quinielasDeJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva));
       const quinielasActivaSet = new Set(quinielasDeJornadaActiva.map(q => q.usuario_id));
       
-      const survivorDeJornadaActiva = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaActivaSecNum));
+      const survivorDeJornadaActiva = todosSurvivor.filter(s => String(s.jornada_id) === String(idJornadaActiva));
       const survivorActivaSet = new Set(survivorDeJornadaActiva.filter(s => s.equipo).map(s => s.usuario_id));
       
       quinielasActivas = quinielasActivaSet.size;
 
-      console.log("🔍 Debug - Quinielas en jornada activa (por sec num):", quinielasDeJornadaActiva.length);
-      console.log("🔍 Debug - Usuarios únicos en quiniela activa:", quinielasActivaSet.size);
-      console.log(" Debug - Survivor en jornada activa (por sec num):", survivorDeJornadaActiva.length);
-      console.log("🔍 Debug - Usuarios únicos en survivor activo:", survivorActivaSet.size);
+      console.log(" Debug - Jornada activa ID:", idJornadaActiva);
+      console.log("🔍 Debug - Jornada activa SecNum:", jornadaActivaSecNum);
+      console.log("🔍 Debug - Quinielas filtradas por ID:", quinielasDeJornadaActiva.length);
+      console.log(" Debug - Usuarios únicos:", quinielasActivaSet.size);
 
-      // AUSENTES QUINIELA
       ausentesQuiniela = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
@@ -304,7 +287,6 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // AUSENTES SURVIVOR
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
@@ -325,7 +307,6 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // Tabla de depuración
       console.table(
         perfilesData.filter(p => !esAdmin(p)).map(p => {
           const reg = acumulado[p.id] || {};
@@ -357,9 +338,6 @@ export default function AdminDashboard() {
     return p.nombre_usuario || p.nombre || (p.email ? p.email.split('@')[0] : 'Usuario');
   };
 
-  //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG) - SIN CAMBIOS
-  //---------------------------------------
   const exportarImagen = async () => {
     try {
       const contenedorTemp = document.createElement('div');
@@ -454,9 +432,6 @@ export default function AdminDashboard() {
     }
   };
 
-  //---------------------------------------
-  // EXPORTAR PDF - SIN CAMBIOS
-  //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
       alert("Selecciona una jornada.");
@@ -527,9 +502,6 @@ export default function AdminDashboard() {
     doc.save(`Quinielas_${jornadaActivaPDF?.nombre || 'Jornada'}.pdf`);
   };
 
-  //---------------------------------------
-  // INTERFAZ
-  //---------------------------------------
   if (cargando) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -575,7 +547,6 @@ export default function AdminDashboard() {
         <button onClick={cerrarSesion} className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 transition">🚪 Cerrar Sesión</button>
       </div>
 
-      {/* TARJETAS DE RESUMEN */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded shadow p-4 border-l-4 border-blue-500">
           <p className="text-gray-500 text-sm font-semibold">JORNADA ACTIVA</p>
@@ -591,7 +562,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* GRÁFICA DINÁMICA */}
       <div className="bg-white rounded shadow p-6 mb-8">
         <h2 className="text-xl font-bold mb-4">Participación por Jornada</h2>
         <div style={{ width: '100%', height: 300 }}>
@@ -609,10 +579,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* SECCIÓN DE AUSENTES EN JORNADA ACTIVA */}
       {jornadaActiva && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* AUSENTES QUINIELA */}
           <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -645,7 +613,6 @@ export default function AdminDashboard() {
             )}
           </div>
 
-          {/* AUSENTES SURVIVOR */}
           <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
