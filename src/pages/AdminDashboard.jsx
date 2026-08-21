@@ -125,7 +125,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO OPTIMIZADO CON DEBUG MEJORADO
+  // PROCESAMIENTO OPTIMIZADO (USANDO LÓGICA DEL PDF)
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -248,7 +248,7 @@ export default function AdminDashboard() {
       };
     });
 
-    // === AUSENTES CON DEBUG MEJORADO ===
+    // === AUSENTES (USANDO LÓGICA IDÉNTICA AL PDF) ===
     let ausentesQuiniela = [];
     let ausentesSurvivor = [];
     let quinielasActivas = 0;
@@ -256,42 +256,20 @@ export default function AdminDashboard() {
     if (idJornadaActiva) {
       const jornadasHastaActiva = jornadasData.filter(j => String(j.id) === String(idJornadaActiva) || j.id <= idJornadaActiva).length;
       
-      const quinielasActivaSet = new Set(
-        todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva)).map(q => q.usuario_id)
-      );
-      const survivorActivaSet = new Set(
-        todosSurvivor.filter(s => String(s.jornada_id) === String(idJornadaActiva) && s.equipo).map(s => s.usuario_id)
-      );
+      // ✅ LÓGICA IDÉNTICA AL PDF: Filtrar y crear Set de usuarios únicos
+      const quinielasDeJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva));
+      const quinielasActivaSet = new Set(quinielasDeJornadaActiva.map(q => q.usuario_id));
+      
+      const survivorDeJornadaActiva = todosSurvivor.filter(s => String(s.jornada_id) === String(idJornadaActiva));
+      const survivorActivaSet = new Set(survivorDeJornadaActiva.filter(s => s.equipo).map(s => s.usuario_id));
       
       quinielasActivas = quinielasActivaSet.size;
 
-      // === DEBUG MEJORADO ===
-      console.log("🔍 Debug - IDs de jornada activa:", idJornadaActiva, "tipo:", typeof idJornadaActiva);
-      console.log("🔍 Debug - quinielasActivaSet size:", quinielasActivaSet.size);
-      console.log(" Debug - survivorActivaSet size:", survivorActivaSet.size);
-      console.log("🔍 Debug - Total quinielas en BD:", todasQuinielas.length);
-      
-      // Mostrar tipo de dato de jornada_id en las primeras 10 quinielas
-      console.log("🔍 Debug - Ejemplos de jornada_id en quinielas:", 
-        todasQuinielas.slice(0, 10).map(q => ({ id: q.jornada_id, tipo: typeof q.jornada_id }))
-      );
-
-      // Contar cuántas quinielas hay para cada jornada
-      const conteoPorJornada = {};
-      todasQuinielas.forEach(q => {
-        const jId = String(q.jornada_id);
-        conteoPorJornada[jId] = (conteoPorJornada[jId] || 0) + 1;
-      });
-      console.log("🔍 Debug - Quinielas por jornada (top 10):", 
-        Object.entries(conteoPorJornada).sort((a, b) => b[1] - a[1]).slice(0, 10)
-      );
-
-      // Verificar específicamente la jornada activa
-      const quinielasJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva));
-      console.log(`🔍 Debug - Quinielas para jornada ${idJornadaActiva}:`, quinielasJornadaActiva.length);
-      console.log("🔍 Debug - Usuarios únicos en jornada activa:", 
-        new Set(quinielasJornadaActiva.map(q => q.usuario_id)).size
-      );
+      console.log("🔍 Debug - Jornada activa ID:", idJornadaActiva);
+      console.log("🔍 Debug - Total quinielas en jornada activa:", quinielasDeJornadaActiva.length);
+      console.log("🔍 Debug - Usuarios únicos en quiniela activa:", quinielasActivaSet.size);
+      console.log("🔍 Debug - Total survivor en jornada activa:", survivorDeJornadaActiva.length);
+      console.log("🔍 Debug - Usuarios únicos en survivor activo:", survivorActivaSet.size);
 
       // AUSENTES QUINIELA
       ausentesQuiniela = perfilesData
@@ -338,7 +316,7 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // Tabla de depuración completa
+      // Tabla de depuración
       console.table(
         perfilesData.filter(p => !esAdmin(p)).map(p => {
           const reg = acumulado[p.id] || {};
@@ -371,7 +349,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG)
+  // EXPORTAR A IMAGEN (JPEG) - SIN CAMBIOS
   //---------------------------------------
   const exportarImagen = async () => {
     try {
@@ -386,7 +364,7 @@ export default function AdminDashboard() {
       contenedorTemp.style.zIndex = '9999';
       
       const titulo = document.createElement('h2');
-      titulo.textContent = '🏆 Ranking General Acumulado - Quinielas';
+      titulo.textContent = ' Ranking General Acumulado - Quinielas';
       titulo.style.fontSize = '28px';
       titulo.style.fontWeight = 'bold';
       titulo.style.marginBottom = '20px';
@@ -468,7 +446,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR PDF
+  // EXPORTAR PDF - SIN CAMBIOS (COMO ESTABA)
   //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
@@ -496,7 +474,7 @@ export default function AdminDashboard() {
     const filas = (partidos || []).map(partido => {
       const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
       usuarios.forEach(usuarioId => {
-        const pronostico = quinielasData?.find(q => String(q.partido_id) === String(partido.id) && q.usuario_id === usuarioId);
+        const pronostico = quinielasData?.find(q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId);
         let valor = "-";
         if (pronostico) {
           valor = pronostico.pronostico;
@@ -630,7 +608,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesQuiniela.length}</span>
-                 Faltan Quiniela
+                ❌ Faltan Quiniela
               </h2>
             </div>
             {ausentesQuiniela.length > 0 ? (
@@ -663,7 +641,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                 <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesSurvivor.length}</span>
-                 Faltan Survivor
+                🦖 Faltan Survivor
               </h2>
             </div>
             {ausentesSurvivor.length > 0 ? (
