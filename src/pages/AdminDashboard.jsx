@@ -58,11 +58,10 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // CARGA OPTIMIZADA DEL DASHBOARD
+  // CARGA OPTIMIZADA Y BLINDADA DEL DASHBOARD
   //---------------------------------------
   const cargarDashboard = async () => {
-    // 🚨 MENSAJE DE PRUEBA PARA SABER SI ESTE CÓDIGO SE CARGÓ 🚨
-    console.log("🚨🚨🚨 PRUEBA CON RANGE 400000 ACTIVADA 🚨🚨🚨");
+    console.log("🚨🚨🚨 VERSIÓN BLINDADA CON ORDER DESC ACTIVADA 🚨🚨🚨");
     
     setCargando(true);
     const t0 = performance.now();
@@ -70,7 +69,8 @@ export default function AdminDashboard() {
     try {
       const ahora = await obtenerHoraMexico();
 
-      // ✅ CAMBIO SOLICITADO: .range(0, 400000)
+      // ✅ SOLUCIÓN BLINDADA: Ordenar de más reciente a más antiguo + rango amplio
+      // Esto garantiza que los registros de la Jornada 29 (la más reciente) lleguen primero
       const [
         jornadasRes,
         jornadaActivaRes,
@@ -84,9 +84,21 @@ export default function AdminDashboard() {
         supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
         supabase.from("profiles").select("*", { count: "exact", head: true }),
         supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor"),
-        supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico").range(0, 400000),
-        supabase.from("survivor").select("jornada_id, usuario_id, equipo").range(0, 400000),
-        supabase.from("partidos").select("id, jornada_id, local, visitante, resultado").range(0, 400000)
+        
+        supabase.from("quinielas")
+          .select("jornada_id, usuario_id, partido_id, pronostico", { count: "exact" })
+          .order("id", { ascending: false }) 
+          .range(0, 5000),
+          
+        supabase.from("survivor")
+          .select("jornada_id, usuario_id, equipo")
+          .order("id", { ascending: false })
+          .range(0, 5000),
+          
+        supabase.from("partidos")
+          .select("id, jornada_id, local, visitante, resultado")
+          .order("id", { ascending: false })
+          .range(0, 5000)
       ]);
 
       const jornadasData = jornadasRes.data || [];
@@ -120,7 +132,10 @@ export default function AdminDashboard() {
 
       const t1 = performance.now();
       console.log(`⚡ Dashboard cargado en ${Math.round(t1 - t0)}ms`);
-      console.log(`📊 Total real de quinielas cargadas: ${todasQuinielas.length}`);
+      
+      // Logs de verificación final para confirmar que el límite ya no es un problema
+      console.log("🔍 Total de filas que dice Supabase que existen:", quinielasRes.count);
+      console.log("🔍 Total de filas que REALMENTE llegaron al navegador:", todasQuinielas.length);
 
     } catch (error) {
       console.error("Error cargando dashboard:", error);
@@ -269,7 +284,6 @@ export default function AdminDashboard() {
       quinielasActivas = quinielasActivaSet.size;
 
       console.log("🔍 Debug - Jornada activa ID:", idJornadaActiva);
-      console.log("🔍 Debug - Quinielas totales en BD:", todasQuinielas.length);
       console.log("🔍 Debug - Quinielas filtradas para jornada activa:", quinielasDeJornadaActiva.length);
       console.log("🔍 Debug - Usuarios únicos en jornada activa:", quinielasActivaSet.size);
 
