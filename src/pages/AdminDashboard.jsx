@@ -50,10 +50,12 @@ export default function AdminDashboard() {
     window.location.replace("/");
   };
 
+  // Función robusta para identificar al admin
   const esAdmin = (p) => {
+    const rol = (p.rol || "").toLowerCase();
     const email = (p.email || "").toLowerCase();
     const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
-    return email.includes("admin") || nombre.includes("admin") || email.includes("root");
+    return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
   };
 
   //---------------------------------------
@@ -124,7 +126,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO OPTIMIZADO Y CON DEPURACIÓN
+  // PROCESAMIENTO OPTIMIZADO Y CORREGIDO
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -191,7 +193,7 @@ export default function AdminDashboard() {
             }
           });
         } else if (esPasadaYCerrada && reg.vidas < 3) {
-          reg.vidas++;
+          reg.vidas++; // Esto solo afecta al cálculo de Survivor
         }
 
         // --- SURVIVOR ---
@@ -229,7 +231,7 @@ export default function AdminDashboard() {
       };
     });
 
-    // === AUSENTES CON MOTIVO EXPLICATIVO (NUEVA LÓGICA) ===
+    // === AUSENTES CON MOTIVO EXPLICATIVO (LÓGICA SEPARADA Y CORREGIDA) ===
     let ausentesQuiniela = [];
     let ausentesSurvivor = [];
     let quinielasActivas = 0;
@@ -246,33 +248,34 @@ export default function AdminDashboard() {
       
       quinielasActivas = quinielasActivaSet.size;
 
-      // 1. AUSENTES QUINIELA: Mostramos a TODOS los que no enviaron, pero con un motivo
+      // 1. AUSENTES QUINIELA: SIN concepto de "vidas" o "eliminados"
       ausentesQuiniela = perfilesData
         .filter(p => {
-          if (esAdmin(p)) return false;
+          if (esAdmin(p)) return false; // Filtro estricto de administrador
           const reg = acumulado[p.id];
           if (!reg) return false;
-          return !quinielasActivaSet.has(p.id); // No envió en esta jornada
+          return !quinielasActivaSet.has(p.id); // Solo los que NO enviaron en esta jornada
         })
         .map(p => {
           const reg = acumulado[p.id];
           let motivo = "Falta en jornada actual";
           let tipo = "normal";
           
-          if (reg.vidas >= 3) {
-            motivo = "Eliminado (3 vidas)";
-            tipo = "eliminado";
-          } else {
-            const jornadasFaltadas = jornadasHastaActiva - reg.quinielasEnviadas;
-            if (jornadasFaltadas > 1) {
-              motivo = `Inactivo (faltó ${jornadasFaltadas} jornadas)`;
-              tipo = "inactivo";
-            }
+          // En quiniela, evaluamos inactividad por falta de envíos históricos
+          const jornadasFaltadas = jornadasHastaActiva - reg.quinielasEnviadas;
+          
+          if (reg.quinielasEnviadas === 0 && reg.survivorEnviados > 0) {
+            motivo = "Solo juega Survivor";
+            tipo = "solo-survivor";
+          } else if (jornadasFaltadas > 1) {
+            motivo = `Inactivo (faltó ${jornadasFaltadas} jornadas)`;
+            tipo = "inactivo";
           }
+          
           return { ...p, motivo, tipo };
         });
 
-      // 2. AUSENTES SURVIVOR: Mostramos a TODOS los que no enviaron, con motivo
+      // 2. AUSENTES SURVIVOR: Aquí SÍ aplican las vidas
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
@@ -289,6 +292,7 @@ export default function AdminDashboard() {
             motivo = "Eliminado (3 vidas)";
             tipo = "eliminado";
           }
+          
           return { ...p, motivo, tipo };
         });
 
@@ -298,8 +302,10 @@ export default function AdminDashboard() {
           const reg = acumulado[p.id] || {};
           return {
             Usuario: p.nombre_usuario || p.email,
-            Vidas: reg.vidas || 0,
+            Rol: p.rol || "usuario",
+            VidasSurvivor: reg.vidas || 0,
             QuinielasEnviadas: reg.quinielasEnviadas || 0,
+            SurvivorEnviados: reg.survivorEnviados || 0,
             FaltaQuinielaHoy: !quinielasActivaSet.has(p.id) ? "SÍ" : "NO",
             FaltaSurvivorHoy: !survivorActivaSet.has(p.id) ? "SÍ" : "NO"
           };
@@ -593,9 +599,8 @@ export default function AdminDashboard() {
                         <span className="text-red-600 font-bold">•</span>
                         <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
                       </div>
-                      {/* BADGE DE MOTIVO */}
                       <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                        p.tipo === 'eliminado' ? 'bg-red-100 text-red-700' : 
+                        p.tipo === 'solo-survivor' ? 'bg-purple-100 text-purple-700' : 
                         p.tipo === 'inactivo' ? 'bg-gray-200 text-gray-700' : 
                         'bg-yellow-100 text-yellow-800'
                       }`}>
@@ -629,7 +634,6 @@ export default function AdminDashboard() {
                         <span className="text-orange-600 font-bold">•</span>
                         <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
                       </div>
-                      {/* BADGE DE MOTIVO */}
                       <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
                         p.tipo === 'eliminado' ? 'bg-red-100 text-red-700' : 
                         'bg-yellow-100 text-yellow-800'
