@@ -57,6 +57,9 @@ export default function AdminDashboard() {
     return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
   };
 
+  //---------------------------------------
+  // CARGA OPTIMIZADA DEL DASHBOARD
+  //---------------------------------------
   const cargarDashboard = async () => {
     setCargando(true);
     const t0 = performance.now();
@@ -64,6 +67,7 @@ export default function AdminDashboard() {
     try {
       const ahora = await obtenerHoraMexico();
 
+      // ✅ CORRECCIÓN: Agregamos .range(0, 10000) para evitar el límite de 1000 filas de Supabase
       const [
         jornadasRes,
         jornadaActivaRes,
@@ -77,9 +81,9 @@ export default function AdminDashboard() {
         supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
         supabase.from("profiles").select("*", { count: "exact", head: true }),
         supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor"),
-        supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico"),
-        supabase.from("survivor").select("jornada_id, usuario_id, equipo"),
-        supabase.from("partidos").select("id, jornada_id, local, visitante, resultado")
+        supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico").range(0, 10000),
+        supabase.from("survivor").select("jornada_id, usuario_id, equipo").range(0, 10000),
+        supabase.from("partidos").select("id, jornada_id, local, visitante, resultado").range(0, 10000)
       ]);
 
       const jornadasData = jornadasRes.data || [];
@@ -113,6 +117,7 @@ export default function AdminDashboard() {
 
       const t1 = performance.now();
       console.log(`⚡ Dashboard cargado en ${Math.round(t1 - t0)}ms`);
+      console.log(`📊 Total real de quinielas cargadas: ${todasQuinielas.length}`);
 
     } catch (error) {
       console.error("Error cargando dashboard:", error);
@@ -121,6 +126,9 @@ export default function AdminDashboard() {
     }
   };
 
+  //---------------------------------------
+  // PROCESAMIENTO DE DATOS
+  //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
     perfilesData,
@@ -175,7 +183,6 @@ export default function AdminDashboard() {
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
-      // ✅ CORRECCIÓN: Filtrar por ID de Supabase (no por número secuencial)
       const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId));
       const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
       const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
@@ -250,7 +257,6 @@ export default function AdminDashboard() {
       const jornadaActivaSecNum = jornadasSecuenciales.find(j => j.idSupabase === idJornadaActiva)?.numero;
       const jornadasHastaActiva = jornadaActivaSecNum || 0;
       
-      // ✅ CORRECCIÓN: Filtrar por ID de Supabase de la jornada activa
       const quinielasDeJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva));
       const quinielasActivaSet = new Set(quinielasDeJornadaActiva.map(q => q.usuario_id));
       
@@ -259,10 +265,10 @@ export default function AdminDashboard() {
       
       quinielasActivas = quinielasActivaSet.size;
 
-      console.log(" Debug - Jornada activa ID:", idJornadaActiva);
-      console.log("🔍 Debug - Jornada activa SecNum:", jornadaActivaSecNum);
-      console.log("🔍 Debug - Quinielas filtradas por ID:", quinielasDeJornadaActiva.length);
-      console.log(" Debug - Usuarios únicos:", quinielasActivaSet.size);
+      console.log("🔍 Debug - Jornada activa ID:", idJornadaActiva);
+      console.log("🔍 Debug - Quinielas totales en BD:", todasQuinielas.length);
+      console.log("🔍 Debug - Quinielas filtradas para jornada activa:", quinielasDeJornadaActiva.length);
+      console.log("🔍 Debug - Usuarios únicos en jornada activa:", quinielasActivaSet.size);
 
       ausentesQuiniela = perfilesData
         .filter(p => {
@@ -278,12 +284,10 @@ export default function AdminDashboard() {
           let tipo = "normal";
           
           const jornadasFaltadas = jornadasHastaActiva - reg.quinielasEnviadas;
-          
           if (jornadasFaltadas > 1) {
             motivo = `Inactivo (faltó ${jornadasFaltadas} jornadas)`;
             tipo = "inactivo";
           }
-          
           return { ...p, motivo, tipo };
         });
 
@@ -298,30 +302,12 @@ export default function AdminDashboard() {
           const reg = acumulado[p.id];
           let motivo = "Falta en jornada actual";
           let tipo = "normal";
-          
           if (reg.vidas >= 3) {
             motivo = "Eliminado (3 vidas)";
             tipo = "eliminado";
           }
-          
           return { ...p, motivo, tipo };
         });
-
-      console.table(
-        perfilesData.filter(p => !esAdmin(p)).map(p => {
-          const reg = acumulado[p.id] || {};
-          return {
-            Usuario: p.nombre_usuario || p.email,
-            SoloSurvivor: p.solo_survivor === true ? "SÍ" : "NO",
-            JuegaSurvivor: usuariosQueJueganSurvivor.has(p.id) ? "SÍ" : "NO",
-            VidasSurvivor: reg.vidas || 0,
-            QuinielasEnviadas: reg.quinielasEnviadas || 0,
-            SurvivorEnviados: reg.survivorEnviados || 0,
-            EnQuinielaActiva: quinielasActivaSet.has(p.id) ? "SÍ" : "NO",
-            EnSurvivorActivo: survivorActivaSet.has(p.id) ? "SÍ" : "NO"
-          };
-        })
-      );
     }
 
     return {
@@ -338,6 +324,9 @@ export default function AdminDashboard() {
     return p.nombre_usuario || p.nombre || (p.email ? p.email.split('@')[0] : 'Usuario');
   };
 
+  //---------------------------------------
+  // EXPORTAR A IMAGEN (JPEG)
+  //---------------------------------------
   const exportarImagen = async () => {
     try {
       const contenedorTemp = document.createElement('div');
@@ -373,13 +362,11 @@ export default function AdminDashboard() {
       jornadasSecuenciales.forEach(jornadaSec => {
         encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 50px;">${jornadaSec.nombre}</th>`;
       });
-      
       encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db; font-weight: bold;">TOTAL</th></tr>`;
       thead.innerHTML = encabezadosHTML;
       tabla.appendChild(thead);
 
       const tbody = document.createElement('tbody');
-      
       rankingQuinielas.forEach((fila, index) => {
         let bgColor = '#ffffff';
         if (fila.vidas >= 3) bgColor = '#ef4444';
@@ -398,7 +385,6 @@ export default function AdminDashboard() {
           const aciertos = fila.aciertosPorJornada[jornadaSec.numero] || 0;
           filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center;">${aciertos}</td>`;
         });
-        
         filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${fila.totalAciertos}</td></tr>`;
         tr.innerHTML = filaHTML;
         tbody.appendChild(tr);
@@ -432,6 +418,9 @@ export default function AdminDashboard() {
     }
   };
 
+  //---------------------------------------
+  // EXPORTAR PDF
+  //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
       alert("Selecciona una jornada.");
@@ -502,6 +491,9 @@ export default function AdminDashboard() {
     doc.save(`Quinielas_${jornadaActivaPDF?.nombre || 'Jornada'}.pdf`);
   };
 
+  //---------------------------------------
+  // INTERFAZ
+  //---------------------------------------
   if (cargando) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
