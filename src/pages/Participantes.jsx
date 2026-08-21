@@ -6,26 +6,35 @@ export default function Participantes() {
   const [busqueda, setBusqueda] = useState("");
   const [seleccionados, setSeleccionados] = useState([]);
   const [cargando, setCargando] = useState(false);
+  const [totalEnBD, setTotalEnBD] = useState(null); // Nuevo: para mostrar el total real
 
   useEffect(() => {
     cargarParticipantes();
   }, []);
 
   const cargarParticipantes = async () => {
-    const { data, error } = await supabase
+    console.log("🔄 Cargando participantes...");
+    
+    // Consulta con count exacto para saber cuántos hay realmente
+    const { data, error, count } = await supabase
       .from("profiles")
-      .select("id, nombre_usuario, nombre_completo, email, telefono, banco, clabe, rol, solo_survivor")
+      .select("id, nombre_usuario, nombre_completo, email, telefono, banco, clabe, rol, solo_survivor", { count: "exact" })
       .order("nombre_usuario", { ascending: true });
 
     if (error) {
-      console.error("Error al cargar participantes:", error);
-      alert("Error al cargar datos: " + error.message);
+      console.error("❌ Error:", error);
+      alert("Error al cargar: " + error.message);
       return;
     }
 
+    console.log(" Total según Supabase (count):", count);
+    console.log("📋 Registros recibidos:", data?.length);
+    
+    setTotalEnBD(count); // Guardamos el total real
+
     const datosLimpios = (data || []).map(p => ({
       ...p,
-      solo_survivor: p.solo_survivor === true, // Asegura que sea booleano estricto
+      solo_survivor: p.solo_survivor === true,
       modificado: false
     }));
 
@@ -42,65 +51,48 @@ export default function Participantes() {
 
   const toggleSoloSurvivor = (userId) => {
     setParticipantes(prev => 
-      prev.map(p => {
-        if (p.id === userId) {
-          return { ...p, solo_survivor: !p.solo_survivor, modificado: true };
-        }
-        return p;
-      })
+      prev.map(p => p.id === userId ? { ...p, solo_survivor: !p.solo_survivor, modificado: true } : p)
     );
   };
 
   const guardarModosDeJuego = async () => {
     const usuariosAModificar = participantes.filter(p => p.modificado);
-    
     if (usuariosAModificar.length === 0) {
-      alert("No hay cambios pendientes por guardar.");
+      alert("No hay cambios pendientes.");
       return;
     }
-
-    if (!window.confirm(`¿Estás seguro de guardar los cambios de modo de juego para ${usuariosAModificar.length} usuario(s)?`)) {
-      return;
-    }
+    if (!window.confirm(`¿Guardar cambios para ${usuariosAModificar.length} usuario(s)?`)) return;
 
     setCargando(true);
-    let exitos = 0;
-    let fallos = 0;
-    let ultimoError = "";
+    let exitos = 0, fallos = 0, ultimoError = "";
 
     for (const usuario of usuariosAModificar) {
-      console.log(`Intentando actualizar usuario: ${usuario.nombre_usuario} a solo_survivor: ${usuario.solo_survivor}`);
-      
       const { data, error } = await supabase
         .from("profiles")
         .update({ solo_survivor: usuario.solo_survivor })
         .eq("id", usuario.id)
         .select();
 
-      // DETECCIÓN DE BLOQUEO POR RLS (Permisos)
       if (error) {
-        console.error("❌ Error de base de datos:", usuario.nombre_usuario, error);
+        console.error("❌ Error:", usuario.nombre_usuario, error);
         ultimoError = error.message;
         fallos++;
       } else if (!data || data.length === 0) {
-        // Si no hay error pero data está vacío, Supabase bloqueó la actualización por RLS
-        console.warn("⚠️ Bloqueado por RLS (Permisos):", usuario.nombre_usuario);
-        ultimoError = "Permisos insuficientes (RLS). Supabase bloqueó la actualización. Ejecuta el SQL de permisos en Supabase.";
+        console.warn("️ RLS bloqueó:", usuario.nombre_usuario);
+        ultimoError = "Permisos RLS insuficientes";
         fallos++;
       } else {
-        console.log("✅ Actualizado correctamente:", data);
         exitos++;
       }
     }
 
     setCargando(false);
-
     if (fallos === 0) {
-      alert(`✅ ${exitos} cambio(s) guardado(s) correctamente en la base de datos.`);
+      alert(`✅ ${exitos} cambio(s) guardado(s).`);
       setParticipantes(prev => prev.map(p => ({ ...p, modificado: false })));
     } else {
-      alert(`️ ERROR AL GUARDAR:\n${ultimoError}\n\nSe procesaron ${exitos} éxitos y ${fallos} fallos.`);
-      await cargarParticipantes(); // Recarga para deshacer cambios visuales fallidos
+      alert(`⚠️ ${exitos} éxitos, ${fallos} fallos.\nError: ${ultimoError}`);
+      await cargarParticipantes();
     }
   };
 
@@ -109,12 +101,9 @@ export default function Participantes() {
       alert("Selecciona al menos un usuario");
       return;
     }
-
-    const confirmar = window.confirm(`¿Deseas eliminar completamente ${seleccionados.length} usuario(s)?`);
-    if (!confirmar) return;
+    if (!window.confirm(`¿Eliminar ${seleccionados.length} usuario(s)?`)) return;
 
     setCargando(true);
-
     for (const userId of seleccionados) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -129,15 +118,14 @@ export default function Participantes() {
             body: JSON.stringify({ userId }),
           }
         );
-
         const resultado = await response.json();
         if (!response.ok) {
-          alert(resultado.error || "Error eliminando usuario de Authentication");
+          alert(resultado.error || "Error eliminando usuario");
           setCargando(false);
           return;
         }
       } catch (error) {
-        console.error("Error eliminando auth user:", error);
+        console.error(error);
         alert("No fue posible conectar con la Edge Function.");
         setCargando(false);
         return;
@@ -155,7 +143,7 @@ export default function Participantes() {
       return;
     }
 
-    alert("Usuarios eliminados completamente");
+    alert("Usuarios eliminados");
     setSeleccionados([]);
     await cargarParticipantes();
     setCargando(false);
@@ -176,6 +164,19 @@ export default function Participantes() {
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">👥 Participantes</h1>
 
+      {/* NUEVO: Aviso si hay diferencia entre BD y lo que se muestra */}
+      {totalEnBD !== null && totalEnBD !== participantes.length && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4 rounded">
+          <p className="text-yellow-800 font-semibold">
+            ⚠️ Hay {totalEnBD} usuarios en la base de datos, pero solo se muestran {participantes.length}.
+          </p>
+          <p className="text-yellow-700 text-sm mt-1">
+            Posibles causas: (1) Usuarios en auth.users sin perfil en profiles, o (2) Políticas RLS filtrando registros.
+            Revisa la consola (F12) y ejecuta el SQL de sincronización en Supabase.
+          </p>
+        </div>
+      )}
+
       <input
         type="text"
         placeholder="Buscar participante..."
@@ -186,42 +187,45 @@ export default function Participantes() {
 
       <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <div>
-          Total participantes: <strong>{participantesFiltrados.length}</strong>
-          {hayCambiosPendientes ? (
+          Mostrando: <strong>{participantesFiltrados.length}</strong>
+          {totalEnBD !== null && (
+            <span className="text-sm text-gray-500 ml-2">(Total en BD: {totalEnBD})</span>
+          )}
+          {hayCambiosPendientes && (
             <span className="ml-3 text-sm text-blue-600 font-semibold animate-pulse">
               ✅ Hay cambios sin guardar
-            </span>
-          ) : (
-            <span className="ml-3 text-sm text-gray-500 italic">
-              (Marca un checkbox de "Solo Survivor" para activar el botón de guardar)
             </span>
           )}
         </div>
 
         <div className="flex gap-2">
           <button
+            onClick={cargarParticipantes}
+            className="px-4 py-2 rounded bg-gray-500 hover:bg-gray-600 text-white font-semibold transition"
+          >
+            🔄 Recargar
+          </button>
+          <button
             onClick={guardarModosDeJuego}
             disabled={cargando || !hayCambiosPendientes}
-            className={`px-4 py-2 rounded transition flex items-center gap-2 font-semibold ${
+            className={`px-4 py-2 rounded transition font-semibold ${
               hayCambiosPendientes && !cargando
-                ? "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
+                ? "bg-blue-600 text-white hover:bg-blue-700"
                 : "bg-gray-400 text-gray-200 cursor-not-allowed"
             }`}
-            title={!hayCambiosPendientes ? "Primero marca al menos un checkbox de 'Solo Survivor'" : ""}
           >
-            {cargando ? "⏳ Guardando..." : " Guardar Cambios de Modo"}
+            {cargando ? " Guardando..." : "💾 Guardar Cambios de Modo"}
           </button>
-          
           <button
             onClick={eliminarUsuarios}
             disabled={cargando || seleccionados.length === 0}
             className={`px-4 py-2 rounded transition ${
               seleccionados.length > 0 && !cargando
-                ? "bg-red-600 text-white hover:bg-red-700 cursor-pointer"
+                ? "bg-red-600 text-white hover:bg-red-700"
                 : "bg-gray-400 text-gray-200 cursor-not-allowed"
             }`}
           >
-            {cargando ? "⏳ Procesando..." : "🗑️ Eliminar Seleccionados"}
+            {cargando ? " Procesando..." : "🗑️ Eliminar Seleccionados"}
           </button>
         </div>
       </div>
@@ -241,7 +245,6 @@ export default function Participantes() {
               <th className="p-3 text-left">Rol</th>
             </tr>
           </thead>
-
           <tbody>
             {participantesFiltrados.map((participante) => (
               <tr 
@@ -258,7 +261,6 @@ export default function Participantes() {
                     />
                   )}
                 </td>
-                
                 <td className="p-3 text-center">
                   <label className="inline-flex items-center cursor-pointer">
                     <input
@@ -272,7 +274,6 @@ export default function Participantes() {
                     </span>
                   </label>
                 </td>
-
                 <td className="p-3">{participante.nombre_usuario || "-"}</td>
                 <td className="p-3">{participante.nombre_completo || "-"}</td>
                 <td className="p-3">{participante.email}</td>
@@ -288,16 +289,6 @@ export default function Participantes() {
             ))}
           </tbody>
         </table>
-      </div>
-      
-      <div className="mt-4 text-sm text-gray-600 bg-blue-50 p-4 rounded border border-blue-200">
-        <strong> Instrucciones:</strong> 
-        <ol className="list-decimal list-inside mt-2 space-y-1">
-          <li>Marca o desmarca la casilla <strong>"Solo Survivor"</strong> en los participantes deseados.</li>
-          <li>La fila se marcará en <strong>azul</strong> y aparecerá <strong>"✏️ (Modificado)"</strong>.</li>
-          <li>El botón <strong>"💾 Guardar Cambios de Modo"</strong> se activará automáticamente.</li>
-          <li>Haz clic en el botón para guardar los cambios en la base de datos.</li>
-        </ol>
       </div>
     </div>
   );
