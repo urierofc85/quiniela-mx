@@ -447,7 +447,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR PDF
+  // EXPORTAR PDF (DISEÑO MEJORADO)
   //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
@@ -463,15 +463,20 @@ export default function AdminDashboard() {
     const { data: quinielasData } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico").eq("jornada_id", jornadaSeleccionada);
     const { data: perfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, nombre_completo");
 
+    // Obtener usuarios únicos que enviaron quiniela (evita duplicados en columnas)
     const usuarios = [...new Set(quinielasData?.map(q => q.usuario_id) || [])];
+    
+    // Crear encabezados con nombres de usuario limpios
     const columnas = ["Partido", "Resultado", ...usuarios.map(usuarioId => {
       const perfil = perfiles?.find(p => p.id === usuarioId);
       return perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
     })];
 
+    // Calcular aciertos por usuario
     const aciertos = {};
     usuarios.forEach(usuarioId => { aciertos[usuarioId] = 0; });
 
+    // Construir filas de datos
     const filas = (partidos || []).map(partido => {
       const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
       usuarios.forEach(usuarioId => {
@@ -486,34 +491,91 @@ export default function AdminDashboard() {
       return fila;
     });
 
+    // Agregar fila de totales
     const filaTotales = ["TOTAL", "", ...usuarios.map(usuarioId => aciertos[usuarioId])];
     filas.push(filaTotales);
 
+    // Crear documento PDF en orientación horizontal
     const doc = new jsPDF("landscape");
-    doc.setFontSize(18);
+    
+    // Título principal con estilo mejorado
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(34, 197, 94); // Verde vibrante
     doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 15);
+    
+    // Subtítulo con fecha
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')}`, 14, 22);
+
+    // Configuración de colores para columnas alternas (facilita la lectura horizontal)
+    const coloresColumnas = [
+      [248, 250, 252], // Gris muy claro
+      [241, 245, 249], // Gris claro
+      [255, 255, 255], // Blanco
+      [248, 250, 252], // Gris muy claro
+      [255, 255, 255], // Blanco
+    ];
 
     autoTable(doc, {
       head: [columnas],
       body: filas,
-      startY: 22,
+      startY: 28,
       theme: "grid",
-      styles: { fontSize: 8, halign: "center", valign: "middle" },
-      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: "bold" },
+      styles: { 
+        fontSize: 7.5, 
+        halign: "center", 
+        valign: "middle",
+        cellPadding: 2.5,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1,
+      },
+      headStyles: { 
+        fillColor: [34, 197, 94], // Verde vibrante
+        textColor: [255, 255, 255], 
+        fontStyle: "bold",
+        fontSize: 8,
+        halign: "center",
+        cellPadding: 3,
+      },
+      columnStyles: {
+        0: { halign: "left", fontStyle: "bold", fillColor: [248, 250, 252] }, // Columna Partido
+        1: { halign: "center", fontStyle: "bold", fillColor: [241, 245, 249] }, // Columna Resultado
+      },
       didParseCell: (data) => {
+        // Fila de totales con estilo especial
         if (data.section === "body" && data.row.index === filas.length - 1) {
-          data.cell.styles.fillColor = [230, 230, 230];
+          data.cell.styles.fillColor = [220, 252, 231]; // Verde muy claro
           data.cell.styles.fontStyle = "bold";
+          data.cell.styles.textColor = [22, 101, 52]; // Verde oscuro
+          data.cell.styles.fontSize = 8.5;
           return;
         }
-        if (data.section !== "body" || data.column.index < 2) return;
-        const fila = filas[data.row.index];
-        if (!fila) return;
-        if (fila[1] !== "-" && fila[1] !== null && data.cell.raw === fila[1]) {
-          data.cell.styles.textColor = [22, 163, 74];
-          data.cell.styles.fontStyle = "bold";
+        
+        // Columnas de usuarios con colores alternos para facilitar la lectura
+        if (data.section === "body" && data.column.index >= 2) {
+          const colIndex = data.column.index - 2;
+          const colorIndex = colIndex % coloresColumnas.length;
+          data.cell.styles.fillColor = coloresColumnas[colorIndex];
+        }
+        
+        // Resaltar aciertos en verde
+        if (data.section === "body" && data.column.index >= 2) {
+          const fila = filas[data.row.index];
+          if (!fila) return;
+          const resultado = fila[1];
+          const pronostico = data.cell.raw;
+          
+          if (resultado && resultado !== "-" && pronostico === resultado) {
+            data.cell.styles.textColor = [22, 163, 74]; // Verde
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fillColor = [240, 253, 244]; // Verde muy claro de fondo
+          }
         }
       },
+      margin: { top: 28, left: 10, right: 10 },
     });
 
     doc.save(`Quinielas_${jornadaActivaPDF?.nombre || 'Jornada'}.pdf`);
