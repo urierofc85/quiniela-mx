@@ -446,7 +446,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR PDF (DISEÑO COMPACTO EN UNA SOLA HOJA)
+  // EXPORTAR PDF (NOMBRES ROTADOS Y LEGIBLES)
   //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
@@ -464,11 +464,10 @@ export default function AdminDashboard() {
 
     const usuarios = [...new Set(quinielasData?.map(q => q.usuario_id) || [])];
     
-    // Truncar nombres largos para asegurar que las ~24 columnas quepan en una sola hoja horizontal sin romper palabras
+    // Nombres completos sin truncar (se leerán rotados 90°)
     const columnas = ["Partido", "Resultado", ...usuarios.map(usuarioId => {
       const perfil = perfiles?.find(p => p.id === usuarioId);
-      let nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
-      return nombre.length > 10 ? nombre.substring(0, 8) + ".." : nombre;
+      return perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
     })];
 
     const aciertos = {};
@@ -491,14 +490,15 @@ export default function AdminDashboard() {
     const filaTotales = ["TOTAL", "", ...usuarios.map(usuarioId => aciertos[usuarioId])];
     filas.push(filaTotales);
 
-    // Orientación horizontal (landscape) para maximizar el espacio
     const doc = new jsPDF("landscape", "mm", "a4");
     
+    // Título
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(34, 197, 94);
     doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 15);
     
+    // Subtítulo
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
@@ -510,10 +510,10 @@ export default function AdminDashboard() {
       startY: 26,
       theme: "grid",
       styles: { 
-        fontSize: 7, // Tamaño compacto para garantizar una sola hoja
+        fontSize: 7,
         halign: "center", 
         valign: "middle",
-        cellPadding: 1.5, // Padding reducido para ahorrar espacio vertical
+        cellPadding: 1.5,
         lineColor: [200, 200, 200],
         lineWidth: 0.1,
       },
@@ -521,18 +521,44 @@ export default function AdminDashboard() {
         fillColor: [34, 197, 94], 
         textColor: [255, 255, 255], 
         fontStyle: "bold",
-        fontSize: 7.5,
+        fontSize: 6.5,
         halign: "center",
-        cellPadding: 2,
+        cellPadding: 1.5,
+        minCellHeight: 28,
       },
       columnStyles: {
-        // Columna 0: Ancho fijo de 55mm y alineación a la izquierda para que los partidos sean 100% legibles (sin cortes como "Partid o")
-        0: { halign: "left", fontStyle: "bold", fontSize: 8, cellWidth: 55 }, 
-        // Columna 1: Resultado
-        1: { halign: "center", fontStyle: "bold", fontSize: 8, cellWidth: 15 },
+        0: { halign: "left", fontStyle: "bold", fontSize: 7.5, cellWidth: 45 }, 
+        1: { halign: "center", fontStyle: "bold", fontSize: 7.5, cellWidth: 14 },
+      },
+      didDrawCell: (data) => {
+        // Rotar los encabezados de usuarios 90 grados para que se lean de abajo hacia arriba
+        if (data.section === "head" && data.column.index >= 2) {
+          const text = data.cell.text[0];
+          const x = data.cell.x + data.cell.width / 2;
+          const y = data.cell.y + data.cell.height - 2;
+          
+          doc.saveGraphicsState();
+          
+          const angle = Math.PI / 2;
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          
+          doc.setFillColor(34, 197, 94);
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(6.5);
+          doc.setFont("helvetica", "bold");
+          
+          doc.setLineHeightFactor(1);
+          const matrix = [cos, sin, -sin, cos, x, y];
+          doc.setCurrentTransformationMatrix(new doc.GState({ matrix }));
+          
+          doc.text(text, 0, 0, { align: "left", baseline: "middle" });
+          
+          doc.restoreGraphicsState();
+        }
       },
       didParseCell: (data) => {
-        // Estilo especial para la fila de totales
+        // Fila de totales con estilo especial
         if (data.section === "body" && data.row.index === filas.length - 1) {
           data.cell.styles.fillColor = [220, 252, 231];
           data.cell.styles.fontStyle = "bold";
@@ -549,9 +575,9 @@ export default function AdminDashboard() {
           const pronostico = data.cell.raw;
           
           if (resultado && resultado !== "-" && pronostico === resultado) {
-            data.cell.styles.textColor = [0, 128, 0]; // Verde fuerte y oscuro
+            data.cell.styles.textColor = [0, 128, 0];
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fillColor = [220, 252, 231]; // Fondo verde muy claro para que resalte
+            data.cell.styles.fillColor = [220, 252, 231];
           }
         }
       },
