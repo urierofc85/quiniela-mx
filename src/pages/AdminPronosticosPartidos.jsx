@@ -66,32 +66,115 @@ export default function AdminPronosticosPartidos() {
         return;
       }
 
-      // 1. Crear mapa de equipos
+      // 1. Crear mapa de equipos (clave normalizada -> equipo completo)
       const mapaEquipos = {};
       equiposData.forEach((equipo) => { 
         mapaEquipos[normalizar(equipo.equipo)] = equipo; 
       });
 
-      // 2. 🆕 Diccionario de aliases EXPANDIDO para la Liga MX
+      // 2. 🆕 Diccionario de aliases CORREGIDO según los nombres reales de tu BD
       const alias = { 
-        guadalajara: "chivas",
-        "chivas rayadas del guadalajara": "chivas",
-        "tigres uanl": "tigres",
-        "tigres": "tigres",
-        "cruz azul": "cruz azul",
-        "club cruz azul": "cruz azul",
+        // San Luis (tu BD: "San Luis")
+        "san luis": "san luis",
+        "atletico san luis": "san luis",
+        "atlético de san luis": "san luis",
+        "atlético san luis": "san luis",
+        "club atletico san luis": "san luis",
+        
+        // Santos (tu BD: "Santos")
+        "santos": "santos",
         "santos laguna": "santos",
         "club santos laguna": "santos",
-        "club necaxa": "necaxa",
+        
+        // Necaxa (tu BD: "Necaxa")
         "necaxa": "necaxa",
+        "club necaxa": "necaxa",
+        
+        // Chivas / Guadalajara
+        guadalajara: "chivas",
+        "chivas rayadas del guadalajara": "chivas",
+        "cd guadalajara": "chivas",
+        chivas: "chivas",
+        
+        // Tigres
+        "tigres uanl": "tigres",
+        tigres: "tigres",
+        
+        // Cruz Azul
+        "cruz azul": "cruz azul",
+        "cd cruz azul": "cruz azul",
+        "club cruz azul": "cruz azul",
+        cruzazul: "cruz azul",
+        
+        // Juárez
         "fc juarez": "juarez",
         "fc juárez": "juarez",
-        "atletico san luis": "atletico san luis",
-        "san luis": "atletico san luis",
+        juarez: "juarez",
+        "juárez": "juarez",
+        
+        // América
         "club america": "america",
-        "america": "america",
+        "club américa": "america",
+        "cf america": "america",
+        "cf américa": "america",
+        america: "america",
+        
+        // Pumas
         "pumas unam": "pumas",
-        "unam pumas": "pumas"
+        "unam pumas": "pumas",
+        pumas: "pumas",
+        
+        // Monterrey
+        "cf monterrey": "monterrey",
+        monterrey: "monterrey",
+        rayados: "monterrey",
+        
+        // Toluca
+        "deportivo toluca": "toluca",
+        "deportivo toluca fc": "toluca",
+        toluca: "toluca",
+        
+        // León
+        "club leon": "leon",
+        "club león": "leon",
+        "club leon fc": "leon",
+        leon: "leon",
+        "león": "leon",
+        
+        // Pachuca
+        "cf pachuca": "pachuca",
+        pachuca: "pachuca",
+        tuzos: "pachuca",
+        
+        // Tijuana
+        "club tijuana": "tijuana",
+        tijuana: "tijuana",
+        xolos: "tijuana",
+        
+        // Atlas
+        "atlas guadalajara": "atlas",
+        "club atlas": "atlas",
+        atlas: "atlas",
+        
+        // Querétaro
+        "queretaro fc": "queretaro",
+        "querétaro fc": "queretaro",
+        queretaro: "queretaro",
+        "querétaro": "queretaro",
+        
+        // Puebla
+        "club puebla": "puebla",
+        puebla: "puebla",
+        
+        // Mazatlán
+        "mazatlan fc": "mazatlan",
+        "mazatlán fc": "mazatlan",
+        mazatlan: "mazatlan",
+        "mazatlán": "mazatlan",
+        
+        // Atlante
+        "cf atlante": "atlante",
+        atlante: "atlante",
       };
 
       const obtenerEquipo = (nombre) => {
@@ -101,13 +184,12 @@ export default function AdminPronosticosPartidos() {
 
       let partidosProcesados = 0;
       const promesasActualizacion = [];
-      const equiposNoEncontrados = []; // 🆕 Para rastrear errores
+      const equiposNoEncontrados = [];
 
       for (const partido of partidosProximos) {
         const localEquipo = obtenerEquipo(partido.local);
         const visitaEquipo = obtenerEquipo(partido.visita);
 
-        // 🆕 Si no encuentra un equipo, lo guarda en la lista de errores
         if (!localEquipo || !visitaEquipo) {
           const faltantes = [];
           if (!localEquipo) faltantes.push(`Local: "${partido.local}"`);
@@ -180,9 +262,8 @@ export default function AdminPronosticosPartidos() {
       await Promise.all(promesasActualizacion);
       await cargarPartidos();
 
-      // 🆕 Alerta informativa si hubo equipos que no se pudieron procesar
       if (equiposNoEncontrados.length > 0) {
-        alert(`⚠️ Se generaron ${partidosProcesados} pronósticos, pero ${equiposNoEncontrados.length} partidos se omitieron porque no se encontraron los equipos en la base de datos:\n\n${equiposNoEncontrados.join('\n')}\n\n💡 Solución: Revisa que el nombre en "Partidos" sea idéntico al de "Equipos", o agrégalo al diccionario de alias.`);
+        alert(`⚠️ Se generaron ${partidosProcesados} pronósticos, pero ${equiposNoEncontrados.length} partidos se omitieron:\n\n${equiposNoEncontrados.join('\n')}`);
       } else {
         alert(`✅ Pronósticos generados correctamente para ${partidosProcesados} partidos.`);
       }
@@ -213,7 +294,7 @@ export default function AdminPronosticosPartidos() {
       return;
     }
 
-    if (!window.confirm(`¿Estás seguro de guardar los resultados de ${partidosPendientes.length} partidos? Esto actualizará las estadísticas de los equipos.`)) {
+    if (!window.confirm(`¿Estás seguro de guardar los resultados de ${partidosPendientes.length} partidos?`)) {
       return;
     }
 
@@ -221,13 +302,38 @@ export default function AdminPronosticosPartidos() {
       setGuardando(true);
 
       const { data: equiposData } = await supabase.from("pronosticos_equipos").select("*");
-      const mapaEquipos = new Map(equiposData.map(e => [e.equipo.toLowerCase(), e]));
-      const alias = { guadalajara: "chivas", "tigres uanl": "tigres", "cruz azul": "cruzazul" };
+      const mapaEquipos = new Map(equiposData.map(e => [normalizar(e.equipo), e]));
+      
+      // 🆕 Mismo diccionario de aliases para la función de guardar
+      const alias = { 
+        "san luis": "san luis",
+        "atletico san luis": "san luis",
+        "santos": "santos",
+        "santos laguna": "santos",
+        "necaxa": "necaxa",
+        "club necaxa": "necaxa",
+        guadalajara: "chivas",
+        "tigres uanl": "tigres",
+        "cruz azul": "cruz azul",
+        "fc juarez": "juarez",
+        "club america": "america",
+        "pumas unam": "pumas",
+        "cf monterrey": "monterrey",
+        "deportivo toluca": "toluca",
+        "club leon": "leon",
+        "cf pachuca": "pachuca",
+        "club tijuana": "tijuana",
+        "atlas guadalajara": "atlas",
+        "queretaro fc": "queretaro",
+        "club puebla": "puebla",
+        "mazatlan fc": "mazatlan",
+        "cf atlante": "atlante",
+      };
+
+      const normalizar = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
       const promesasPartidos = [];
       const cambiosEquipos = {};
-
-      const normalizar = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
       for (const partido of partidosPendientes) {
         const input = inputsResultados[partido.id];
@@ -245,7 +351,8 @@ export default function AdminPronosticosPartidos() {
           }).eq("id", partido.id)
         );
 
-        const nombreLocal = mapaEquipos.get(alias[normalizar(partido.local)] || normalizar(partido.local))?.equipo || partido.local;
+        const claveLocal = alias[normalizar(partido.local)] || normalizar(partido.local);
+        const nombreLocal = mapaEquipos.get(claveLocal)?.equipo || partido.local;
         if (!cambiosEquipos[nombreLocal]) cambiosEquipos[nombreLocal] = { partidos: 0, victorias: 0, empates: 0, derrotas: 0, puntos: 0, puntos_ultimos5: 0, goles_favor: 0, goles_contra: 0 };
         
         cambiosEquipos[nombreLocal].partidos += 1;
@@ -264,7 +371,8 @@ export default function AdminPronosticosPartidos() {
           cambiosEquipos[nombreLocal].derrotas += 1;
         }
 
-        const nombreVisita = mapaEquipos.get(alias[normalizar(partido.visita)] || normalizar(partido.visita))?.equipo || partido.visita;
+        const claveVisita = alias[normalizar(partido.visita)] || normalizar(partido.visita);
+        const nombreVisita = mapaEquipos.get(claveVisita)?.equipo || partido.visita;
         if (!cambiosEquipos[nombreVisita]) cambiosEquipos[nombreVisita] = { partidos: 0, victorias: 0, empates: 0, derrotas: 0, puntos: 0, puntos_ultimos5: 0, goles_favor: 0, goles_contra: 0 };
         
         cambiosEquipos[nombreVisita].partidos += 1;
@@ -314,7 +422,7 @@ export default function AdminPronosticosPartidos() {
         setTabActiva("proximos");
       }, 500);
 
-      alert(`✅ ¡Guardado exitoso!\n\n📊 Partidos procesados: ${partidosPendientes.length}\n🎯 Aciertos del sistema: ${aciertos}\n❌ Fallos del sistema: ${partidosPendientes.length - aciertos}\n\n💡 Recuerda ir a "Recalcular Ratings" para actualizar las formas.`);
+      alert(`✅ ¡Guardado exitoso!\n\n📊 Partidos procesados: ${partidosPendientes.length}\n🎯 Aciertos del sistema: ${aciertos}\n❌ Fallos del sistema: ${partidosPendientes.length - aciertos}`);
       
       setInputsResultados({});
     } catch (error) {
