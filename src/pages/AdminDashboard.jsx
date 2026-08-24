@@ -69,7 +69,6 @@ export default function AdminDashboard() {
     try {
       const ahora = await obtenerHoraMexico();
 
-      // Función auxiliar para obtener TODAS las filas, sin importar el límite de 1000 de Supabase
       const fetchAllRows = async (tableName, columns) => {
         let allData = [];
         let from = 0;
@@ -103,7 +102,6 @@ export default function AdminDashboard() {
         return allData;
       };
 
-      // 1. Consultas simples
       const [jornadasRes, jornadaActivaRes, participantesRes, perfilesRes] = await Promise.all([
         supabase.from("jornadas").select("id, nombre, activa, fecha_limite").order("id", { ascending: true }),
         supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
@@ -111,7 +109,6 @@ export default function AdminDashboard() {
         supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor")
       ]);
 
-      // 2. Consultas masivas usando la paginación automática
       const [todasQuinielas, todosSurvivor, todosPartidos] = await Promise.all([
         fetchAllRows("quinielas", "jornada_id, usuario_id, partido_id, pronostico"),
         fetchAllRows("survivor", "jornada_id, usuario_id, equipo"),
@@ -261,11 +258,12 @@ export default function AdminDashboard() {
       });
     });
 
+    // ✅ ORDENAMIENTO CORREGIDO: Prioriza estrictamente el Total de Aciertos descendente
     const rankingQuinielas = Object.values(acumulado)
       .filter(u => !u.soloSurvivor)
       .sort((a, b) => {
-        if (a.vidas !== b.vidas) return a.vidas - b.vidas;
         if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
+        if (a.vidas !== b.vidas) return a.vidas - b.vidas;
         return a.nombre.localeCompare(b.nombre);
       });
 
@@ -352,10 +350,19 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG)
+  // EXPORTAR A IMAGEN (JPEG) CON COLORES Y LÓGICA DE REZAGO
   //---------------------------------------
   const exportarImagen = async () => {
     try {
+      // 1. Asegurar que el ranking esté ordenado estrictamente por totalAciertos descendente
+      const rankingOrdenado = [...rankingQuinielas].sort((a, b) => {
+        if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
+        return a.nombre.localeCompare(b.nombre);
+      });
+
+      // 2. Obtener el puntaje del líder (1° lugar)
+      const liderScore = rankingOrdenado.length > 0 ? rankingOrdenado[0].totalAciertos : 0;
+
       const contenedorTemp = document.createElement('div');
       contenedorTemp.style.position = 'fixed';
       contenedorTemp.style.top = '0';
@@ -381,38 +388,71 @@ export default function AdminDashboard() {
 
       const thead = document.createElement('thead');
       let encabezadosHTML = `
-        <tr style="background-color: #e5e7eb;">
-          <th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 50px;">Pos</th>
-          <th style="border: 1px solid #9ca3af; padding: 8px; text-align: left; width: 150px;">Usuario</th>
+        <tr style="background-color: #16a34a; color: white;">
+          <th style="border: 1px solid #15803d; padding: 8px; text-align: center; width: 50px;">Pos</th>
+          <th style="border: 1px solid #15803d; padding: 8px; text-align: left; width: 150px;">Usuario</th>
       `;
 
       jornadasSecuenciales.forEach(jornadaSec => {
-        encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 50px;">${jornadaSec.nombre}</th>`;
+        encabezadosHTML += `<th style="border: 1px solid #15803d; padding: 8px; text-align: center; width: 50px;">${jornadaSec.nombre}</th>`;
       });
-      encabezadosHTML += `<th style="border: 1px solid #9ca3af; padding: 8px; text-align: center; width: 70px; background-color: #d1d5db; font-weight: bold;">TOTAL</th></tr>`;
+      encabezadosHTML += `<th style="border: 1px solid #15803d; padding: 8px; text-align: center; width: 70px; background-color: #15803d; font-weight: bold;">TOTAL</th></tr>`;
       thead.innerHTML = encabezadosHTML;
       tabla.appendChild(thead);
 
       const tbody = document.createElement('tbody');
-      rankingQuinielas.forEach((fila, index) => {
+      
+      rankingOrdenado.forEach((fila, index) => {
+        const pos = index + 1;
         let bgColor = '#ffffff';
-        if (fila.vidas >= 3) bgColor = '#ef4444';
-        else if (fila.vidas === 2) bgColor = '#fbbf24';
-        else if (index < 3) bgColor = '#22c55e';
+        let textColor = '#000000';
+        let fontWeight = 'normal';
+
+        // 🎨 Lógica de colores para los primeros 5 lugares
+        if (pos === 1) {
+          bgColor = '#22c55e'; // Verde
+          textColor = '#ffffff';
+          fontWeight = 'bold';
+        } else if (pos === 2) {
+          bgColor = '#eab308'; // Amarillo
+          textColor = '#000000';
+          fontWeight = 'bold';
+        } else if (pos === 3) {
+          bgColor = '#f97316'; // Naranja
+          textColor = '#ffffff';
+          fontWeight = 'bold';
+        } else if (pos === 4) {
+          bgColor = '#3b82f6'; // Azul
+          textColor = '#ffffff';
+          fontWeight = 'bold';
+        } else if (pos === 5) {
+          bgColor = '#8b5cf6'; // Morado
+          textColor = '#ffffff';
+          fontWeight = 'bold';
+        }
+
+        // 🚨 Lógica de alerta: Diferencia mayor a 11 puntos con el líder
+        if (liderScore - fila.totalAciertos > 11) {
+          bgColor = '#ef4444'; // Rojo
+          textColor = '#ffffff';
+          fontWeight = 'bold';
+        }
 
         const tr = document.createElement('tr');
         tr.style.backgroundColor = bgColor;
+        tr.style.color = textColor;
 
         let filaHTML = `
-          <td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold;">${index + 1}</td>
-          <td style="border: 1px solid #9ca3af; padding: 8px; font-weight: 600;">${fila.nombre}</td>
+          <td style="border: 1px solid rgba(156, 163, 175, 0.5); padding: 8px; text-align: center; font-weight: ${fontWeight};">${pos}</td>
+          <td style="border: 1px solid rgba(156, 163, 175, 0.5); padding: 8px; font-weight: ${fontWeight};">${fila.nombre}</td>
         `;
 
         jornadasSecuenciales.forEach(jornadaSec => {
           const aciertos = fila.aciertosPorJornada[jornadaSec.numero] || 0;
-          filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center;">${aciertos}</td>`;
+          filaHTML += `<td style="border: 1px solid rgba(156, 163, 175, 0.5); padding: 8px; text-align: center;">${aciertos}</td>`;
         });
-        filaHTML += `<td style="border: 1px solid #9ca3af; padding: 8px; text-align: center; font-weight: bold; background-color: #d1d5db;">${fila.totalAciertos}</td></tr>`;
+        
+        filaHTML += `<td style="border: 1px solid rgba(156, 163, 175, 0.5); padding: 8px; text-align: center; font-weight: bold; background-color: rgba(0,0,0,0.1);">${fila.totalAciertos}</td></tr>`;
         tr.innerHTML = filaHTML;
         tbody.appendChild(tr);
       });
@@ -464,7 +504,6 @@ export default function AdminDashboard() {
 
     const usuarios = [...new Set(quinielasData?.map(q => q.usuario_id) || [])];
     
-    // Nombres completos sin truncar (se leerán rotados 90°)
     const columnas = ["Partido", "Resultado", ...usuarios.map(usuarioId => {
       const perfil = perfiles?.find(p => p.id === usuarioId);
       return perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
@@ -492,13 +531,11 @@ export default function AdminDashboard() {
 
     const doc = new jsPDF("landscape", "mm", "a4");
     
-    // Título
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(34, 197, 94);
     doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 15);
     
-    // Subtítulo
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
@@ -531,7 +568,6 @@ export default function AdminDashboard() {
         1: { halign: "center", fontStyle: "bold", fontSize: 7.5, cellWidth: 14 },
       },
       didDrawCell: (data) => {
-        // Rotar los encabezados de usuarios 90 grados para que se lean de abajo hacia arriba
         if (data.section === "head" && data.column.index >= 2) {
           const text = data.cell.text[0];
           const x = data.cell.x + data.cell.width / 2;
@@ -558,7 +594,6 @@ export default function AdminDashboard() {
         }
       },
       didParseCell: (data) => {
-        // Fila de totales con estilo especial
         if (data.section === "body" && data.row.index === filas.length - 1) {
           data.cell.styles.fillColor = [220, 252, 231];
           data.cell.styles.fontStyle = "bold";
@@ -567,7 +602,6 @@ export default function AdminDashboard() {
           return;
         }
         
-        // Resaltar aciertos en VERDE FUERTE
         if (data.section === "body" && data.column.index >= 2) {
           const fila = filas[data.row.index];
           if (!fila) return;
