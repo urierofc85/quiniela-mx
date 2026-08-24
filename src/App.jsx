@@ -90,7 +90,6 @@ function App() {
         <Route path="/admin-importar-transfermarkt" element={<AdminImportarTransfermarkt />} 
         <Route path="/admin-datos-extra" element={<AdminDatosExtra />} />
         
-/>
       </Routes>
     </BrowserRouter>
   );
