@@ -38,6 +38,7 @@ import AdminImportarCalendarioScore from "./pages/AdminImportarCalendarioScore";
 import AdminFormaTemporadas from "./pages/AdminFormaTemporadas";
 import AdminRecalcularRatings from "./pages/AdminRecalcularRatings";
 import AdminRecalcularPorcentajes from "./pages/AdminRecalcularPorcentajes";
+import AdminImportarTransfermarkt from "./pages/AdminImportarTransfermarkt";
 
 function App() {
   return (
@@ -85,6 +86,8 @@ function App() {
         <Route path="/admin-forma-temporadas" element={<AdminRoute><AdminFormaTemporadas /></AdminRoute>} />
         <Route path="/admin-recalcular-ratings" element={<AdminRoute><AdminRecalcularRatings /></AdminRoute>} />
         <Route path="/admin-recalcular-porcentajes" element={<AdminRoute><AdminRecalcularPorcentajes /></AdminRoute>} />
+        <Route path="/admin-importar-transfermarkt" element={<AdminImportarTransfermarkt />} 
+/>
       </Routes>
     </BrowserRouter>
   );

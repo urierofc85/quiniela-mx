@@ -131,124 +131,145 @@ export default function AdminPronosticos() {
         </Link>
 
         <Link
-  to="/admin-importar-sofascore"
-  className="
-    bg-emerald-600
-    text-white
-    p-5
-    rounded-lg
-    shadow
-    hover:bg-emerald-700
-  "
->
-  <div className="text-xl font-bold">
-    📊 SofaScore
-  </div>
+          to="/admin-importar-sofascore"
+          className="
+            bg-emerald-600
+            text-white
+            p-5
+            rounded-lg
+            shadow
+            hover:bg-emerald-700
+          "
+        >
+          <div className="text-xl font-bold">
+            📊 SofaScore
+          </div>
 
-  <div className="text-sm mt-2">
-    Analizar tabla de SofaScore
-  </div>
-</Link>
+          <div className="text-sm mt-2">
+            Analizar tabla de SofaScore
+          </div>
+        </Link>
 
-<Link
-  to="/admin-importar-formascore"
-  className="
-    bg-purple-600
-    text-white
-    p-5
-    rounded-lg
-    shadow
-    hover:bg-purple-700
-  "
->
-  <div className="text-xl font-bold">
-    📈 Forma SofaScore
-  </div>
+        <Link
+          to="/admin-importar-formascore"
+          className="
+            bg-purple-600
+            text-white
+            p-5
+            rounded-lg
+            shadow
+            hover:bg-purple-700
+          "
+        >
+          <div className="text-xl font-bold">
+            📈 Forma SofaScore
+          </div>
 
-  <div className="text-sm mt-2">
-    Importar forma reciente de los equipos
-  </div>
-</Link>
+          <div className="text-sm mt-2">
+            Importar forma reciente de los equipos
+          </div>
+        </Link>
 
-  <Link
-  to="/admin-forma-temporadas"
-  className="
-    bg-indigo-600
-    text-white
-    p-5
-    rounded-lg
-    shadow
-    hover:bg-indigo-700
-  "
->
-  <div className="text-xl font-bold">
-    📊 Temporadas
-  </div>
+        <Link
+          to="/admin-forma-temporadas"
+          className="
+            bg-indigo-600
+            text-white
+            p-5
+            rounded-lg
+            shadow
+            hover:bg-indigo-700
+          "
+        >
+          <div className="text-xl font-bold">
+            📊 Temporadas
+          </div>
 
-  <div className="text-sm mt-2">
-    General / Local / Visitante
-  </div>
-</Link>
+          <div className="text-sm mt-2">
+            General / Local / Visitante
+          </div>
+        </Link>
 
-<Link
-  to="/admin-importar-calendario-score"
-  className="
-    bg-orange-600
-    text-white
-    p-5
-    rounded-lg
-    shadow
-    hover:bg-orange-700
-  "
->
-  <div className="text-xl font-bold">
-    📅 Calendario SofaScore
-  </div>
+        <Link
+          to="/admin-importar-calendario-score"
+          className="
+            bg-orange-600
+            text-white
+            p-5
+            rounded-lg
+            shadow
+            hover:bg-orange-700
+          "
+        >
+          <div className="text-xl font-bold">
+            📅 Calendario SofaScore
+          </div>
 
-  <div className="text-sm mt-2">
-    Importar partidos de Liga MX
-  </div>
-</Link>
+          <div className="text-sm mt-2">
+            Importar partidos de Liga MX
+          </div>
+        </Link>
 
-<Link
-  to="/admin-recalcular-ratings"
-  className="
-    bg-red-600
-    text-white
-    p-5
-    rounded-lg
-    shadow
-    hover:bg-red-700
-  "
->
-  <div className="text-xl font-bold">
-    ⚙️ Ratings
-  </div>
+        <Link
+          to="/admin-recalcular-ratings"
+          className="
+            bg-red-600
+            text-white
+            p-5
+            rounded-lg
+            shadow
+            hover:bg-red-700
+          "
+        >
+          <div className="text-xl font-bold">
+            ⚙️ Ratings
+          </div>
 
-  <div className="text-sm mt-2">
-    Recalcular ratings de equipos
-  </div>
-</Link>
+          <div className="text-sm mt-2">
+            Recalcular ratings de equipos
+          </div>
+        </Link>
 
-<Link
-  to="/admin-recalcular-porcentajes"
-  className="
-    bg-purple-600
-    text-white
-    p-5
-    rounded-lg
-    shadow
-    hover:bg-purple-700
-  "
->
-  <div className="text-xl font-bold">
-    📊 Porcentajes
-  </div>
+        <Link
+          to="/admin-recalcular-porcentajes"
+          className="
+            bg-purple-600
+            text-white
+            p-5
+            rounded-lg
+            shadow
+            hover:bg-purple-700
+          "
+        >
+          <div className="text-xl font-bold">
+            📊 Porcentajes
+          </div>
 
-  <div className="text-sm mt-2">
-    Recalcular porcentajes históricos
-  </div>
-</Link>
+          <div className="text-sm mt-2">
+            Recalcular porcentajes históricos
+          </div>
+        </Link>
+
+        {/* 🆕 NUEVO: Importar valores de Transfermarkt */}
+        <Link
+          to="/admin-importar-transfermarkt"
+          className="
+            bg-green-600
+            text-white
+            p-5
+            rounded-lg
+            shadow
+            hover:bg-green-700
+          "
+        >
+          <div className="text-xl font-bold">
+            💰 Transfermarkt
+          </div>
+
+          <div className="text-sm mt-2">
+            Importar valor de mercado de plantillas
+          </div>
+        </Link>
 
       </div>
 
