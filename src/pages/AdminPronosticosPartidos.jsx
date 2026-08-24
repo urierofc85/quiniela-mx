@@ -7,8 +7,6 @@ export default function AdminPronosticosPartidos() {
   const [generando, setGenerando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [tabActiva, setTabActiva] = useState("pendientes");
-  
-  // Estado para almacenar los inputs de cada partido pendiente: { [id]: { resultado, golesLocal, golesVisita } }
   const [inputsResultados, setInputsResultados] = useState({});
 
   useEffect(() => {
@@ -38,7 +36,6 @@ export default function AdminPronosticosPartidos() {
       } else {
         if (!p.resultado_real) {
           pendientes.push(p);
-          // Inicializar estado vacío para este partido
           nuevosInputs[p.id] = { resultado: "", golesLocal: "", golesVisita: "" };
         }
       }
@@ -59,6 +56,8 @@ export default function AdminPronosticosPartidos() {
   const generarPronosticos = async () => {
     try {
       setGenerando(true);
+      console.log("🚀 Iniciando generación de pronósticos con nuevos factores...");
+
       const normalizar = (texto = "") => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
       const { data: equiposData, error: errorEquipos } = await supabase.from("pronosticos_equipos").select("*");
 
@@ -83,11 +82,41 @@ export default function AdminPronosticosPartidos() {
         const visitaEquipo = obtenerEquipo(partido.visita);
         if (!localEquipo || !visitaEquipo) continue;
 
-        const scoreLocal = Number(localEquipo.rating_general || 0) * 0.25 + Number(localEquipo.rating_forma || 0) * 0.25 + Number(localEquipo.rating_ofensivo || 0) * 0.15 + Number(localEquipo.rating_defensivo || 0) * 0.15 + Number(localEquipo.rating_local || 0) * 0.10 + Number(localEquipo.rating_tendencia || 0) * 0.10;
-        const scoreVisita = Number(visitaEquipo.rating_general || 0) * 0.25 + Number(visitaEquipo.rating_forma || 0) * 0.25 + Number(visitaEquipo.rating_ofensivo || 0) * 0.15 + Number(visitaEquipo.rating_defensivo || 0) * 0.15 + Number(visitaEquipo.rating_visitante || 0) * 0.10 + Number(visitaEquipo.rating_tendencia || 0) * 0.10;
+        // 🆕 FACTORES CONTEXTUALES
+        const bonoAltitudLocal = localEquipo.factor_altitud || 0;
+        const bonoLiguillaLocal = localEquipo.factor_liguilla || 0;
+        const bonoValorPlantillaLocal = (Number(localEquipo.valor_plantilla || 50) / 100) * 5;
+
+        const bonoAltitudVisita = visitaEquipo.factor_altitud || 0;
+        const bonoLiguillaVisita = visitaEquipo.factor_liguilla || 0;
+        const bonoValorPlantillaVisita = (Number(visitaEquipo.valor_plantilla || 50) / 100) * 5;
+
+        // FÓRMULA MEJORADA con factores contextuales
+        const scoreLocal =
+          Number(localEquipo.rating_general || 0) * 0.20 +
+          Number(localEquipo.rating_forma || 0) * 0.20 +
+          Number(localEquipo.rating_ofensivo || 0) * 0.15 +
+          Number(localEquipo.rating_defensivo || 0) * 0.15 +
+          Number(localEquipo.rating_local || 0) * 0.10 +
+          Number(localEquipo.rating_tendencia || 0) * 0.10 +
+          bonoAltitudLocal +
+          bonoLiguillaLocal +
+          bonoValorPlantillaLocal;
+
+        const scoreVisita =
+          Number(visitaEquipo.rating_general || 0) * 0.20 +
+          Number(visitaEquipo.rating_forma || 0) * 0.20 +
+          Number(visitaEquipo.rating_ofensivo || 0) * 0.15 +
+          Number(visitaEquipo.rating_defensivo || 0) * 0.15 +
+          Number(visitaEquipo.rating_visitante || 0) * 0.10 +
+          Number(visitaEquipo.rating_tendencia || 0) * 0.10 +
+          bonoAltitudVisita +
+          bonoLiguillaVisita +
+          bonoValorPlantillaVisita;
 
         const diferencia = Math.abs(scoreLocal - scoreVisita);
         let empateFactor = (Number(localEquipo.pct_hist_local_empata || 0) + Number(visitaEquipo.pct_hist_visita_empata || 0)) / 2;
+
         if (diferencia < 5) empateFactor *= 2.0;
         else if (diferencia < 10) empateFactor *= 1.5;
         else if (diferencia < 15) empateFactor *= 1.2;
@@ -106,9 +135,13 @@ export default function AdminPronosticosPartidos() {
 
         promesasActualizacion.push(
           supabase.from("pronosticos_partidos").update({
-            score_local: Number(scoreLocal.toFixed(2)), score_visita: Number(scoreVisita.toFixed(2)),
-            diferencia: Number(diferencia.toFixed(2)), prob_local: probLocal, prob_empate: probEmpate,
-            prob_visita: probVisita, pronostico: pronostico,
+            score_local: Number(scoreLocal.toFixed(2)),
+            score_visita: Number(scoreVisita.toFixed(2)),
+            diferencia: Number(diferencia.toFixed(2)),
+            prob_local: probLocal,
+            prob_empate: probEmpate,
+            prob_visita: probVisita,
+            pronostico: pronostico,
           }).eq("id", partido.id)
         );
         partidosProcesados++;
@@ -116,7 +149,7 @@ export default function AdminPronosticosPartidos() {
 
       await Promise.all(promesasActualizacion);
       await cargarPartidos();
-      alert(`✅ Pronósticos generados para ${partidosProcesados} partidos.`);
+      alert(`✅ Pronósticos generados para ${partidosProcesados} partidos con factores contextuales (altitud, liguilla, valor plantilla).`);
     } catch (error) {
       console.error("💥 Error:", error);
       alert("Error al generar pronósticos: " + error.message);
@@ -125,7 +158,6 @@ export default function AdminPronosticosPartidos() {
     }
   };
 
-  // 🆕 Manejador de cambios en los inputs de la tabla
   const handleInputChange = (partidoId, campo, valor) => {
     setInputsResultados(prev => ({
       ...prev,
@@ -133,9 +165,7 @@ export default function AdminPronosticosPartidos() {
     }));
   };
 
-  // 🆕 FUNCIÓN CLAVE: Guardar y actualizar todo en un solo paso
   const guardarYActualizarTodo = async () => {
-    // 1. Validar que todos los campos estén llenos
     const camposIncompletos = partidosPendientes.some(p => {
       const input = inputsResultados[p.id];
       return !input.resultado || input.golesLocal === "" || input.golesVisita === "";
@@ -153,17 +183,15 @@ export default function AdminPronosticosPartidos() {
     try {
       setGuardando(true);
 
-      // 2. Obtener datos actuales de los equipos para calcular las nuevas estadísticas
       const { data: equiposData } = await supabase.from("pronosticos_equipos").select("*");
       const mapaEquipos = new Map(equiposData.map(e => [e.equipo.toLowerCase(), e]));
       const alias = { guadalajara: "chivas", "tigres uanl": "tigres", "cruz azul": "cruzazul" };
 
       const promesasPartidos = [];
-      const cambiosEquipos = {}; // Acumulador de cambios: { "nombre_equipo": { partidos: +1, puntos: +3, ... } }
+      const cambiosEquipos = {};
 
       const normalizar = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-      // 3. Procesar cada partido pendiente
       for (const partido of partidosPendientes) {
         const input = inputsResultados[partido.id];
         const resultadoReal = input.resultado;
@@ -171,7 +199,6 @@ export default function AdminPronosticosPartidos() {
         const golesVisita = Number(input.golesVisita);
         const acerto = partido.pronostico === resultadoReal;
 
-        // A. Preparar update del partido (Esto garantiza UPDATE, no INSERT duplicado)
         promesasPartidos.push(
           supabase.from("pronosticos_partidos").update({
             resultado_real: resultadoReal,
@@ -181,7 +208,6 @@ export default function AdminPronosticosPartidos() {
           }).eq("id", partido.id)
         );
 
-        // B. Calcular cambios para el equipo Local
         const nombreLocal = mapaEquipos.get(alias[normalizar(partido.local)] || normalizar(partido.local))?.equipo || partido.local;
         if (!cambiosEquipos[nombreLocal]) cambiosEquipos[nombreLocal] = { partidos: 0, victorias: 0, empates: 0, derrotas: 0, puntos: 0, puntos_ultimos5: 0, goles_favor: 0, goles_contra: 0 };
         
@@ -201,7 +227,6 @@ export default function AdminPronosticosPartidos() {
           cambiosEquipos[nombreLocal].derrotas += 1;
         }
 
-        // C. Calcular cambios para el equipo Visita
         const nombreVisita = mapaEquipos.get(alias[normalizar(partido.visita)] || normalizar(partido.visita))?.equipo || partido.visita;
         if (!cambiosEquipos[nombreVisita]) cambiosEquipos[nombreVisita] = { partidos: 0, victorias: 0, empates: 0, derrotas: 0, puntos: 0, puntos_ultimos5: 0, goles_favor: 0, goles_contra: 0 };
         
@@ -222,7 +247,6 @@ export default function AdminPronosticosPartidos() {
         }
       }
 
-      // 4. Preparar updates de los equipos con los cambios acumulados
       const promesasEquipos = [];
       for (const [nombreEquipo, cambios] of Object.entries(cambiosEquipos)) {
         const equipoActual = equiposData.find(e => e.equipo === nombreEquipo);
@@ -235,7 +259,7 @@ export default function AdminPronosticosPartidos() {
             empates: (equipoActual.empates || 0) + cambios.empates,
             derrotas: (equipoActual.derrotas || 0) + cambios.derrotas,
             puntos: (equipoActual.puntos || 0) + cambios.puntos,
-            puntos_ultimos5: Math.min((equipoActual.puntos_ultimos5 || 0) + cambios.puntos_ultimos5, 15), // Tope de 15 puntos (5 victorias)
+            puntos_ultimos5: Math.min((equipoActual.puntos_ultimos5 || 0) + cambios.puntos_ultimos5, 15),
             goles_favor: (equipoActual.goles_favor || 0) + cambios.goles_favor,
             goles_contra: (equipoActual.goles_contra || 0) + cambios.goles_contra,
             diferencia_goles: ((equipoActual.goles_favor || 0) + cambios.goles_favor) - ((equipoActual.goles_contra || 0) + cambios.goles_contra),
@@ -244,15 +268,18 @@ export default function AdminPronosticosPartidos() {
         );
       }
 
-      // 5. Ejecutar TODO en paralelo
       await Promise.all([...promesasPartidos, ...promesasEquipos]);
 
       const aciertos = partidosPendientes.filter(p => inputsResultados[p.id].resultado === p.pronostico).length;
-      alert(`✅ ¡Guardado exitoso!\n\n📊 Partidos procesados: ${partidosPendientes.length}\n🎯 Aciertos del sistema: ${aciertos}\n❌ Fallos del sistema: ${partidosPendientes.length - aciertos}\n\n💡 Recuerda ir a "Recalcular Ratings" para que las nuevas formas surtan efecto en los próximos pronósticos.`);
       
-      // Limpiar y recargar
+      setTimeout(async () => {
+        await cargarPartidos();
+        setTabActiva("proximos");
+      }, 500);
+
+      alert(`✅ ¡Guardado exitoso!\n\n📊 Partidos procesados: ${partidosPendientes.length}\n🎯 Aciertos del sistema: ${aciertos}\n❌ Fallos del sistema: ${partidosPendientes.length - aciertos}\n\n💡 Recuerda ir a "Recalcular Ratings" para actualizar las formas.`);
+      
       setInputsResultados({});
-      cargarPartidos();
     } catch (error) {
       console.error("💥 Error al guardar:", error);
       alert("Error crítico al guardar: " + error.message);
@@ -265,7 +292,6 @@ export default function AdminPronosticosPartidos() {
     <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">⚽ Administración de Partidos y Pronósticos</h1>
 
-      {/* Tabs de navegación */}
       <div className="flex gap-4 mb-6 border-b">
         <button
           onClick={() => setTabActiva("pendientes")}
@@ -281,7 +307,6 @@ export default function AdminPronosticosPartidos() {
         </button>
       </div>
 
-      {/* SECCIÓN: PARTIDOS POR VALIDAR (VISTA MASIVA) */}
       {tabActiva === "pendientes" && (
         <div className="bg-white shadow rounded p-6">
           {partidosPendientes.length === 0 ? (
@@ -396,7 +421,6 @@ export default function AdminPronosticosPartidos() {
         </div>
       )}
 
-      {/* SECCIÓN: PRÓXIMOS PARTIDOS (Sin cambios mayores, solo limpieza) */}
       {tabActiva === "proximos" && (
         <div className="bg-white shadow rounded p-5">
           <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
