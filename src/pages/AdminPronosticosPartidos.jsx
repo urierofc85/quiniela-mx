@@ -20,30 +20,19 @@ export default function AdminPronosticosPartidos() {
       return;
     }
 
-    console.log("📊 Total partidos en BD:", data?.length);
-
-    // Filtro de fecha tolerante: extrae solo YYYY-MM-DD por si la BD guarda la hora
     const hoyStr = new Date().toISOString().split("T")[0]; 
-    
     const partidosVigentes = (data || []).filter((p) => {
       const fechaPartido = p.fecha_partido ? String(p.fecha_partido).split("T")[0] : "";
       return fechaPartido >= hoyStr;
     });
 
-    console.log("✅ Partidos vigentes (hoy o futuros) a mostrar:", partidosVigentes.length);
     setPartidos(partidosVigentes);
   };
 
   const eliminarPartido = async (id) => {
-    if (!window.confirm("¿Estás seguro de eliminar este partido?")) {
-      return;
-    }
+    if (!window.confirm("¿Estás seguro de eliminar este partido?")) return;
 
-    const { error } = await supabase
-      .from("pronosticos_partidos")
-      .delete()
-      .eq("id", id);
-
+    const { error } = await supabase.from("pronosticos_partidos").delete().eq("id", id);
     if (error) {
       alert(error.message);
     } else {
@@ -54,14 +43,10 @@ export default function AdminPronosticosPartidos() {
   const generarPronosticos = async () => {
     try {
       setGenerando(true);
-      console.log("🚀 Iniciando generación de pronósticos para", partidos.length, "partidos...");
+      console.log("🚀 Iniciando generación de pronósticos...");
 
       const normalizar = (texto = "") =>
-        texto
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .toLowerCase()
-          .trim();
+        texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
       const { data: equiposData, error: errorEquipos } = await supabase
         .from("pronosticos_equipos")
@@ -77,7 +62,7 @@ export default function AdminPronosticosPartidos() {
         mapaEquipos[normalizar(equipo.equipo)] = equipo;
       });
 
-      const alias = { guadalajara: "chivas" };
+      const alias = { guadalajara: "chivas", "tigres uanl": "tigres", "cruz azul": "cruzazul" };
 
       const obtenerEquipo = (nombre) => {
         const clave = normalizar(nombre);
@@ -85,44 +70,45 @@ export default function AdminPronosticosPartidos() {
       };
 
       let partidosProcesados = 0;
+      const promesasActualizacion = [];
 
       for (const partido of partidos) {
         const localEquipo = obtenerEquipo(partido.local);
         const visitaEquipo = obtenerEquipo(partido.visita);
 
         if (!localEquipo || !visitaEquipo) {
-          console.warn(`⚠️ Equipo no encontrado en BD: ${partido.local} vs ${partido.visita}`);
+          console.warn(`⚠️ Equipo no encontrado: ${partido.local} vs ${partido.visita}`);
           continue;
         }
 
+        // FÓRMULA MEJORADA: Usa rating_local para el local y rating_visitante para la visita
         const scoreLocal =
-          Number(localEquipo.rating_total || 0) * 0.30 +
-          Number(localEquipo.rating_historico || 0) * 0.20 +
-          Number(localEquipo.rating_tendencia || 0) * 0.10 +
-          Number(localEquipo.rating_ofensivo || 0) * 0.10 +
-          Number(localEquipo.rating_defensivo || 0) * 0.10 +
-          Number(localEquipo.pct_hist_local_gana || 0) * 0.20;
+          Number(localEquipo.rating_general || 0) * 0.25 +
+          Number(localEquipo.rating_forma || 0) * 0.25 +
+          Number(localEquipo.rating_ofensivo || 0) * 0.15 +
+          Number(localEquipo.rating_defensivo || 0) * 0.15 +
+          Number(localEquipo.rating_local || 0) * 0.10 +      // Específico de localía
+          Number(localEquipo.rating_tendencia || 0) * 0.10;    // Momentum
 
         const scoreVisita =
-          Number(visitaEquipo.rating_total || 0) * 0.30 +
-          Number(visitaEquipo.rating_historico || 0) * 0.20 +
-          Number(visitaEquipo.rating_tendencia || 0) * 0.10 +
-          Number(visitaEquipo.rating_ofensivo || 0) * 0.10 +
-          Number(visitaEquipo.rating_defensivo || 0) * 0.10 +
-          Number(visitaEquipo.pct_hist_visita_gana || 0) * 0.20;
+          Number(visitaEquipo.rating_general || 0) * 0.25 +
+          Number(visitaEquipo.rating_forma || 0) * 0.25 +
+          Number(visitaEquipo.rating_ofensivo || 0) * 0.15 +
+          Number(visitaEquipo.rating_defensivo || 0) * 0.15 +
+          Number(visitaEquipo.rating_visitante || 0) * 0.10 +  // Específico de visita
+          Number(visitaEquipo.rating_tendencia || 0) * 0.10;   // Momentum
 
         const diferencia = Math.abs(scoreLocal - scoreVisita);
 
+        // Factor de empate dinámico (funciona perfecto en escala 0-100)
         let empateFactor =
-          (Number(localEquipo.pct_hist_local_empata || 0) +
-            Number(visitaEquipo.pct_hist_visita_empata || 0)) / 2;
+          (Number(localEquipo.pct_hist_local_empata || 0) + Number(visitaEquipo.pct_hist_visita_empata || 0)) / 2;
 
-        if (diferencia < 5) empateFactor *= 2;
-        else if (diferencia < 10) empateFactor *= 1.5;
-        else if (diferencia < 15) empateFactor *= 1.2;
+        if (diferencia < 5) empateFactor *= 2.0;       // Partido muy cerrado
+        else if (diferencia < 10) empateFactor *= 1.5; // Partido reñido
+        else if (diferencia < 15) empateFactor *= 1.2; // Ligera ventaja
 
         const total = scoreLocal + scoreVisita + empateFactor;
-
         if (total <= 0) continue;
 
         const probLocal = Number(((scoreLocal / total) * 100).toFixed(2));
@@ -131,34 +117,31 @@ export default function AdminPronosticosPartidos() {
 
         let pronostico = "EMPATE";
         const maximo = Math.max(probLocal, probEmpate, probVisita);
-
         if (maximo === probLocal) pronostico = "LOCAL";
         else if (maximo === probVisita) pronostico = "VISITA";
 
-        // Actualizar en BD y usar .select() para verificar qué se guardó
-        const { data: updateData, error: updateError } = await supabase
-          .from("pronosticos_partidos")
-          .update({
-            score_local: Number(scoreLocal.toFixed(2)),
-            score_visita: Number(scoreVisita.toFixed(2)),
-            diferencia: Number(diferencia.toFixed(2)),
-            prob_local: probLocal,
-            prob_empate: probEmpate,
-            prob_visita: probVisita,
-            pronostico: pronostico,
-          })
-          .eq("id", partido.id)
-          .select(); // <-- Esto nos devuelve el registro actualizado para verificar
-
-        if (updateError) {
-          console.error(`❌ Error actualizando partido ${partido.id}:`, updateError);
-        } else {
-          console.log(`✅ Partido ${partido.id} actualizado:`, updateData[0]);
-          partidosProcesados++;
-        }
+        // Acumulamos la promesa para ejecutarla en paralelo
+        promesasActualizacion.push(
+          supabase
+            .from("pronosticos_partidos")
+            .update({
+              score_local: Number(scoreLocal.toFixed(2)),
+              score_visita: Number(scoreVisita.toFixed(2)),
+              diferencia: Number(diferencia.toFixed(2)),
+              prob_local: probLocal,
+              prob_empate: probEmpate,
+              prob_visita: probVisita,
+              pronostico: pronostico,
+            })
+            .eq("id", partido.id)
+        );
+        
+        partidosProcesados++;
       }
 
-      // Forzar recarga fresca desde la BD
+      // Ejecutamos todas las actualizaciones en paralelo
+      await Promise.all(promesasActualizacion);
+
       console.log("🔄 Recargando lista de partidos...");
       await cargarPartidos();
 
@@ -211,30 +194,27 @@ export default function AdminPronosticosPartidos() {
                   </div>
                 </div>
 
-                {/* BLOQUE DE PREDICCIÓN: Siempre visible, cambia su contenido según haya datos o no */}
                 <div className="bg-gray-50 p-3 rounded-lg text-sm min-w-[220px] border border-gray-200 mb-3 md:mb-0 md:mx-4">
                   {partido.pronostico ? (
                     <>
                       <div className="flex justify-between mb-1">
                         <span>🏠 Local:</span>
-                        <span className="font-semibold">{partido.prob_local}%</span>
+                        <span className="font-semibold text-blue-700">{partido.prob_local}%</span>
                       </div>
                       <div className="flex justify-between mb-1">
                         <span>🤝 Empate:</span>
-                        <span className="font-semibold">{partido.prob_empate}%</span>
+                        <span className="font-semibold text-yellow-700">{partido.prob_empate}%</span>
                       </div>
                       <div className="flex justify-between mb-2">
                         <span>✈️ Visita:</span>
-                        <span className="font-semibold">{partido.prob_visita}%</span>
+                        <span className="font-semibold text-red-700">{partido.prob_visita}%</span>
                       </div>
-                      <div className="border-t pt-2 mt-2 font-bold text-center text-blue-700 bg-blue-50 rounded">
+                      <div className="border-t pt-2 mt-2 font-bold text-center text-white bg-blue-600 rounded">
                         ✅ {partido.pronostico}
                       </div>
                     </>
                   ) : (
-                    <div className="text-center text-gray-500 py-3">
-                      ⏳ Pendiente de generar
-                    </div>
+                    <div className="text-center text-gray-500 py-3">⏳ Pendiente de generar</div>
                   )}
                 </div>
 
