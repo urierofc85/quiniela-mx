@@ -7,7 +7,7 @@ export default function Pronosticos() {
   const [partidos, setPartidos] = useState([]);
   const [equiposMap, setEquiposMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
-  const [tabActiva, setTabActiva] = useState("proximos"); // 'proximos' o 'historial'
+  const [tabActiva, setTabActiva] = useState("proximos");
 
   useEffect(() => {
     const autorizado = sessionStorage.getItem("pronosticos_autorizado");
@@ -18,7 +18,6 @@ export default function Pronosticos() {
     cargarDatos();
   }, [navigate]);
 
-  // 🆕 Carga optimizada: Trae todo en 2 consultas paralelas en lugar de N consultas
   const cargarDatos = async () => {
     try {
       setLoading(true);
@@ -33,29 +32,117 @@ export default function Pronosticos() {
         return;
       }
 
-      // Crear un mapa de equipos para búsqueda instantánea O(1)
+      // 🆕 Crear mapa con normalización y aliases
+      const normalizar = (texto) => texto?.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      
       const mapa = new Map();
-      equiposData?.forEach((eq) => mapa.set(eq.equipo.toLowerCase(), eq));
+      equiposData?.forEach((eq) => {
+        mapa.set(normalizar(eq.equipo), eq);
+      });
+      
+      // 🆕 Diccionario de aliases (mismo que en AdminPronosticosPartidos)
+      const alias = {
+        "san luis": "san luis",
+        "atletico san luis": "san luis",
+        "santos": "santos",
+        "santos laguna": "santos",
+        "necaxa": "necaxa",
+        "club necaxa": "necaxa",
+        guadalajara: "chivas",
+        "chivas rayadas del guadalajara": "chivas",
+        "cd guadalajara": "chivas",
+        chivas: "chivas",
+        "tigres uanl": "tigres",
+        tigres: "tigres",
+        "cruz azul": "cruz azul",
+        "cd cruz azul": "cruz azul",
+        "club cruz azul": "cruz azul",
+        cruzazul: "cruz azul",
+        "fc juarez": "juarez",
+        "fc juárez": "juarez",
+        juarez: "juarez",
+        "juárez": "juarez",
+        "club america": "america",
+        "club américa": "america",
+        "cf america": "america",
+        "cf américa": "america",
+        america: "america",
+        "pumas unam": "pumas",
+        "unam pumas": "pumas",
+        pumas: "pumas",
+        "cf monterrey": "monterrey",
+        monterrey: "monterrey",
+        rayados: "monterrey",
+        "deportivo toluca": "toluca",
+        "deportivo toluca fc": "toluca",
+        toluca: "toluca",
+        "club leon": "leon",
+        "club león": "leon",
+        "club leon fc": "leon",
+        leon: "leon",
+        "león": "leon",
+        "cf pachuca": "pachuca",
+        pachuca: "pachuca",
+        tuzos: "pachuca",
+        "club tijuana": "tijuana",
+        tijuana: "tijuana",
+        xolos: "tijuana",
+        "atlas guadalajara": "atlas",
+        "club atlas": "atlas",
+        atlas: "atlas",
+        "queretaro fc": "queretaro",
+        "querétaro fc": "queretaro",
+        queretaro: "queretaro",
+        "querétaro": "queretaro",
+        "club puebla": "puebla",
+        puebla: "puebla",
+        "mazatlan fc": "mazatlan",
+        "mazatlán fc": "mazatlan",
+        mazatlan: "mazatlan",
+        "mazatlán": "mazatlan",
+        "cf atlante": "atlante",
+        atlante: "atlante",
+      };
+
+      const obtenerEquipo = (nombre) => {
+        const clave = normalizar(nombre);
+        return mapa.get(alias[clave] || clave);
+      };
+
       setEquiposMap(mapa);
 
       // Fusionar datos de partidos con las estadísticas de los equipos
       const datosFusionados = partidosData.map((partido) => {
-        const local = mapa.get(partido.local?.toLowerCase()) || {};
-        const visita = mapa.get(partido.visita?.toLowerCase()) || {};
+        const local = obtenerEquipo(partido.local) || {};
+        const visita = obtenerEquipo(partido.visita) || {};
+
+        // 🆕 Calcular confianza basada en la diferencia de probabilidades
+        const probMax = Math.max(
+          partido.prob_local || 0,
+          partido.prob_empate || 0,
+          partido.prob_visita || 0
+        );
+        
+        // Confianza = qué tan alta es la probabilidad del pronóstico ganador
+        // Si el sistema dice LOCAL con 60%, confianza = 60%
+        const confianza = partido.pronostico ? probMax : 0;
 
         return {
           ...partido,
+          confianza: confianza,
           statsLocal: {
             rating: local.rating_total || 0,
             forma: local.puntos_ultimos5 || 0,
             posicion: local.posicion || "-",
             puntos: local.puntos || 0,
+            valor: local.valor_plantilla || 0,
           },
           statsVisita: {
             rating: visita.rating_total || 0,
             forma: visita.puntos_ultimos5 || 0,
             posicion: visita.posicion || "-",
             puntos: visita.puntos || 0,
+            valor: visita.valor_plantilla || 0,
           },
         };
       });
@@ -68,11 +155,9 @@ export default function Pronosticos() {
     }
   };
 
-  // Separar partidos en dos grupos para las pestañas
   const partidosProximos = partidos.filter((p) => !p.resultado_real);
   const partidosFinalizados = partidos.filter((p) => p.resultado_real);
 
-  // Calcular efectividad del sistema
   const totalValidados = partidosFinalizados.length;
   const aciertos = partidosFinalizados.filter((p) => p.acerto === true).length;
   const efectividad = totalValidados > 0 ? ((aciertos / totalValidados) * 100).toFixed(1) : 0;
@@ -100,7 +185,6 @@ export default function Pronosticos() {
         </button>
       </div>
 
-      {/* Pestañas de Navegación */}
       <div className="flex gap-2 mb-6 border-b border-gray-200">
         <button
           onClick={() => setTabActiva("proximos")}
@@ -120,7 +204,6 @@ export default function Pronosticos() {
         </button>
       </div>
 
-      {/* ================= TAB: PRÓXIMOS PARTIDOS ================= */}
       {tabActiva === "proximos" && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {partidosProximos.length === 0 ? (
@@ -134,7 +217,7 @@ export default function Pronosticos() {
                     <th className="px-4 py-3">Partido</th>
                     <th className="px-4 py-3 text-center">Pronóstico del Sistema</th>
                     <th className="px-4 py-3 text-center">Confianza</th>
-                    <th className="px-4 py-3 text-center">Stats Clave (Rating / Forma)</th>
+                    <th className="px-4 py-3 text-center">Stats Clave (Rating / Forma / Valor)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -162,18 +245,24 @@ export default function Pronosticos() {
                       </td>
                       <td className="px-4 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <span className="font-bold text-gray-700">{p.confianza || 0}%</span>
+                          <span className="font-bold text-gray-700">{p.confianza.toFixed(0)}%</span>
                           <div className="w-16 bg-gray-200 rounded-full h-2">
-                            <div className="bg-green-500 h-2 rounded-full" style={{ width: `${p.confianza || 0}%` }}></div>
+                            <div 
+                              className={`h-2 rounded-full ${
+                                p.confianza >= 60 ? 'bg-green-500' : 
+                                p.confianza >= 45 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`} 
+                              style={{ width: `${p.confianza}%` }}
+                            ></div>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-xs text-gray-600">
                         <div className="flex justify-between mb-1">
-                          <span>🏠 {p.statsLocal.rating} (Forma: {p.statsLocal.forma})</span>
+                          <span>🏠 Rating: {p.statsLocal.rating} | Forma: {p.statsLocal.forma} | Valor: {p.statsLocal.valor}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span>✈️ {p.statsVisita.rating} (Forma: {p.statsVisita.forma})</span>
+                          <span>✈️ Rating: {p.statsVisita.rating} | Forma: {p.statsVisita.forma} | Valor: {p.statsVisita.valor}</span>
                         </div>
                       </td>
                     </tr>
@@ -185,10 +274,8 @@ export default function Pronosticos() {
         </div>
       )}
 
-      {/* ================= TAB: HISTORIAL Y VALIDACIÓN ================= */}
       {tabActiva === "historial" && (
         <div className="space-y-6">
-          {/* Tarjeta de Resumen de Efectividad */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 text-center">
               <div className="text-sm text-gray-500 uppercase font-semibold">Partidos Validados</div>
@@ -206,7 +293,6 @@ export default function Pronosticos() {
             </div>
           </div>
 
-          {/* Tabla de Validación */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             {totalValidados === 0 ? (
               <div className="p-8 text-center text-gray-500">Aún no hay partidos finalizados para validar.</div>
