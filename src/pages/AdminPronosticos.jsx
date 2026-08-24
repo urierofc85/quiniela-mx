@@ -271,6 +271,11 @@ export default function AdminPronosticos() {
           </div>
         </Link>
 
+        <Link to="/admin-datos-extra" className="bg-pink-600 ...">
+  <div className="text-xl font-bold">🏆 Motivación</div>
+  <div className="text-sm mt-2">Actualizar liguilla semanal</div>
+</Link>
+
       </div>
 
     </div>
