@@ -87,8 +87,10 @@ function App() {
         <Route path="/admin-forma-temporadas" element={<AdminRoute><AdminFormaTemporadas /></AdminRoute>} />
         <Route path="/admin-recalcular-ratings" element={<AdminRoute><AdminRecalcularRatings /></AdminRoute>} />
         <Route path="/admin-recalcular-porcentajes" element={<AdminRoute><AdminRecalcularPorcentajes /></AdminRoute>} />
-        <Route path="/admin-importar-transfermarkt" element={<AdminImportarTransfermarkt />} 
-        <Route path="/admin-datos-extra" element={<AdminDatosExtra />} />
+        
+        {/* 🆕 Rutas nuevas corregidas, cerradas correctamente y protegidas */}
+        <Route path="/admin-importar-transfermarkt" element={<AdminRoute><AdminImportarTransfermarkt /></AdminRoute>} />
+        <Route path="/admin-datos-extra" element={<AdminRoute><AdminDatosExtra /></AdminRoute>} />
         
       </Routes>
     </BrowserRouter>
