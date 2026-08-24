@@ -56,7 +56,7 @@ export default function AdminPronosticosPartidos() {
   const generarPronosticos = async () => {
     try {
       setGenerando(true);
-      console.log("🚀 Iniciando generación de pronósticos con nuevos factores...");
+      console.log("🚀 Iniciando generación de pronósticos...");
 
       const normalizar = (texto = "") => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
       const { data: equiposData, error: errorEquipos } = await supabase.from("pronosticos_equipos").select("*");
@@ -66,9 +66,34 @@ export default function AdminPronosticosPartidos() {
         return;
       }
 
+      // 1. Crear mapa de equipos
       const mapaEquipos = {};
-      equiposData.forEach((equipo) => { mapaEquipos[normalizar(equipo.equipo)] = equipo; });
-      const alias = { guadalajara: "chivas", "tigres uanl": "tigres", "cruz azul": "cruzazul" };
+      equiposData.forEach((equipo) => { 
+        mapaEquipos[normalizar(equipo.equipo)] = equipo; 
+      });
+
+      // 2. 🆕 Diccionario de aliases EXPANDIDO para la Liga MX
+      const alias = { 
+        guadalajara: "chivas",
+        "chivas rayadas del guadalajara": "chivas",
+        "tigres uanl": "tigres",
+        "tigres": "tigres",
+        "cruz azul": "cruz azul",
+        "club cruz azul": "cruz azul",
+        "santos laguna": "santos",
+        "club santos laguna": "santos",
+        "club necaxa": "necaxa",
+        "necaxa": "necaxa",
+        "fc juarez": "juarez",
+        "fc juárez": "juarez",
+        "atletico san luis": "atletico san luis",
+        "san luis": "atletico san luis",
+        "club america": "america",
+        "america": "america",
+        "pumas unam": "pumas",
+        "unam pumas": "pumas"
+      };
+
       const obtenerEquipo = (nombre) => {
         const clave = normalizar(nombre);
         return mapaEquipos[alias[clave] || clave];
@@ -76,13 +101,23 @@ export default function AdminPronosticosPartidos() {
 
       let partidosProcesados = 0;
       const promesasActualizacion = [];
+      const equiposNoEncontrados = []; // 🆕 Para rastrear errores
 
       for (const partido of partidosProximos) {
         const localEquipo = obtenerEquipo(partido.local);
         const visitaEquipo = obtenerEquipo(partido.visita);
-        if (!localEquipo || !visitaEquipo) continue;
 
-        // 🆕 FACTORES CONTEXTUALES
+        // 🆕 Si no encuentra un equipo, lo guarda en la lista de errores
+        if (!localEquipo || !visitaEquipo) {
+          const faltantes = [];
+          if (!localEquipo) faltantes.push(`Local: "${partido.local}"`);
+          if (!visitaEquipo) faltantes.push(`Visita: "${partido.visita}"`);
+          equiposNoEncontrados.push(`${partido.local} vs ${partido.visita} (${faltantes.join(', ')})`);
+          console.warn(`⚠️ Equipo no encontrado: ${partido.local} vs ${partido.visita}`);
+          continue;
+        }
+
+        // FACTORES CONTEXTUALES
         const bonoAltitudLocal = localEquipo.factor_altitud || 0;
         const bonoLiguillaLocal = localEquipo.factor_liguilla || 0;
         const bonoValorPlantillaLocal = (Number(localEquipo.valor_plantilla || 50) / 100) * 5;
@@ -91,7 +126,6 @@ export default function AdminPronosticosPartidos() {
         const bonoLiguillaVisita = visitaEquipo.factor_liguilla || 0;
         const bonoValorPlantillaVisita = (Number(visitaEquipo.valor_plantilla || 50) / 100) * 5;
 
-        // FÓRMULA MEJORADA con factores contextuales
         const scoreLocal =
           Number(localEquipo.rating_general || 0) * 0.20 +
           Number(localEquipo.rating_forma || 0) * 0.20 +
@@ -99,9 +133,7 @@ export default function AdminPronosticosPartidos() {
           Number(localEquipo.rating_defensivo || 0) * 0.15 +
           Number(localEquipo.rating_local || 0) * 0.10 +
           Number(localEquipo.rating_tendencia || 0) * 0.10 +
-          bonoAltitudLocal +
-          bonoLiguillaLocal +
-          bonoValorPlantillaLocal;
+          bonoAltitudLocal + bonoLiguillaLocal + bonoValorPlantillaLocal;
 
         const scoreVisita =
           Number(visitaEquipo.rating_general || 0) * 0.20 +
@@ -110,9 +142,7 @@ export default function AdminPronosticosPartidos() {
           Number(visitaEquipo.rating_defensivo || 0) * 0.15 +
           Number(visitaEquipo.rating_visitante || 0) * 0.10 +
           Number(visitaEquipo.rating_tendencia || 0) * 0.10 +
-          bonoAltitudVisita +
-          bonoLiguillaVisita +
-          bonoValorPlantillaVisita;
+          bonoAltitudVisita + bonoLiguillaVisita + bonoValorPlantillaVisita;
 
         const diferencia = Math.abs(scoreLocal - scoreVisita);
         let empateFactor = (Number(localEquipo.pct_hist_local_empata || 0) + Number(visitaEquipo.pct_hist_visita_empata || 0)) / 2;
@@ -149,7 +179,14 @@ export default function AdminPronosticosPartidos() {
 
       await Promise.all(promesasActualizacion);
       await cargarPartidos();
-      alert(`✅ Pronósticos generados para ${partidosProcesados} partidos con factores contextuales (altitud, liguilla, valor plantilla).`);
+
+      // 🆕 Alerta informativa si hubo equipos que no se pudieron procesar
+      if (equiposNoEncontrados.length > 0) {
+        alert(`⚠️ Se generaron ${partidosProcesados} pronósticos, pero ${equiposNoEncontrados.length} partidos se omitieron porque no se encontraron los equipos en la base de datos:\n\n${equiposNoEncontrados.join('\n')}\n\n💡 Solución: Revisa que el nombre en "Partidos" sea idéntico al de "Equipos", o agrégalo al diccionario de alias.`);
+      } else {
+        alert(`✅ Pronósticos generados correctamente para ${partidosProcesados} partidos.`);
+      }
+
     } catch (error) {
       console.error("💥 Error:", error);
       alert("Error al generar pronósticos: " + error.message);
