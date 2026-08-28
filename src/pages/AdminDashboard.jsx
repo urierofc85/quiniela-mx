@@ -486,7 +486,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR PDF (NOMBRES ROTADOS Y LEGIBLES)
+  // EXPORTAR PDF (ORDENADO POR ACIERTOS, SOLO MARCA AL 1° LUGAR)
   //---------------------------------------
   const exportarPDF = async () => {
     if (!jornadaSeleccionada) {
@@ -502,40 +502,80 @@ export default function AdminDashboard() {
     const { data: quinielasData } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico").eq("jornada_id", jornadaSeleccionada);
     const { data: perfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, nombre_completo");
 
-    const usuarios = [...new Set(quinielasData?.map(q => q.usuario_id) || [])];
-    
-    const columnas = ["Partido", "Resultado", ...usuarios.map(usuarioId => {
-      const perfil = perfiles?.find(p => p.id === usuarioId);
-      return perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
-    })];
+    let usuarios = [...new Set(quinielasData?.map(q => q.usuario_id) || [])];
 
+    // PASO 1: Calcular aciertos de cada usuario
     const aciertos = {};
     usuarios.forEach(usuarioId => { aciertos[usuarioId] = 0; });
 
+    (partidos || []).forEach(partido => {
+      if (!partido.resultado) return;
+      usuarios.forEach(usuarioId => {
+        const pronostico = quinielasData?.find(
+          q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
+        );
+        if (pronostico && pronostico.pronostico === partido.resultado) {
+          aciertos[usuarioId]++;
+        }
+      });
+    });
+
+    // PASO 2: Ordenar usuarios por aciertos (de mayor a menor)
+    const usuariosOrdenados = [...usuarios].sort((a, b) => aciertos[b] - aciertos[a]);
+
+    // PASO 3: Calcular posiciones con empates (1, 1, 3, 4...)
+    const posiciones = {};
+    usuariosOrdenados.forEach((usuarioId, index) => {
+      if (index === 0) {
+        posiciones[usuarioId] = 1;
+      } else {
+        const prevUsuario = usuariosOrdenados[index - 1];
+        if (aciertos[usuarioId] === aciertos[prevUsuario]) {
+          posiciones[usuarioId] = posiciones[prevUsuario]; // Misma posición si hay empate
+        } else {
+          posiciones[usuarioId] = index + 1;
+        }
+      }
+    });
+
+    // PASO 4: Construir columnas con [Posición] + [Nombre] en dos líneas
+    const columnas = [
+      "Partido",
+      "Resultado",
+      ...usuariosOrdenados.map(usuarioId => {
+        const perfil = perfiles?.find(p => p.id === usuarioId);
+        const nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
+        return [`#${posiciones[usuarioId]}`, nombre]; 
+      })
+    ];
+
+    // PASO 5: Construir filas en el mismo orden
     const filas = (partidos || []).map(partido => {
       const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
-      usuarios.forEach(usuarioId => {
-        const pronostico = quinielasData?.find(q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId);
-        let valor = "-";
-        if (pronostico) {
-          valor = pronostico.pronostico;
-          if (partido.resultado && pronostico.pronostico === partido.resultado) aciertos[usuarioId]++;
-        }
-        fila.push(valor);
+      usuariosOrdenados.forEach(usuarioId => {
+        const pronostico = quinielasData?.find(
+          q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
+        );
+        fila.push(pronostico?.pronostico || "-");
       });
       return fila;
     });
 
-    const filaTotales = ["TOTAL", "", ...usuarios.map(usuarioId => aciertos[usuarioId])];
+    // PASO 6: Fila de totales ordenada
+    const filaTotales = [
+      "TOTAL",
+      "",
+      ...usuariosOrdenados.map(usuarioId => aciertos[usuarioId])
+    ];
     filas.push(filaTotales);
 
     const doc = new jsPDF("landscape", "mm", "a4");
-    
+
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(34, 197, 94);
     doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 15);
-    
+
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
@@ -546,54 +586,29 @@ export default function AdminDashboard() {
       body: filas,
       startY: 26,
       theme: "grid",
-      styles: { 
+      styles: {
         fontSize: 7,
-        halign: "center", 
+        halign: "center",
         valign: "middle",
         cellPadding: 1.5,
         lineColor: [200, 200, 200],
         lineWidth: 0.1,
       },
-      headStyles: { 
-        fillColor: [34, 197, 94], 
-        textColor: [255, 255, 255], 
+      headStyles: {
+        fillColor: [34, 197, 94],
+        textColor: [255, 255, 255], // Color base blanco para todos
         fontStyle: "bold",
         fontSize: 6.5,
         halign: "center",
         cellPadding: 1.5,
-        minCellHeight: 28,
+        minCellHeight: 32,
       },
       columnStyles: {
-        0: { halign: "left", fontStyle: "bold", fontSize: 7.5, cellWidth: 45 }, 
+        0: { halign: "left", fontStyle: "bold", fontSize: 7.5, cellWidth: 45 },
         1: { halign: "center", fontStyle: "bold", fontSize: 7.5, cellWidth: 14 },
       },
-      didDrawCell: (data) => {
-        if (data.section === "head" && data.column.index >= 2) {
-          const text = data.cell.text[0];
-          const x = data.cell.x + data.cell.width / 2;
-          const y = data.cell.y + data.cell.height - 2;
-          
-          doc.saveGraphicsState();
-          
-          const angle = Math.PI / 2;
-          const cos = Math.cos(angle);
-          const sin = Math.sin(angle);
-          
-          doc.setFillColor(34, 197, 94);
-          doc.setTextColor(255, 255, 255);
-          doc.setFontSize(6.5);
-          doc.setFont("helvetica", "bold");
-          
-          doc.setLineHeightFactor(1);
-          const matrix = [cos, sin, -sin, cos, x, y];
-          doc.setCurrentTransformationMatrix(new doc.GState({ matrix }));
-          
-          doc.text(text, 0, 0, { align: "left", baseline: "middle" });
-          
-          doc.restoreGraphicsState();
-        }
-      },
       didParseCell: (data) => {
+        // 1. Fila de totales
         if (data.section === "body" && data.row.index === filas.length - 1) {
           data.cell.styles.fillColor = [220, 252, 231];
           data.cell.styles.fontStyle = "bold";
@@ -601,13 +616,26 @@ export default function AdminDashboard() {
           data.cell.styles.fontSize = 8;
           return;
         }
-        
+
+        // 2. ENCABEZADO: SOLO marcar al 1° lugar (o empatados en 1°)
+        if (data.section === "head" && data.column.index >= 2) {
+          const usuarioId = usuariosOrdenados[data.column.index - 2];
+          const pos = posiciones[usuarioId];
+          
+          if (pos === 1) {
+            data.cell.styles.textColor = [255, 215, 0]; // 🥇 Dorado solo para el 1° lugar
+          } else {
+            data.cell.styles.textColor = [255, 255, 255]; // Blanco para el resto (2°, 3°, etc.)
+          }
+        }
+
+        // 3. Resaltar aciertos en verde en el cuerpo de la tabla
         if (data.section === "body" && data.column.index >= 2) {
           const fila = filas[data.row.index];
           if (!fila) return;
           const resultado = fila[1];
           const pronostico = data.cell.raw;
-          
+
           if (resultado && resultado !== "-" && pronostico === resultado) {
             data.cell.styles.textColor = [0, 128, 0];
             data.cell.styles.fontStyle = "bold";
