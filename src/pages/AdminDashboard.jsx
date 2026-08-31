@@ -33,6 +33,11 @@ export default function AdminDashboard() {
 
   const [cargando, setCargando] = useState(true);
 
+  // 🆕 Estados para el modal de exportación PDF
+  const [modalPDFAbierto, setModalPDFAbierto] = useState(false);
+  const [jornadaParaPDF, setJornadaParaPDF] = useState("");
+  const [exportandoPDF, setExportandoPDF] = useState(false);
+
   useEffect(() => {
     cargarDashboard();
   }, []);
@@ -44,6 +49,17 @@ export default function AdminDashboard() {
     };
     validarSesion();
   }, [navigate]);
+
+  // 🆕 Cerrar modal con tecla Escape
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === "Escape" && modalPDFAbierto) {
+        setModalPDFAbierto(false);
+      }
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [modalPDFAbierto]);
 
   const cerrarSesion = async () => {
     await supabase.auth.signOut();
@@ -258,7 +274,6 @@ export default function AdminDashboard() {
       });
     });
 
-    // ✅ ORDENAMIENTO CORREGIDO: Prioriza estrictamente el Total de Aciertos descendente
     const rankingQuinielas = Object.values(acumulado)
       .filter(u => !u.soloSurvivor)
       .sort((a, b) => {
@@ -291,9 +306,6 @@ export default function AdminDashboard() {
       const survivorActivaSet = new Set(survivorDeJornadaActiva.filter(s => s.equipo).map(s => s.usuario_id));
       
       quinielasActivas = quinielasActivaSet.size;
-
-      console.log("🔍 Debug - Quinielas filtradas para jornada activa:", quinielasDeJornadaActiva.length);
-      console.log("🔍 Debug - Usuarios únicos en jornada activa:", quinielasActivaSet.size);
 
       ausentesQuiniela = perfilesData
         .filter(p => {
@@ -350,17 +362,15 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG) CON COLORES Y LÓGICA DE REZAGO
+  // EXPORTAR A IMAGEN (JPEG)
   //---------------------------------------
   const exportarImagen = async () => {
     try {
-      // 1. Asegurar que el ranking esté ordenado estrictamente por totalAciertos descendente
       const rankingOrdenado = [...rankingQuinielas].sort((a, b) => {
         if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
         return a.nombre.localeCompare(b.nombre);
       });
 
-      // 2. Obtener el puntaje del líder (1° lugar)
       const liderScore = rankingOrdenado.length > 0 ? rankingOrdenado[0].totalAciertos : 0;
 
       const contenedorTemp = document.createElement('div');
@@ -408,32 +418,30 @@ export default function AdminDashboard() {
         let textColor = '#000000';
         let fontWeight = 'normal';
 
-        // 🎨 Lógica de colores para los primeros 5 lugares
         if (pos === 1) {
-          bgColor = '#22c55e'; // Verde
+          bgColor = '#22c55e';
           textColor = '#ffffff';
           fontWeight = 'bold';
         } else if (pos === 2) {
-          bgColor = '#eab308'; // Amarillo
+          bgColor = '#eab308';
           textColor = '#000000';
           fontWeight = 'bold';
         } else if (pos === 3) {
-          bgColor = '#f97316'; // Naranja
+          bgColor = '#f97316';
           textColor = '#ffffff';
           fontWeight = 'bold';
         } else if (pos === 4) {
-          bgColor = '#3b82f6'; // Azul
+          bgColor = '#3b82f6';
           textColor = '#ffffff';
           fontWeight = 'bold';
         } else if (pos === 5) {
-          bgColor = '#8b5cf6'; // Morado
+          bgColor = '#8b5cf6';
           textColor = '#ffffff';
           fontWeight = 'bold';
         }
 
-        // 🚨 Lógica de alerta: Diferencia mayor a 11 puntos con el líder
         if (liderScore - fila.totalAciertos > 11) {
-          bgColor = '#ef4444'; // Rojo
+          bgColor = '#ef4444';
           textColor = '#ffffff';
           fontWeight = 'bold';
         }
@@ -486,167 +494,190 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
+  // 🆕 ABRIR MODAL DE SELECCIÓN DE JORNADA PARA PDF
+  //---------------------------------------
+  const abrirModalPDF = () => {
+    // Pre-seleccionar la jornada activa si existe, si no, la primera
+    const preSeleccion = jornadaActiva?.id || (jornadas.length > 0 ? jornadas[0].id : "");
+    setJornadaParaPDF(preSeleccion);
+    setModalPDFAbierto(true);
+  };
+
+  //---------------------------------------
   // EXPORTAR PDF (ORDENADO POR ACIERTOS, SOLO MARCA AL 1° LUGAR)
   //---------------------------------------
-  const exportarPDF = async () => {
-    if (!jornadaSeleccionada) {
+  const exportarPDF = async (jornadaId) => {
+    if (!jornadaId) {
       alert("Selecciona una jornada.");
       return;
     }
 
-    const { default: jsPDF } = await import("jspdf");
-    const { default: autoTable } = await import("jspdf-autotable");
+    setExportandoPDF(true);
 
-    const { data: jornadaActivaPDF } = await supabase.from("jornadas").select("*").eq("id", jornadaSeleccionada).single();
-    const { data: partidos } = await supabase.from("partidos").select("id, local, visitante, resultado").eq("jornada_id", jornadaSeleccionada).order("id");
-    const { data: quinielasData } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico").eq("jornada_id", jornadaSeleccionada);
-    const { data: perfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, nombre_completo");
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const { default: autoTable } = await import("jspdf-autotable");
 
-    let usuarios = [...new Set(quinielasData?.map(q => q.usuario_id) || [])];
+      const { data: jornadaActivaPDF } = await supabase.from("jornadas").select("*").eq("id", jornadaId).single();
+      const { data: partidos } = await supabase.from("partidos").select("id, local, visitante, resultado").eq("jornada_id", jornadaId).order("id");
+      const { data: quinielasData } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico").eq("jornada_id", jornadaId);
+      const { data: perfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, nombre_completo");
 
-    // PASO 1: Calcular aciertos de cada usuario
-    const aciertos = {};
-    usuarios.forEach(usuarioId => { aciertos[usuarioId] = 0; });
+      let usuarios = [...new Set(quinielasData?.map(q => q.usuario_id) || [])];
 
-    (partidos || []).forEach(partido => {
-      if (!partido.resultado) return;
-      usuarios.forEach(usuarioId => {
-        const pronostico = quinielasData?.find(
-          q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
-        );
-        if (pronostico && pronostico.pronostico === partido.resultado) {
-          aciertos[usuarioId]++;
-        }
-      });
-    });
-
-    // PASO 2: Ordenar usuarios por aciertos (de mayor a menor)
-    const usuariosOrdenados = [...usuarios].sort((a, b) => aciertos[b] - aciertos[a]);
-
-    // PASO 3: Calcular posiciones con empates (1, 1, 3, 4...)
-    const posiciones = {};
-    usuariosOrdenados.forEach((usuarioId, index) => {
-      if (index === 0) {
-        posiciones[usuarioId] = 1;
-      } else {
-        const prevUsuario = usuariosOrdenados[index - 1];
-        if (aciertos[usuarioId] === aciertos[prevUsuario]) {
-          posiciones[usuarioId] = posiciones[prevUsuario]; // Misma posición si hay empate
-        } else {
-          posiciones[usuarioId] = index + 1;
-        }
+      if (usuarios.length === 0) {
+        alert("⚠️ No hay quinielas registradas para esta jornada.");
+        setExportandoPDF(false);
+        return;
       }
-    });
 
-    // PASO 4: Construir columnas con [Posición] + [Nombre] en dos líneas
-    const columnas = [
-      "Partido",
-      "Resultado",
-      ...usuariosOrdenados.map(usuarioId => {
-        const perfil = perfiles?.find(p => p.id === usuarioId);
-        const nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
-        return [`#${posiciones[usuarioId]}`, nombre]; 
-      })
-    ];
+      // PASO 1: Calcular aciertos de cada usuario
+      const aciertos = {};
+      usuarios.forEach(usuarioId => { aciertos[usuarioId] = 0; });
 
-    // PASO 5: Construir filas en el mismo orden
-    const filas = (partidos || []).map(partido => {
-      const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
-      usuariosOrdenados.forEach(usuarioId => {
-        const pronostico = quinielasData?.find(
-          q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
-        );
-        fila.push(pronostico?.pronostico || "-");
+      (partidos || []).forEach(partido => {
+        if (!partido.resultado) return;
+        usuarios.forEach(usuarioId => {
+          const pronostico = quinielasData?.find(
+            q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
+          );
+          if (pronostico && pronostico.pronostico === partido.resultado) {
+            aciertos[usuarioId]++;
+          }
+        });
       });
-      return fila;
-    });
 
-    // PASO 6: Fila de totales ordenada
-    const filaTotales = [
-      "TOTAL",
-      "",
-      ...usuariosOrdenados.map(usuarioId => aciertos[usuarioId])
-    ];
-    filas.push(filaTotales);
+      // PASO 2: Ordenar usuarios por aciertos (de mayor a menor)
+      const usuariosOrdenados = [...usuarios].sort((a, b) => aciertos[b] - aciertos[a]);
 
-    const doc = new jsPDF("landscape", "mm", "a4");
-
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(34, 197, 94);
-    doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 15);
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')}`, 14, 21);
-
-    autoTable(doc, {
-      head: [columnas],
-      body: filas,
-      startY: 26,
-      theme: "grid",
-      styles: {
-        fontSize: 7,
-        halign: "center",
-        valign: "middle",
-        cellPadding: 1.5,
-        lineColor: [200, 200, 200],
-        lineWidth: 0.1,
-      },
-      headStyles: {
-        fillColor: [34, 197, 94],
-        textColor: [255, 255, 255], // Color base blanco para todos
-        fontStyle: "bold",
-        fontSize: 6.5,
-        halign: "center",
-        cellPadding: 1.5,
-        minCellHeight: 32,
-      },
-      columnStyles: {
-        0: { halign: "left", fontStyle: "bold", fontSize: 7.5, cellWidth: 45 },
-        1: { halign: "center", fontStyle: "bold", fontSize: 7.5, cellWidth: 14 },
-      },
-      didParseCell: (data) => {
-        // 1. Fila de totales
-        if (data.section === "body" && data.row.index === filas.length - 1) {
-          data.cell.styles.fillColor = [220, 252, 231];
-          data.cell.styles.fontStyle = "bold";
-          data.cell.styles.textColor = [22, 101, 52];
-          data.cell.styles.fontSize = 8;
-          return;
-        }
-
-        // 2. ENCABEZADO: SOLO marcar al 1° lugar (o empatados en 1°)
-        if (data.section === "head" && data.column.index >= 2) {
-          const usuarioId = usuariosOrdenados[data.column.index - 2];
-          const pos = posiciones[usuarioId];
-          
-          if (pos === 1) {
-            data.cell.styles.textColor = [255, 215, 0]; // 🥇 Dorado solo para el 1° lugar
+      // PASO 3: Calcular posiciones con empates (1, 1, 3, 4...)
+      const posiciones = {};
+      usuariosOrdenados.forEach((usuarioId, index) => {
+        if (index === 0) {
+          posiciones[usuarioId] = 1;
+        } else {
+          const prevUsuario = usuariosOrdenados[index - 1];
+          if (aciertos[usuarioId] === aciertos[prevUsuario]) {
+            posiciones[usuarioId] = posiciones[prevUsuario];
           } else {
-            data.cell.styles.textColor = [255, 255, 255]; // Blanco para el resto (2°, 3°, etc.)
+            posiciones[usuarioId] = index + 1;
           }
         }
+      });
 
-        // 3. Resaltar aciertos en verde en el cuerpo de la tabla
-        if (data.section === "body" && data.column.index >= 2) {
-          const fila = filas[data.row.index];
-          if (!fila) return;
-          const resultado = fila[1];
-          const pronostico = data.cell.raw;
+      // PASO 4: Construir columnas con [Posición] + [Nombre] en dos líneas
+      const columnas = [
+        "Partido",
+        "Resultado",
+        ...usuariosOrdenados.map(usuarioId => {
+          const perfil = perfiles?.find(p => p.id === usuarioId);
+          const nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
+          return [`#${posiciones[usuarioId]}`, nombre]; 
+        })
+      ];
 
-          if (resultado && resultado !== "-" && pronostico === resultado) {
-            data.cell.styles.textColor = [0, 128, 0];
-            data.cell.styles.fontStyle = "bold";
+      // PASO 5: Construir filas en el mismo orden
+      const filas = (partidos || []).map(partido => {
+        const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
+        usuariosOrdenados.forEach(usuarioId => {
+          const pronostico = quinielasData?.find(
+            q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
+          );
+          fila.push(pronostico?.pronostico || "-");
+        });
+        return fila;
+      });
+
+      // PASO 6: Fila de totales ordenada
+      const filaTotales = [
+        "TOTAL",
+        "",
+        ...usuariosOrdenados.map(usuarioId => aciertos[usuarioId])
+      ];
+      filas.push(filaTotales);
+
+      const doc = new jsPDF("landscape", "mm", "a4");
+
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(34, 197, 94);
+      doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 15);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')}`, 14, 21);
+
+      autoTable(doc, {
+        head: [columnas],
+        body: filas,
+        startY: 26,
+        theme: "grid",
+        styles: {
+          fontSize: 7,
+          halign: "center",
+          valign: "middle",
+          cellPadding: 1.5,
+          lineColor: [200, 200, 200],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [34, 197, 94],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 6.5,
+          halign: "center",
+          cellPadding: 1.5,
+          minCellHeight: 32,
+        },
+        columnStyles: {
+          0: { halign: "left", fontStyle: "bold", fontSize: 7.5, cellWidth: 45 },
+          1: { halign: "center", fontStyle: "bold", fontSize: 7.5, cellWidth: 14 },
+        },
+        didParseCell: (data) => {
+          if (data.section === "body" && data.row.index === filas.length - 1) {
             data.cell.styles.fillColor = [220, 252, 231];
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.textColor = [22, 101, 52];
+            data.cell.styles.fontSize = 8;
+            return;
           }
-        }
-      },
-      margin: { top: 26, left: 8, right: 8, bottom: 10 },
-    });
 
-    doc.save(`Quinielas_${jornadaActivaPDF?.nombre || 'Jornada'}.pdf`);
+          if (data.section === "head" && data.column.index >= 2) {
+            const usuarioId = usuariosOrdenados[data.column.index - 2];
+            const pos = posiciones[usuarioId];
+            
+            if (pos === 1) {
+              data.cell.styles.textColor = [255, 215, 0];
+            } else {
+              data.cell.styles.textColor = [255, 255, 255];
+            }
+          }
+
+          if (data.section === "body" && data.column.index >= 2) {
+            const fila = filas[data.row.index];
+            if (!fila) return;
+            const resultado = fila[1];
+            const pronostico = data.cell.raw;
+
+            if (resultado && resultado !== "-" && pronostico === resultado) {
+              data.cell.styles.textColor = [0, 128, 0];
+              data.cell.styles.fontStyle = "bold";
+              data.cell.styles.fillColor = [220, 252, 231];
+            }
+          }
+        },
+        margin: { top: 26, left: 8, right: 8, bottom: 10 },
+      });
+
+      doc.save(`Quinielas_${jornadaActivaPDF?.nombre || 'Jornada'}.pdf`);
+      setModalPDFAbierto(false);
+    } catch (error) {
+      console.error("Error al exportar PDF:", error);
+      alert("Error al generar el PDF: " + error.message);
+    } finally {
+      setExportandoPDF(false);
+    }
   };
 
   //---------------------------------------
@@ -686,7 +717,13 @@ export default function AdminDashboard() {
           📸 Exportar Ranking General Quinielas (JPEG)
         </button>
 
-        <button onClick={exportarPDF} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">📄 Exportar PDF</button>
+        {/* 🆕 Botón que ahora abre el modal */}
+        <button 
+          onClick={abrirModalPDF} 
+          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
+        >
+          📄 Exportar PDF
+        </button>
         
         <Link to="/admin" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">Crear Jornada</Link>
         <Link to="/partidos" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Crear Partidos</Link>
@@ -793,6 +830,71 @@ export default function AdminDashboard() {
                 <p className="font-semibold">✅ ¡Todos los no eliminados han registrado su survivor!</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 MODAL DE SELECCIÓN DE JORNADA PARA PDF */}
+      {modalPDFAbierto && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => !exportandoPDF && setModalPDFAbierto(false)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800">📄 Exportar PDF</h3>
+              <button
+                onClick={() => setModalPDFAbierto(false)}
+                disabled={exportandoPDF}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="text-gray-600 mb-4 text-sm">
+              Selecciona la jornada que deseas exportar como PDF:
+            </p>
+
+            <select
+              value={jornadaParaPDF}
+              onChange={(e) => setJornadaParaPDF(Number(e.target.value))}
+              disabled={exportandoPDF}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 mb-6 focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:bg-gray-100"
+            >
+              {jornadas.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.nombre} {j.activa ? "(Activa)" : ""}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setModalPDFAbierto(false)}
+                disabled={exportandoPDF}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => exportarPDF(jornadaParaPDF)}
+                disabled={exportandoPDF || !jornadaParaPDF}
+                className="px-4 py-2 text-sm font-bold text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {exportandoPDF ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Generando...
+                  </>
+                ) : (
+                  <>📄 Generar PDF</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
