@@ -26,9 +26,7 @@ export default function Quiniela() {
   useEffect(() => {
     const validarSesion = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate("/");
-      }
+      if (!session) navigate("/");
     };
     validarSesion();
   }, [navigate]);
@@ -37,7 +35,6 @@ export default function Quiniela() {
     setCargandoPerfil(true);
     const ahora = await obtenerHoraMexico();
 
-    // 1. Verificar si el usuario es solo Survivor
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data: perfil } = await supabase
@@ -45,12 +42,10 @@ export default function Quiniela() {
         .select("solo_survivor")
         .eq("id", user.id)
         .single();
-      
       setEsSoloSurvivor(perfil?.solo_survivor === true);
     }
     setCargandoPerfil(false);
 
-    // 2. Cargar todas las jornadas para el selector de PDF
     const { data: todasJornadas } = await supabase
       .from("jornadas")
       .select("*")
@@ -63,14 +58,10 @@ export default function Quiniela() {
         const limiteS = j.fecha_limite_survivor ? new Date(j.fecha_limite_survivor) : limiteQ;
         return ahora > limiteQ && ahora > limiteS;
       });
-
       setJornadas(cerradas);
-      if (cerradas.length > 0) {
-        setJornadaSeleccionadaPDF(cerradas[0].id.toString());
-      }
+      if (cerradas.length > 0) setJornadaSeleccionadaPDF(cerradas[0].id.toString());
     }
 
-    // 3. Cargar la jornada activa actual
     const { data: activa } = await supabase
       .from("jornadas")
       .select("*")
@@ -92,8 +83,6 @@ export default function Quiniela() {
 
   const cargarPartidos = async (jornadaId) => {
     if (!jornadaId) return;
-    
-    // ✅ Agregamos 'jornada_original', 'pospuesto' y 'reactivado' a la consulta
     const { data, error } = await supabase
       .from("partidos")
       .select("id, jornada_id, jornada_original, local, visitante, resultado, pospuesto, reactivado")
@@ -123,9 +112,7 @@ export default function Quiniela() {
 
     setQuinielaGuardada(data || []);
     const nuevosPronosticos = {};
-    data?.forEach((item) => {
-      nuevosPronosticos[item.partido_id] = item.pronostico;
-    });
+    data?.forEach((item) => { nuevosPronosticos[item.partido_id] = item.pronostico; });
     setPronosticos(nuevosPronosticos);
   };
 
@@ -152,10 +139,8 @@ export default function Quiniela() {
       return;
     }
 
-    // Verificamos si hay partidos reactivados en esta jornada
     const hayPartidosReactivados = partidos.some((p) => p.reactivado);
     
-    // Permitimos guardar si la jornada NO está cerrada, O si hay partidos reactivados pendientes
     if (jornadaCerrada && !hayPartidosReactivados) {
       alert("La jornada ya fue cerrada");
       return;
@@ -177,7 +162,6 @@ export default function Quiniela() {
       .eq("jornada_id", jornadaActiva.id);
 
     if (deleteError) {
-      console.error("Error eliminando quiniela previa:", deleteError);
       alert(deleteError.message);
       return;
     }
@@ -185,16 +169,13 @@ export default function Quiniela() {
     const { data, error } = await supabase.from("quinielas").insert(registros).select();
 
     if (error) {
-      console.error("Error guardando quiniela:", error);
       alert(error.message);
       return;
     }
 
     setQuinielaGuardada(data || []);
     const nuevosPronosticos = {};
-    data?.forEach((item) => {
-      nuevosPronosticos[item.partido_id] = item.pronostico;
-    });
+    data?.forEach((item) => { nuevosPronosticos[item.partido_id] = item.pronostico; });
     setPronosticos(nuevosPronosticos);
 
     alert("✅ Quiniela guardada correctamente");
@@ -311,7 +292,6 @@ export default function Quiniela() {
     );
   }
 
-  // Lógica para habilitar el botón de guardar si hay partidos reactivados
   const hayPartidosReactivados = partidos.some((p) => p.reactivado);
   const puedeGuardar = !jornadaCerrada || hayPartidosReactivados;
 
@@ -389,22 +369,35 @@ export default function Quiniela() {
             const estaReactivado = partido.reactivado;
             const tieneResultado = !!partido.resultado;
             
-            // ✅ Se bloquea si: (Jornada cerrada Y no reactivado) O (Ya tiene resultado)
-            const estaDeshabilitado = (jornadaCerrada && !estaReactivado) || tieneResultado;
+            // ✅ Detectar si el partido fue movido desde otra jornada
+            const fueMovido = partido.jornada_original && partido.jornada_original !== partido.jornada_id;
+            
+            // ✅ Se bloquea si: (Jornada cerrada Y no reactivado) O (Ya tiene resultado) O (Está pospuesto sin reactivar)
+            const estaDeshabilitado = (jornadaCerrada && !estaReactivado) || tieneResultado || estaPospuesto;
 
             return (
               <div 
                 key={partido.id} 
                 className={`border rounded p-4 mb-3 transition-all ${
-                  estaPospuesto ? "bg-gray-100 opacity-60" : 
-                  estaReactivado ? "bg-green-50 border-2 border-green-400" : "bg-white"
+                  estaPospuesto 
+                    ? "bg-orange-50 border-orange-300 opacity-80" 
+                    : estaReactivado 
+                      ? "bg-green-50 border-2 border-green-400" 
+                      : "bg-white"
                 }`}
               >
                 <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
                   <h3 className="font-semibold text-lg">{partido.local} vs {partido.visitante}</h3>
                   <div className="flex gap-2 flex-wrap">
-                    {/* 🆕 ETIQUETA PARA PARTIDOS REASIGNADOS DESDE OTRA JORNADA */}
-                    {partido.jornada_original && partido.jornada_original !== partido.jornada_id && (
+                    {/* 🆕 ETIQUETA: Partido pospuesto en su jornada original */}
+                    {estaPospuesto && !fueMovido && (
+                      <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded font-bold">
+                        ⏸️ PARTIDO POSPUESTO
+                      </span>
+                    )}
+                    
+                    {/* 🆕 ETIQUETA: Partido que fue movido desde otra jornada */}
+                    {fueMovido && (
                       <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded font-bold">
                         ⚠️ Pospuesto de la J{partido.jornada_original}
                       </span>
@@ -422,6 +415,13 @@ export default function Quiniela() {
                     )}
                   </div>
                 </div>
+
+                {/* 🆕 MENSAJE EXPLICATIVO PARA PARTIDOS POSPUESTOS */}
+                {estaPospuesto && !fueMovido && (
+                  <div className="bg-orange-100 border-l-4 border-orange-400 p-2 mb-3 rounded text-sm text-orange-800">
+                    ⏸️ Este partido fue pospuesto por el administrador. No puedes hacer pronóstico hasta que sea reactivado en otra jornada.
+                  </div>
+                )}
                 
                 <div className="flex gap-4 mt-3">
                   {["L", "E", "V"].map((valor) => (
@@ -529,8 +529,8 @@ export default function Quiniela() {
                   <ul className="list-disc list-inside space-y-3 text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-200">
                     <li>Cada jornada el participante hará la selección de sus pronósticos: <strong>Local, Empate o Visitante</strong>.</li>
                     <li>Se llevará un <strong>ranking semanal</strong>.</li>
-                    <li>Los aciertos semanales se sumarán al acumulado de pronósticos acertados. Al final del torneo de la Liga MX se tendrá a un primer, segundo y tercer lugar, conforme a los aciertos que tengan y usos de equipos.</li>
-                    <li>En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>. En ese momento, ya no se podrán elegir pronósticos ni survivor, por lo que, cualquier omisión será responsabilidad única del participante.</li>
+                    <li>Los aciertos semanales se sumarán al acumulado de pronósticos acertados.</li>
+                    <li>En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>.</li>
                   </ul>
                   <p className="text-center text-lg font-bold text-green-700 mt-4">¡Es una quiniela entre amigos! ⚽🍻</p>
                 </div>

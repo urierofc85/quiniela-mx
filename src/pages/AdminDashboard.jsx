@@ -33,7 +33,6 @@ export default function AdminDashboard() {
 
   const [cargando, setCargando] = useState(true);
 
-  // 🆕 Estados para el modal de exportación PDF
   const [modalPDFAbierto, setModalPDFAbierto] = useState(false);
   const [jornadaParaPDF, setJornadaParaPDF] = useState("");
   const [exportandoPDF, setExportandoPDF] = useState(false);
@@ -50,7 +49,6 @@ export default function AdminDashboard() {
     validarSesion();
   }, [navigate]);
 
-  // 🆕 Cerrar modal con tecla Escape
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key === "Escape" && modalPDFAbierto) {
@@ -128,7 +126,7 @@ export default function AdminDashboard() {
       const [todasQuinielas, todosSurvivor, todosPartidos] = await Promise.all([
         fetchAllRows("quinielas", "jornada_id, usuario_id, partido_id, pronostico"),
         fetchAllRows("survivor", "jornada_id, usuario_id, equipo"),
-        fetchAllRows("partidos", "id, jornada_id, local, visitante, resultado")
+        fetchAllRows("partidos", "id, jornada_id, local, visitante, resultado, pospuesto") // ✅ Agregamos 'pospuesto'
       ]);
 
       const jornadasData = jornadasRes.data || [];
@@ -225,7 +223,8 @@ export default function AdminDashboard() {
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
-      const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId));
+      // ✅ FILTRO CLAVE: Excluir partidos pospuestos del cálculo de aciertos
+      const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId) && !p.pospuesto);
       const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
       const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
 
@@ -494,17 +493,16 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // 🆕 ABRIR MODAL DE SELECCIÓN DE JORNADA PARA PDF
+  // ABRIR MODAL DE SELECCIÓN DE JORNADA PARA PDF
   //---------------------------------------
   const abrirModalPDF = () => {
-    // Pre-seleccionar la jornada activa si existe, si no, la primera
     const preSeleccion = jornadaActiva?.id || (jornadas.length > 0 ? jornadas[0].id : "");
     setJornadaParaPDF(preSeleccion);
     setModalPDFAbierto(true);
   };
 
   //---------------------------------------
-  // EXPORTAR PDF (ORDENADO POR ACIERTOS, SOLO MARCA AL 1° LUGAR)
+  // EXPORTAR PDF (ORDENADO POR ACIERTOS, EXCLUYE POSPUESTOS)
   //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
@@ -519,7 +517,15 @@ export default function AdminDashboard() {
       const { default: autoTable } = await import("jspdf-autotable");
 
       const { data: jornadaActivaPDF } = await supabase.from("jornadas").select("*").eq("id", jornadaId).single();
-      const { data: partidos } = await supabase.from("partidos").select("id, local, visitante, resultado").eq("jornada_id", jornadaId).order("id");
+      
+      // ✅ FILTRO CLAVE: .eq("pospuesto", false) para que solo salgan los partidos jugados
+      const { data: partidos } = await supabase
+        .from("partidos")
+        .select("id, local, visitante, resultado, pospuesto")
+        .eq("jornada_id", jornadaId)
+        .eq("pospuesto", false)
+        .order("id");
+        
       const { data: quinielasData } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico").eq("jornada_id", jornadaId);
       const { data: perfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, nombre_completo");
 
@@ -531,7 +537,6 @@ export default function AdminDashboard() {
         return;
       }
 
-      // PASO 1: Calcular aciertos de cada usuario
       const aciertos = {};
       usuarios.forEach(usuarioId => { aciertos[usuarioId] = 0; });
 
@@ -547,10 +552,8 @@ export default function AdminDashboard() {
         });
       });
 
-      // PASO 2: Ordenar usuarios por aciertos (de mayor a menor)
       const usuariosOrdenados = [...usuarios].sort((a, b) => aciertos[b] - aciertos[a]);
 
-      // PASO 3: Calcular posiciones con empates (1, 1, 3, 4...)
       const posiciones = {};
       usuariosOrdenados.forEach((usuarioId, index) => {
         if (index === 0) {
@@ -565,7 +568,6 @@ export default function AdminDashboard() {
         }
       });
 
-      // PASO 4: Construir columnas con [Posición] + [Nombre] en dos líneas
       const columnas = [
         "Partido",
         "Resultado",
@@ -576,7 +578,6 @@ export default function AdminDashboard() {
         })
       ];
 
-      // PASO 5: Construir filas en el mismo orden
       const filas = (partidos || []).map(partido => {
         const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
         usuariosOrdenados.forEach(usuarioId => {
@@ -588,7 +589,6 @@ export default function AdminDashboard() {
         return fila;
       });
 
-      // PASO 6: Fila de totales ordenada
       const filaTotales = [
         "TOTAL",
         "",
@@ -717,7 +717,6 @@ export default function AdminDashboard() {
           📸 Exportar Ranking General Quinielas (JPEG)
         </button>
 
-        {/* 🆕 Botón que ahora abre el modal */}
         <button 
           onClick={abrirModalPDF} 
           className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
@@ -834,7 +833,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* 🆕 MODAL DE SELECCIÓN DE JORNADA PARA PDF */}
       {modalPDFAbierto && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
