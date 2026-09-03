@@ -37,8 +37,12 @@ export default function Survivor() {
       .eq("activa", true)
       .single();
 
-    if (!data) return;
+    if (!data) {
+      console.error("❌ No se encontró jornada activa");
+      return;
+    }
 
+    console.log("✅ Jornada activa encontrada:", data);
     setJornadaActiva(data);
 
     if (data.fecha_limite) {
@@ -48,41 +52,67 @@ export default function Survivor() {
     }
   };
 
-  // ✅ CORREGIDO: Manejo de errores si la columna 'pospuesto' aún no existe
   const cargarTodosLosPartidos = async () => {
+    console.log("🔍 Intentando cargar partidos con columna 'pospuesto'...");
+    
     let { data, error } = await supabase
       .from("partidos")
       .select("id, jornada_id, local, visitante, pospuesto");
     
     if (error) {
-      console.warn("⚠️ No se pudo cargar la columna 'pospuesto' (quizás el SQL aún no se ejecutó). Reintentando sin ella...");
-      const { data: fallbackData } = await supabase
+      console.warn("⚠️ Error con columna 'pospuesto':", error.message);
+      console.log("🔄 Reintentando sin la columna 'pospuesto'...");
+      
+      const { data: fallbackData, error: fallbackError } = await supabase
         .from("partidos")
         .select("id, jornada_id, local, visitante");
-      setTodosLosPartidos(fallbackData || []);
+      
+      if (fallbackError) {
+        console.error("❌ Error en fallback:", fallbackError);
+        setTodosLosPartidos([]);
+      } else {
+        console.log("✅ Fallback exitoso. Partidos cargados:", fallbackData?.length);
+        setTodosLosPartidos(fallbackData || []);
+      }
     } else {
+      console.log("✅ Partidos cargados con 'pospuesto':", data?.length);
       setTodosLosPartidos(data || []);
     }
   };
 
-  // ✅ CORREGIDO: Comparación segura con String() y !== true
   const cargarEquiposDisponibles = async () => {
-    if (!jornadaActiva) return;
+    if (!jornadaActiva) {
+      console.error("❌ No hay jornada activa para cargar equipos");
+      return;
+    }
 
+    console.log("\n🔍 === DIAGNÓSTICO DE EQUIPOS DISPONIBLES ===");
+    console.log("Jornada activa ID:", jornadaActiva.id, "Nombre:", jornadaActiva.nombre);
+    console.log("Total de partidos en memoria:", todosLosPartidos.length);
+
+    // Mostrar todos los partidos de la jornada activa
     const partidosJornada = todosLosPartidos.filter(
       (p) => String(p.jornada_id) === String(jornadaActiva.id)
     );
 
-    console.log("🔍 Partidos encontrados para la jornada activa:", partidosJornada.length);
+    console.log("Partidos encontrados para esta jornada:", partidosJornada.length);
+    console.log("Detalle de partidos:");
+    partidosJornada.forEach(p => {
+      console.log(`  - ${p.local} vs ${p.visitante} | pospuesto: ${p.pospuesto} | tipo: ${typeof p.pospuesto}`);
+    });
 
     const opciones = [];
     partidosJornada.forEach((p) => {
-      // Solo excluimos si pospuesto es EXPLÍCITAMENTE true
+      // ✅ Solo excluimos si pospuesto es EXPLÍCITAMENTE true
       if (p.pospuesto !== true) {
         opciones.push({ nombre: p.local, rival: p.visitante });
         opciones.push({ nombre: p.visitante, rival: p.local });
+      } else {
+        console.log(`  ⏸️ EXCLUIDO por pospuesto: ${p.local} vs ${p.visitante}`);
       }
     });
+
+    console.log("Opciones antes de eliminar duplicados:", opciones.length);
 
     const unicos = [];
     const vistos = new Set();
@@ -94,6 +124,11 @@ export default function Survivor() {
     });
 
     unicos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    
+    console.log("Equipos únicos disponibles:", unicos.length);
+    console.log("Lista de equipos:", unicos.map(e => e.nombre));
+    console.log("=== FIN DIAGNÓSTICO ===\n");
+
     setEquiposDisponibles(unicos);
   };
 
@@ -412,7 +447,7 @@ export default function Survivor() {
 
           {equiposDisponibles.length === 0 && !jornadaCerrada && (
             <p className="text-orange-600 text-sm mb-4 bg-orange-50 p-3 rounded border border-orange-200">
-              ⚠️ No se encontraron equipos disponibles. Verifica la consola (F12) o asegúrate de que los partidos de esta jornada no estén marcados como pospuestos.
+              ⚠️ No se encontraron equipos disponibles. Abre la consola (F12) para ver el diagnóstico detallado.
             </p>
           )}
 
