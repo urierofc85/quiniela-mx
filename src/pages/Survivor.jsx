@@ -14,9 +14,7 @@ export default function Survivor() {
   const [vidasPerdidas, setVidasPerdidas] = useState(0);
   const [todosLosPartidos, setTodosLosPartidos] = useState([]);
   
-  // 🆕 Estado para mostrar advertencias al usuario
   const [mensajeAdvertencia, setMensajeAdvertencia] = useState("");
-  
   const [mostrarReglas, setMostrarReglas] = useState(false);
 
   useEffect(() => {
@@ -25,15 +23,20 @@ export default function Survivor() {
 
   const cargarDatos = async () => {
     await cargarJornada();
-    await cargarTodosLosPartidos();
+    await cargarTodosLosPartidos(); 
     await cargarEquiposDisponibles();
-    await cargarSeleccionActual(); // 🆕 Ahora se llama después de tener los partidos
+    await cargarSeleccionActual(); 
     await cargarHistorial();
     await cargarUsoEquipos();
   };
 
   const cargarJornada = async () => {
-    const { data } = await supabase.from("jornadas").select("*").eq("activa", true).single();
+    const { data } = await supabase
+      .from("jornadas")
+      .select("*")
+      .eq("activa", true)
+      .single();
+
     if (!data) return;
 
     setJornadaActiva(data);
@@ -45,21 +48,37 @@ export default function Survivor() {
     }
   };
 
+  // ✅ CORREGIDO: Manejo de errores si la columna 'pospuesto' aún no existe
   const cargarTodosLosPartidos = async () => {
-    const { data } = await supabase.from("partidos").select("id, jornada_id, local, visitante, pospuesto");
-    setTodosLosPartidos(data || []);
+    let { data, error } = await supabase
+      .from("partidos")
+      .select("id, jornada_id, local, visitante, pospuesto");
+    
+    if (error) {
+      console.warn("⚠️ No se pudo cargar la columna 'pospuesto' (quizás el SQL aún no se ejecutó). Reintentando sin ella...");
+      const { data: fallbackData } = await supabase
+        .from("partidos")
+        .select("id, jornada_id, local, visitante");
+      setTodosLosPartidos(fallbackData || []);
+    } else {
+      setTodosLosPartidos(data || []);
+    }
   };
 
+  // ✅ CORREGIDO: Comparación segura con String() y !== true
   const cargarEquiposDisponibles = async () => {
     if (!jornadaActiva) return;
 
     const partidosJornada = todosLosPartidos.filter(
-      (p) => Number(p.jornada_id) === Number(jornadaActiva.id)
+      (p) => String(p.jornada_id) === String(jornadaActiva.id)
     );
+
+    console.log("🔍 Partidos encontrados para la jornada activa:", partidosJornada.length);
 
     const opciones = [];
     partidosJornada.forEach((p) => {
-      if (!p.pospuesto) {
+      // Solo excluimos si pospuesto es EXPLÍCITAMENTE true
+      if (p.pospuesto !== true) {
         opciones.push({ nombre: p.local, rival: p.visitante });
         opciones.push({ nombre: p.visitante, rival: p.local });
       }
@@ -78,7 +97,6 @@ export default function Survivor() {
     setEquiposDisponibles(unicos);
   };
 
-  // 🆕 ACTUALIZADO: Detecta si la selección actual está en un partido pospuesto
   const cargarSeleccionActual = async () => {
     if (!jornadaActiva) return;
     
@@ -93,15 +111,13 @@ export default function Survivor() {
       .maybeSingle();
 
     if (data) {
-      // Buscar si el equipo que eligió está en un partido pospuesto de ESTA jornada
       const partidoDeMiSeleccion = todosLosPartidos.find(
         (p) =>
-          Number(p.jornada_id) === Number(jornadaActiva.id) &&
+          String(p.jornada_id) === String(jornadaActiva.id) &&
           (p.local === data.equipo || p.visitante === data.equipo)
       );
 
-      if (partidoDeMiSeleccion?.pospuesto) {
-        // 🚨 Si está pospuesto, limpiamos el select y avisamos
+      if (partidoDeMiSeleccion?.pospuesto === true) {
         setEquipoSeleccionado("");
         setMensajeAdvertencia(
           `⚠️ Tu selección anterior (${data.equipo}) fue pospuesta. Por favor elige un nuevo equipo para esta jornada.`
@@ -130,7 +146,7 @@ export default function Survivor() {
     data?.forEach((sel) => {
       const partido = todosLosPartidos.find(
         (p) =>
-          Number(p.jornada_id) === Number(sel.jornada_id) &&
+          String(p.jornada_id) === String(sel.jornada_id) &&
           (p.local === sel.equipo || p.visitante === sel.equipo)
       );
 
@@ -139,7 +155,6 @@ export default function Survivor() {
         const rival = partido.local === sel.equipo ? partido.visitante : partido.local;
         clave = `${sel.equipo} (vs ${rival})`;
       } else {
-        // Si el partido fue movido a otra jornada, buscarlo globalmente
         const partidoMovido = todosLosPartidos.find(p => p.local === sel.equipo || p.visitante === sel.equipo);
         if (partidoMovido) {
            const rival = partidoMovido.local === sel.equipo ? partidoMovido.visitante : partidoMovido.local;
@@ -155,7 +170,6 @@ export default function Survivor() {
     setUsoEquipos(resultado);
   };
 
-  // 🆕 ACTUALIZADO: Maneja partidos pospuestos y movidos en el historial
   const cargarHistorial = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -178,7 +192,7 @@ export default function Survivor() {
 
     const procesado = (jornadas || []).map((jornada) => {
       const esPasadaYCerrada = jornada.fecha_limite ? horaMexico > new Date(jornada.fecha_limite) : false;
-      const seleccion = selecciones?.find((s) => Number(s.jornada_id) === Number(jornada.id));
+      const seleccion = selecciones?.find((s) => String(s.jornada_id) === String(jornada.id));
 
       if (!seleccion && esPasadaYCerrada) {
         vidas++;
@@ -201,10 +215,9 @@ export default function Survivor() {
         };
       }
 
-      // Buscar el partido en ESTA jornada
       const partido = todosLosPartidos?.find(
         (p) =>
-          Number(p.jornada_id) === Number(jornada.id) &&
+          String(p.jornada_id) === String(jornada.id) &&
           (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
       );
 
@@ -216,8 +229,7 @@ export default function Survivor() {
         const rival = partido.local === seleccion.equipo ? partido.visitante : partido.local;
         nombreEquipoConRival = `${seleccion.equipo} (vs ${rival})`;
 
-        // 🆕 CASO: El partido está pospuesto
-        if (partido.pospuesto) {
+        if (partido.pospuesto === true) {
           resultado = "⏸️ Pospuesto";
           puntos = 0;
         } else if (partido.resultado) {
@@ -232,7 +244,6 @@ export default function Survivor() {
           }
         }
       } else {
-        // 🆕 CASO: El partido fue movido a OTRA jornada
         const partidoMovido = todosLosPartidos.find(
           (p) => p.local === seleccion.equipo || p.visitante === seleccion.equipo
         );
@@ -315,7 +326,7 @@ export default function Survivor() {
     }
 
     alert("Selección guardada correctamente");
-    setMensajeAdvertencia(""); // 🆕 Limpiar advertencia al guardar
+    setMensajeAdvertencia("");
     await cargarSeleccionActual();
     await cargarHistorial();
     await cargarUsoEquipos();
@@ -379,7 +390,6 @@ export default function Survivor() {
             {jornadaCerrada && <span className="text-sm bg-red-100 text-red-700 px-2 py-1 rounded font-normal">Cerrada</span>}
           </h2>
 
-          {/* 🆕 MENSAJE DE ADVERTENCIA SI SU SELECCIÓN FUE POSPUESTA */}
           {mensajeAdvertencia && (
             <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4 rounded text-sm text-yellow-800">
               {mensajeAdvertencia}
@@ -402,7 +412,7 @@ export default function Survivor() {
 
           {equiposDisponibles.length === 0 && !jornadaCerrada && (
             <p className="text-orange-600 text-sm mb-4 bg-orange-50 p-3 rounded border border-orange-200">
-              ⚠️ Todos los partidos de esta jornada están pospuestos. No hay equipos disponibles para seleccionar.
+              ⚠️ No se encontraron equipos disponibles. Verifica la consola (F12) o asegúrate de que los partidos de esta jornada no estén marcados como pospuestos.
             </p>
           )}
 
