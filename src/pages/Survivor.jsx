@@ -22,34 +22,37 @@ export default function Survivor() {
   }, []);
 
   const cargarDatos = async () => {
-    await cargarJornada();
-    await cargarTodosLosPartidos(); 
-    await cargarEquiposDisponibles();
-    await cargarSeleccionActual(); 
-    await cargarHistorial();
-    await cargarUsoEquipos();
-  };
-
-  const cargarJornada = async () => {
-    const { data } = await supabase
+    // 1. Cargar jornada activa directamente
+    const { data: jornadaData } = await supabase
       .from("jornadas")
       .select("*")
       .eq("activa", true)
       .single();
 
-    if (!data) {
-      console.error("❌ No se encontró jornada activa");
-      return;
+    if (jornadaData) {
+      setJornadaActiva(jornadaData);
+      if (jornadaData.fecha_limite) {
+        const limite = new Date(jornadaData.fecha_limite);
+        const horaMexico = await obtenerHoraMexico();
+        setJornadaCerrada(horaMexico > limite);
+      }
+    } else {
+      console.error("❌ No se encontró jornada activa en la BD");
     }
 
-    console.log("✅ Jornada activa encontrada:", data);
-    setJornadaActiva(data);
+    // 2. Cargar partidos
+    await cargarTodosLosPartidos();
 
-    if (data.fecha_limite) {
-      const limite = new Date(data.fecha_limite);
-      const horaMexico = await obtenerHoraMexico();
-      setJornadaCerrada(horaMexico > limite);
+    // 3. Cargar equipos y selección PASANDO la jornadaData directamente 
+    // para evitar el problema de estado asíncrono de React
+    if (jornadaData) {
+      await cargarEquiposDisponibles(jornadaData);
+      await cargarSeleccionActual(jornadaData);
     }
+
+    // 4. Cargar historial y usos
+    await cargarHistorial();
+    await cargarUsoEquipos();
   };
 
   const cargarTodosLosPartidos = async () => {
@@ -80,19 +83,19 @@ export default function Survivor() {
     }
   };
 
-  const cargarEquiposDisponibles = async () => {
-    if (!jornadaActiva) {
+  // ✅ Recibe la jornada como parámetro (con fallback al estado)
+  const cargarEquiposDisponibles = async (jornada = jornadaActiva) => {
+    if (!jornada) {
       console.error("❌ No hay jornada activa para cargar equipos");
       return;
     }
 
     console.log("\n🔍 === DIAGNÓSTICO DE EQUIPOS DISPONIBLES ===");
-    console.log("Jornada activa ID:", jornadaActiva.id, "Nombre:", jornadaActiva.nombre);
+    console.log("Jornada activa ID:", jornada.id, "Nombre:", jornada.nombre);
     console.log("Total de partidos en memoria:", todosLosPartidos.length);
 
-    // Mostrar todos los partidos de la jornada activa
     const partidosJornada = todosLosPartidos.filter(
-      (p) => String(p.jornada_id) === String(jornadaActiva.id)
+      (p) => String(p.jornada_id) === String(jornada.id)
     );
 
     console.log("Partidos encontrados para esta jornada:", partidosJornada.length);
@@ -103,7 +106,6 @@ export default function Survivor() {
 
     const opciones = [];
     partidosJornada.forEach((p) => {
-      // ✅ Solo excluimos si pospuesto es EXPLÍCITAMENTE true
       if (p.pospuesto !== true) {
         opciones.push({ nombre: p.local, rival: p.visitante });
         opciones.push({ nombre: p.visitante, rival: p.local });
@@ -132,8 +134,9 @@ export default function Survivor() {
     setEquiposDisponibles(unicos);
   };
 
-  const cargarSeleccionActual = async () => {
-    if (!jornadaActiva) return;
+  // ✅ Recibe la jornada como parámetro (con fallback al estado)
+  const cargarSeleccionActual = async (jornada = jornadaActiva) => {
+    if (!jornada) return;
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -142,13 +145,13 @@ export default function Survivor() {
       .from("survivor")
       .select("*")
       .eq("usuario_id", user.id)
-      .eq("jornada_id", jornadaActiva.id)
+      .eq("jornada_id", jornada.id)
       .maybeSingle();
 
     if (data) {
       const partidoDeMiSeleccion = todosLosPartidos.find(
         (p) =>
-          String(p.jornada_id) === String(jornadaActiva.id) &&
+          String(p.jornada_id) === String(jornada.id) &&
           (p.local === data.equipo || p.visitante === data.equipo)
       );
 
@@ -307,6 +310,8 @@ export default function Survivor() {
   };
 
   const guardarSeleccion = async () => {
+    if (!jornadaActiva) return;
+    
     const horaMexico = await obtenerHoraMexico();
     const fechaLimite = new Date(jornadaActiva.fecha_limite);
 
