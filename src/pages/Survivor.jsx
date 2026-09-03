@@ -22,7 +22,7 @@ export default function Survivor() {
   }, []);
 
   const cargarDatos = async () => {
-    // 1. Cargar jornada activa directamente
+    // 1. Cargar jornada activa
     const { data: jornadaData } = await supabase
       .from("jornadas")
       .select("*")
@@ -36,55 +36,40 @@ export default function Survivor() {
         const horaMexico = await obtenerHoraMexico();
         setJornadaCerrada(horaMexico > limite);
       }
-    } else {
-      console.error("❌ No se encontró jornada activa en la BD");
     }
 
-    // 2. Cargar partidos
-    await cargarTodosLosPartidos();
-
-    // 3. Cargar equipos y selección PASANDO la jornadaData directamente 
-    // para evitar el problema de estado asíncrono de React
-    if (jornadaData) {
-      await cargarEquiposDisponibles(jornadaData);
-      await cargarSeleccionActual(jornadaData);
-    }
-
-    // 4. Cargar historial y usos
-    await cargarHistorial();
-    await cargarUsoEquipos();
-  };
-
-  const cargarTodosLosPartidos = async () => {
-    console.log("🔍 Intentando cargar partidos con columna 'pospuesto'...");
-    
+    // 2. Cargar partidos y obtener los datos DIRECTAMENTE (sin depender del estado)
+    let partidosData = [];
     let { data, error } = await supabase
       .from("partidos")
       .select("id, jornada_id, local, visitante, pospuesto");
     
     if (error) {
       console.warn("⚠️ Error con columna 'pospuesto':", error.message);
-      console.log("🔄 Reintentando sin la columna 'pospuesto'...");
-      
-      const { data: fallbackData, error: fallbackError } = await supabase
+      const { data: fallbackData } = await supabase
         .from("partidos")
         .select("id, jornada_id, local, visitante");
-      
-      if (fallbackError) {
-        console.error("❌ Error en fallback:", fallbackError);
-        setTodosLosPartidos([]);
-      } else {
-        console.log("✅ Fallback exitoso. Partidos cargados:", fallbackData?.length);
-        setTodosLosPartidos(fallbackData || []);
-      }
+      partidosData = fallbackData || [];
     } else {
-      console.log("✅ Partidos cargados con 'pospuesto':", data?.length);
-      setTodosLosPartidos(data || []);
+      partidosData = data || [];
     }
+    
+    // Actualizar el estado para futuros usos (ej. cuando el admin cambia algo)
+    setTodosLosPartidos(partidosData);
+
+    // 3. Cargar equipos y selección PASANDO los datos directamente para evitar el bug de estado
+    if (jornadaData) {
+      await cargarEquiposDisponibles(jornadaData, partidosData);
+      await cargarSeleccionActual(jornadaData, partidosData);
+    }
+
+    // 4. Cargar historial y usos pasando también los datos
+    await cargarHistorial(partidosData);
+    await cargarUsoEquipos(partidosData);
   };
 
-  // ✅ Recibe la jornada como parámetro (con fallback al estado)
-  const cargarEquiposDisponibles = async (jornada = jornadaActiva) => {
+  // ✅ Recibe 'partidos' como parámetro (con fallback al estado)
+  const cargarEquiposDisponibles = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
     if (!jornada) {
       console.error("❌ No hay jornada activa para cargar equipos");
       return;
@@ -92,9 +77,9 @@ export default function Survivor() {
 
     console.log("\n🔍 === DIAGNÓSTICO DE EQUIPOS DISPONIBLES ===");
     console.log("Jornada activa ID:", jornada.id, "Nombre:", jornada.nombre);
-    console.log("Total de partidos en memoria:", todosLosPartidos.length);
+    console.log("Total de partidos recibidos:", partidos.length);
 
-    const partidosJornada = todosLosPartidos.filter(
+    const partidosJornada = partidos.filter(
       (p) => String(p.jornada_id) === String(jornada.id)
     );
 
@@ -134,8 +119,8 @@ export default function Survivor() {
     setEquiposDisponibles(unicos);
   };
 
-  // ✅ Recibe la jornada como parámetro (con fallback al estado)
-  const cargarSeleccionActual = async (jornada = jornadaActiva) => {
+  // ✅ Recibe 'partidos' como parámetro (con fallback al estado)
+  const cargarSeleccionActual = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
     if (!jornada) return;
     
     const { data: { user } } = await supabase.auth.getUser();
@@ -149,7 +134,7 @@ export default function Survivor() {
       .maybeSingle();
 
     if (data) {
-      const partidoDeMiSeleccion = todosLosPartidos.find(
+      const partidoDeMiSeleccion = partidos.find(
         (p) =>
           String(p.jornada_id) === String(jornada.id) &&
           (p.local === data.equipo || p.visitante === data.equipo)
@@ -170,7 +155,8 @@ export default function Survivor() {
     }
   };
 
-  const cargarUsoEquipos = async () => {
+  // ✅ Recibe 'partidos' como parámetro
+  const cargarUsoEquipos = async (partidos = todosLosPartidos) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -182,7 +168,7 @@ export default function Survivor() {
     const usoDetallado = {};
 
     data?.forEach((sel) => {
-      const partido = todosLosPartidos.find(
+      const partido = partidos.find(
         (p) =>
           String(p.jornada_id) === String(sel.jornada_id) &&
           (p.local === sel.equipo || p.visitante === sel.equipo)
@@ -193,7 +179,7 @@ export default function Survivor() {
         const rival = partido.local === sel.equipo ? partido.visitante : partido.local;
         clave = `${sel.equipo} (vs ${rival})`;
       } else {
-        const partidoMovido = todosLosPartidos.find(p => p.local === sel.equipo || p.visitante === sel.equipo);
+        const partidoMovido = partidos.find(p => p.local === sel.equipo || p.visitante === sel.equipo);
         if (partidoMovido) {
            const rival = partidoMovido.local === sel.equipo ? partidoMovido.visitante : partidoMovido.local;
            clave = `${sel.equipo} (vs ${rival} - Movido J${partidoMovido.jornada_id})`;
@@ -208,7 +194,8 @@ export default function Survivor() {
     setUsoEquipos(resultado);
   };
 
-  const cargarHistorial = async () => {
+  // ✅ Recibe 'partidos' como parámetro
+  const cargarHistorial = async (partidos = todosLosPartidos) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -253,7 +240,7 @@ export default function Survivor() {
         };
       }
 
-      const partido = todosLosPartidos?.find(
+      const partido = partidos?.find(
         (p) =>
           String(p.jornada_id) === String(jornada.id) &&
           (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
@@ -282,7 +269,7 @@ export default function Survivor() {
           }
         }
       } else {
-        const partidoMovido = todosLosPartidos.find(
+        const partidoMovido = partidos.find(
           (p) => p.local === seleccion.equipo || p.visitante === seleccion.equipo
         );
         if (partidoMovido) {
@@ -367,9 +354,11 @@ export default function Survivor() {
 
     alert("Selección guardada correctamente");
     setMensajeAdvertencia("");
-    await cargarSeleccionActual();
-    await cargarHistorial();
-    await cargarUsoEquipos();
+    
+    // Recargar datos pasando la jornada actual para mantener la consistencia
+    await cargarSeleccionActual(jornadaActiva, todosLosPartidos);
+    await cargarHistorial(todosLosPartidos);
+    await cargarUsoEquipos(todosLosPartidos);
   };
 
   return (
