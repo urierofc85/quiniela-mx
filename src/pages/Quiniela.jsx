@@ -16,7 +16,6 @@ export default function Quiniela() {
   const [cargandoPDF, setCargandoPDF] = useState(false);
   const [mostrarModal, setMostrarModal] = useState(false);
   
-  // NUEVO ESTADO: Validar si el usuario solo juega Survivor
   const [esSoloSurvivor, setEsSoloSurvivor] = useState(false);
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
 
@@ -27,9 +26,7 @@ export default function Quiniela() {
   useEffect(() => {
     const validarSesion = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate("/");
-      }
+      if (!session) navigate("/");
     };
     validarSesion();
   }, [navigate]);
@@ -38,37 +35,14 @@ export default function Quiniela() {
     setCargandoPerfil(true);
     const ahora = await obtenerHoraMexico();
 
-    // 0. VERIFICAR SI EL USUARIO ES SOLO SURVIVOR (VALIDACIÓN ROBUSTA)
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      const { data: perfil, error: errorPerfil } = await supabase
-        .from("profiles")
-        .select("solo_survivor")
-        .eq("id", user.id)
-        .single();
-      
-      if (errorPerfil) {
-        console.error("Error al obtener perfil:", errorPerfil);
-      } else {
-        // Validación estricta: solo es true si el valor es EXACTAMENTE true
-        const esSolo = perfil?.solo_survivor === true;
-        console.log(" Validación Solo Survivor:", {
-          usuario: user.email,
-          valorEnBD: perfil?.solo_survivor,
-          tipoDato: typeof perfil?.solo_survivor,
-          esSoloSurvivor: esSolo
-        });
-        setEsSoloSurvivor(esSolo);
-      }
+      const { data: perfil } = await supabase.from("profiles").select("solo_survivor").eq("id", user.id).single();
+      setEsSoloSurvivor(perfil?.solo_survivor === true);
     }
     setCargandoPerfil(false);
 
-    // 1. Cargar todas las jornadas para el selector de PDF
-    const { data: todasJornadas } = await supabase
-      .from("jornadas")
-      .select("*")
-      .order("id", { ascending: false });
-
+    const { data: todasJornadas } = await supabase.from("jornadas").select("*").order("id", { ascending: false });
     if (todasJornadas) {
       const cerradas = todasJornadas.filter((j) => {
         if (!j.fecha_limite) return false;
@@ -76,75 +50,48 @@ export default function Quiniela() {
         const limiteS = j.fecha_limite_survivor ? new Date(j.fecha_limite_survivor) : limiteQ;
         return ahora > limiteQ && ahora > limiteS;
       });
-
       setJornadas(cerradas);
-      if (cerradas.length > 0) {
-        setJornadaSeleccionadaPDF(cerradas[0].id.toString());
+      if (cerradas.length > 0) setJornadaSeleccionadaPDF(cerradas[0].id.toString());
+    }
+
+    const { data: activa } = await supabase.from("jornadas").select("*").eq("activa", true).single();
+    if (activa) {
+      setJornadaActiva(activa);
+      await cargarMiQuiniela(activa.id);
+      await cargarPartidos(activa.id);
+
+      if (activa.fecha_limite) {
+        const limiteQ = new Date(activa.fecha_limite);
+        const limiteS = activa.fecha_limite_survivor ? new Date(activa.fecha_limite_survivor) : limiteQ;
+        setJornadaCerrada(ahora > limiteQ && ahora > limiteS);
       }
-    }
-
-    // 2. Cargar la jornada activa actual
-    const { data: activa, error: jornadaError } = await supabase
-      .from("jornadas")
-      .select("*")
-      .eq("activa", true)
-      .single();
-
-    if (jornadaError || !activa) {
-      console.error("Error cargando jornada activa:", jornadaError);
-      return;
-    }
-
-    setJornadaActiva(activa);
-    await cargarMiQuiniela(activa.id);
-    await cargarPartidos(activa.id);
-
-    if (activa.fecha_limite) {
-      const limiteQ = new Date(activa.fecha_limite);
-      const limiteS = activa.fecha_limite_survivor ? new Date(activa.fecha_limite_survivor) : limiteQ;
-      setJornadaCerrada(ahora > limiteQ && ahora > limiteS);
     }
   };
 
   const cargarPartidos = async (jornadaId) => {
     if (!jornadaId) return;
-    const { data, error } = await supabase.from("partidos").select("*").eq("jornada_id", jornadaId);
-    if (error) {
-      console.error("Error cargando partidos:", error);
-      return;
-    }
-    setPartidos(data || []);
+    // ✅ Ahora traemos también las columnas 'pospuesto' y 'reactivado'
+    const { data, error } = await supabase.from("partidos").select("id, jornada_id, local, visitante, pospuesto, reactivado").eq("jornada_id", jornadaId);
+    if (error) console.error("Error cargando partidos:", error);
+    else setPartidos(data || []);
   };
 
   const cargarMiQuiniela = async (jornadaId) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !jornadaId) return;
 
-    const { data, error } = await supabase
-      .from("quinielas")
-      .select("*")
-      .eq("usuario_id", user.id)
-      .eq("jornada_id", jornadaId);
-
-    if (error) {
-      console.error("Error cargando quiniela:", error);
-      return;
+    const { data, error } = await supabase.from("quinielas").select("*").eq("usuario_id", user.id).eq("jornada_id", jornadaId);
+    if (error) console.error("Error cargando quiniela:", error);
+    else {
+      setQuinielaGuardada(data || []);
+      const nuevosPronosticos = {};
+      data?.forEach((item) => { nuevosPronosticos[item.partido_id] = item.pronostico; });
+      setPronosticos(nuevosPronosticos);
     }
-
-    setQuinielaGuardada(data || []);
-    const nuevosPronosticos = {};
-    data?.forEach((item) => {
-      nuevosPronosticos[item.partido_id] = item.pronostico;
-    });
-    setPronosticos(nuevosPronosticos);
   };
 
   const cerrarSesion = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      alert(error.message);
-      return;
-    }
+    await supabase.auth.signOut();
     navigate("/");
   };
 
@@ -153,11 +100,8 @@ export default function Quiniela() {
   };
 
   const guardarQuiniela = async () => {
-    // VALIDACIÓN DE SEGURIDAD ROBUSTA
-    console.log(" Intentando guardar quiniela. esSoloSurvivor:", esSoloSurvivor);
-    
     if (esSoloSurvivor === true) {
-      alert("️ Tu cuenta está configurada solo para jugar Survivor. No puedes guardar quinielas.\n\nPor favor, ve a la sección de Survivor para hacer tu selección.");
+      alert("⚠️ Tu cuenta está configurada solo para jugar Survivor.");
       return;
     }
 
@@ -169,7 +113,9 @@ export default function Quiniela() {
       return;
     }
 
-    if (horaMexico > new Date(jornadaActiva.fecha_limite)) {
+    // ✅ EXCEPCIÓN: Permitir guardar si hay partidos reactivados, aunque la jornada esté cerrada
+    const hayPartidosReactivados = partidos.some((p) => p.reactivado);
+    if (horaMexico > new Date(jornadaActiva.fecha_limite) && !hayPartidosReactivados) {
       alert("La jornada ya fue cerrada");
       return;
     }
@@ -183,31 +129,21 @@ export default function Quiniela() {
       fecha_envio: horaMexico.toISOString(),
     }));
 
-    const { error: deleteError } = await supabase
-      .from("quinielas")
-      .delete()
-      .eq("usuario_id", user.id)
-      .eq("jornada_id", jornadaActiva.id);
-
+    const { error: deleteError } = await supabase.from("quinielas").delete().eq("usuario_id", user.id).eq("jornada_id", jornadaActiva.id);
     if (deleteError) {
-      console.error("Error eliminando quiniela previa:", deleteError);
       alert(deleteError.message);
       return;
     }
 
     const { data, error } = await supabase.from("quinielas").insert(registros).select();
-
     if (error) {
-      console.error("Error guardando quiniela:", error);
       alert(error.message);
       return;
     }
 
     setQuinielaGuardada(data || []);
     const nuevosPronosticos = {};
-    data?.forEach((item) => {
-      nuevosPronosticos[item.partido_id] = item.pronostico;
-    });
+    data?.forEach((item) => { nuevosPronosticos[item.partido_id] = item.pronostico; });
     setPronosticos(nuevosPronosticos);
 
     alert("Quiniela guardada correctamente");
@@ -218,39 +154,21 @@ export default function Quiniela() {
       alert("Por favor selecciona una jornada para descargar.");
       return;
     }
-
     const jornadaAExportar = jornadas.find((j) => j.id.toString() === jornadaSeleccionadaPDF);
-
     try {
       setCargandoPDF(true);
       const { default: jsPDF } = await import("jspdf");
       const { default: autoTable } = await import("jspdf-autotable");
 
-      const { data: partidosData } = await supabase
-        .from("partidos")
-        .select("id, local, visitante, resultado")
-        .eq("jornada_id", jornadaSeleccionadaPDF)
-        .order("id");
-
-      const { data: quinielasData } = await supabase
-        .from("quinielas")
-        .select("usuario_id, partido_id, pronostico")
-        .eq("jornada_id", jornadaSeleccionadaPDF);
-
-      const { data: perfiles } = await supabase
-        .from("profiles")
-        .select("id, nombre, nombre_usuario, nombre_completo");
+      const { data: partidosData } = await supabase.from("partidos").select("id, local, visitante, resultado").eq("jornada_id", jornadaSeleccionadaPDF).order("id");
+      const { data: quinielasData } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico").eq("jornada_id", jornadaSeleccionadaPDF);
+      const { data: perfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, nombre_completo");
 
       const usuarios = [...new Set(quinielasData?.map((q) => q.usuario_id) || [])];
-
-      const columnas = [
-        "Partido",
-        "Resultado",
-        ...usuarios.map((usuarioId) => {
-          const perfil = perfiles?.find((p) => p.id === usuarioId);
-          return perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
-        }),
-      ];
+      const columnas = ["Partido", "Resultado", ...usuarios.map((usuarioId) => {
+        const perfil = perfiles?.find((p) => p.id === usuarioId);
+        return perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
+      })];
 
       const aciertos = {};
       usuarios.forEach((usuarioId) => { aciertos[usuarioId] = 0; });
@@ -258,15 +176,11 @@ export default function Quiniela() {
       const filas = (partidosData || []).map((partido) => {
         const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
         usuarios.forEach((usuarioId) => {
-          const pronostico = quinielasData?.find(
-            (q) => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
-          );
+          const pronostico = quinielasData?.find((q) => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId);
           let valor = "-";
           if (pronostico) {
             valor = pronostico.pronostico;
-            if (partido.resultado && pronostico.pronostico === partido.resultado) {
-              aciertos[usuarioId]++;
-            }
+            if (partido.resultado && pronostico.pronostico === partido.resultado) aciertos[usuarioId]++;
           }
           fila.push(valor);
         });
@@ -303,10 +217,7 @@ export default function Quiniela() {
         },
       });
 
-      const nombreArchivo = jornadaAExportar
-        ? `Quinielas_${jornadaAExportar.nombre.replace(/\s+/g, "_")}.pdf`
-        : `Quinielas_Jornada_${jornadaSeleccionadaPDF}.pdf`;
-
+      const nombreArchivo = jornadaAExportar ? `Quinielas_${jornadaAExportar.nombre.replace(/\s+/g, "_")}.pdf` : `Quinielas_Jornada_${jornadaSeleccionadaPDF}.pdf`;
       doc.save(nombreArchivo);
     } catch (err) {
       console.error("Error generando PDF:", err);
@@ -323,6 +234,10 @@ export default function Quiniela() {
       </div>
     );
   }
+
+  // ✅ Lógica para habilitar el botón de guardar si hay partidos reactivados
+  const hayPartidosReactivados = partidos.some((p) => p.reactivado);
+  const puedeGuardar = !jornadaCerrada || hayPartidosReactivados;
 
   return (
     <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen relative">
@@ -346,80 +261,72 @@ export default function Quiniela() {
       {esSoloSurvivor ? (
         <div className="bg-purple-50 border-l-4 border-purple-600 text-purple-800 p-6 rounded-lg shadow-md mb-8">
           <h2 className="text-2xl font-bold mb-3 flex items-center gap-2">🦖 Modo Solo Survivor Activado</h2>
-          <p className="mb-4 text-lg">
-            Tu cuenta está configurada por el administrador para participar <strong>únicamente en el juego de Survivor</strong>. 
-            No tienes permitido realizar selecciones de quiniela.
-          </p>
-          <Link to="/survivor" className="inline-block bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg shadow transition">
-            Ir a hacer mi selección de Survivor →
-          </Link>
+          <p className="mb-4 text-lg">Tu cuenta está configurada por el administrador para participar <strong>únicamente en el juego de Survivor</strong>.</p>
+          <Link to="/survivor" className="inline-block bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg shadow transition">Ir a hacer mi selección de Survivor →</Link>
         </div>
       ) : (
         <>
           <div className="bg-gray-50 border p-4 rounded-lg mb-6 flex flex-wrap items-center gap-3">
             <div className="flex-1 min-w-[200px]">
               <label className="block text-sm font-medium text-gray-700 mb-1">Descargar Quiniela General (PDF):</label>
-              <select
-                value={jornadaSeleccionadaPDF}
-                onChange={(e) => setJornadaSeleccionadaPDF(e.target.value)}
-                disabled={jornadas.length === 0}
-                className="w-full border rounded p-2 text-gray-800 bg-white"
-              >
-                {jornadas.length === 0 ? (
-                  <option value="">Sin jornadas cerradas disponibles</option>
-                ) : (
-                  jornadas.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {j.nombre} {j.id === jornadaActiva?.id ? "(Jornada Actual)" : ""}
-                    </option>
-                  ))
-                )}
+              <select value={jornadaSeleccionadaPDF} onChange={(e) => setJornadaSeleccionadaPDF(e.target.value)} disabled={jornadas.length === 0} className="w-full border rounded p-2 text-gray-800 bg-white">
+                {jornadas.length === 0 ? <option value="">Sin jornadas cerradas disponibles</option> : jornadas.map((j) => (<option key={j.id} value={j.id}>{j.nombre} {j.id === jornadaActiva?.id ? "(Jornada Actual)" : ""}</option>))}
               </select>
             </div>
-            <button
-              onClick={exportarPDF}
-              disabled={jornadas.length === 0 || cargandoPDF}
-              className={`px-4 py-2 rounded text-white self-end flex items-center gap-2 ${
-                jornadas.length > 0 && !cargandoPDF ? "bg-red-600 hover:bg-red-700 cursor-pointer transition" : "bg-gray-400 cursor-not-allowed"
-              }`}
-            >
+            <button onClick={exportarPDF} disabled={jornadas.length === 0 || cargandoPDF} className={`px-4 py-2 rounded text-white self-end flex items-center gap-2 ${jornadas.length > 0 && !cargandoPDF ? "bg-red-600 hover:bg-red-700 cursor-pointer transition" : "bg-gray-400 cursor-not-allowed"}`}>
               📄 {cargandoPDF ? "Generando..." : "Descargar PDF"}
             </button>
           </div>
 
           {jornadaActiva && (
-            <p className="mb-4 text-red-600 font-semibold">
-              ⏰ Fecha límite ({jornadaActiva.nombre}): {new Date(jornadaActiva.fecha_limite).toLocaleString("es-MX")}
-            </p>
+            <p className="mb-4 text-red-600 font-semibold">⏰ Fecha límite ({jornadaActiva.nombre}): {new Date(jornadaActiva.fecha_limite).toLocaleString("es-MX")}</p>
           )}
 
-          {partidos.map((partido) => (
-            <div key={partido.id} className="border rounded p-4 mb-3">
-              <h3 className="font-semibold">{partido.local} vs {partido.visitante}</h3>
-              <div className="flex gap-4 mt-3">
-                <label className="cursor-pointer flex items-center gap-1">
-                  <input type="radio" name={`partido-${partido.id}`} checked={pronosticos[partido.id] === "L"} onChange={() => actualizarPronostico(partido.id, "L")} disabled={jornadaCerrada} className="cursor-pointer" /> Local
-                </label>
-                <label className="cursor-pointer flex items-center gap-1">
-                  <input type="radio" name={`partido-${partido.id}`} checked={pronosticos[partido.id] === "E"} onChange={() => actualizarPronostico(partido.id, "E")} disabled={jornadaCerrada} className="cursor-pointer" /> Empate
-                </label>
-                <label className="cursor-pointer flex items-center gap-1">
-                  <input type="radio" name={`partido-${partido.id}`} checked={pronosticos[partido.id] === "V"} onChange={() => actualizarPronostico(partido.id, "V")} disabled={jornadaCerrada} className="cursor-pointer" /> Visitante
-                </label>
-              </div>
-            </div>
-          ))}
+          {partidos.map((partido) => {
+            const estaPospuesto = partido.pospuesto && !partido.reactivado;
+            const estaReactivado = partido.reactivado;
+            // ✅ Solo se deshabilita si la jornada está cerrada Y el partido NO está reactivado
+            const estaDeshabilitado = jornadaCerrada && !estaReactivado;
 
-          {jornadaCerrada && (
-            <p className="text-red-600 font-bold mt-4">🔒 La jornada activa ya fue cerrada. Puedes descargar la quiniela en el selector superior.</p>
+            return (
+              <div key={partido.id} className={`border rounded p-4 mb-3 transition-all ${estaPospuesto ? "bg-gray-100 opacity-60" : estaReactivado ? "bg-green-50 border-2 border-green-400" : "bg-white"}`}>
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-semibold text-lg">{partido.local} vs {partido.visitante}</h3>
+                  {estaPospuesto && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded font-bold">⏸️ POSPUESTO</span>}
+                  {estaReactivado && <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold animate-pulse">✅ REACTIVADO PARA EDICIÓN</span>}
+                </div>
+                
+                <div className="flex gap-4 mt-3">
+                  {["L", "E", "V"].map((valor) => (
+                    <label key={valor} className={`cursor-pointer flex items-center gap-1 ${estaDeshabilitado ? "opacity-50 cursor-not-allowed" : ""}`}>
+                      <input 
+                        type="radio" 
+                        name={`partido-${partido.id}`} 
+                        checked={pronosticos[partido.id] === valor} 
+                        onChange={() => actualizarPronostico(partido.id, valor)} 
+                        disabled={estaDeshabilitado} 
+                        className="cursor-pointer" 
+                      /> 
+                      {valor === "L" ? "Local" : valor === "E" ? "Empate" : "Visitante"}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {jornadaCerrada && !hayPartidosReactivados && (
+            <p className="text-red-600 font-bold mt-4 bg-red-50 p-3 rounded border border-red-200">🔒 La jornada activa ya fue cerrada. Puedes descargar la quiniela en el selector superior.</p>
+          )}
+          
+          {jornadaCerrada && hayPartidosReactivados && (
+            <p className="text-green-700 font-bold mt-4 bg-green-50 p-3 rounded border border-green-200">✅ Tienes partidos reactivados. Puedes modificar solo esos juegos y guardar los cambios.</p>
           )}
 
           <button
-            disabled={jornadaCerrada}
+            disabled={!puedeGuardar}
             onClick={guardarQuiniela}
-            className={`px-5 py-2 rounded mt-6 text-white font-semibold shadow-md transition ${
-              jornadaCerrada ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
-            }`}
+            className={`px-5 py-2 rounded mt-6 text-white font-semibold shadow-md transition ${puedeGuardar ? "bg-green-600 hover:bg-green-700" : "bg-gray-400 cursor-not-allowed"}`}
           >
             Guardar Quiniela
           </button>
@@ -442,7 +349,7 @@ export default function Quiniela() {
                         <tr key={item.id}>
                           <td className="p-2 border">{partido ? `${partido.local} vs ${partido.visitante}` : "Partido no encontrado"}</td>
                           <td className="p-2 border font-semibold">
-                            {item.pronostico === "L" && " Local"}
+                            {item.pronostico === "L" && "🏠 Local"}
                             {item.pronostico === "E" && "🤝 Empate"}
                             {item.pronostico === "V" && "✈️ Visitante"}
                           </td>
