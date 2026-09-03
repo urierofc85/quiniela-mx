@@ -66,115 +66,31 @@ export default function AdminPronosticosPartidos() {
         return;
       }
 
-      // 1. Crear mapa de equipos (clave normalizada -> equipo completo)
       const mapaEquipos = {};
       equiposData.forEach((equipo) => { 
         mapaEquipos[normalizar(equipo.equipo)] = equipo; 
       });
 
-      // 2. 🆕 Diccionario de aliases CORREGIDO según los nombres reales de tu BD
       const alias = { 
-        // San Luis (tu BD: "San Luis")
-        "san luis": "san luis",
-        "atletico san luis": "san luis",
-        "atlético de san luis": "san luis",
-        "atlético san luis": "san luis",
-        "club atletico san luis": "san luis",
-        
-        // Santos (tu BD: "Santos")
-        "santos": "santos",
-        "santos laguna": "santos",
-        "club santos laguna": "santos",
-        
-        // Necaxa (tu BD: "Necaxa")
-        "necaxa": "necaxa",
-        "club necaxa": "necaxa",
-        
-        // Chivas / Guadalajara
-        guadalajara: "chivas",
-        "chivas rayadas del guadalajara": "chivas",
-        "cd guadalajara": "chivas",
-        chivas: "chivas",
-        
-        // Tigres
-        "tigres uanl": "tigres",
-        tigres: "tigres",
-        
-        // Cruz Azul
-        "cruz azul": "cruz azul",
-        "cd cruz azul": "cruz azul",
-        "club cruz azul": "cruz azul",
-        cruzazul: "cruz azul",
-        
-        // Juárez
-        "fc juarez": "juarez",
-        "fc juárez": "juarez",
-        juarez: "juarez",
-        "juárez": "juarez",
-        
-        // América
-        "club america": "america",
-        "club américa": "america",
-        "cf america": "america",
-        "cf américa": "america",
-        america: "america",
-        
-        // Pumas
-        "pumas unam": "pumas",
-        "unam pumas": "pumas",
-        pumas: "pumas",
-        
-        // Monterrey
-        "cf monterrey": "monterrey",
-        monterrey: "monterrey",
-        rayados: "monterrey",
-        
-        // Toluca
-        "deportivo toluca": "toluca",
-        "deportivo toluca fc": "toluca",
-        toluca: "toluca",
-        
-        // León
-        "club leon": "leon",
-        "club león": "leon",
-        "club leon fc": "leon",
-        leon: "leon",
-        "león": "leon",
-        
-        // Pachuca
-        "cf pachuca": "pachuca",
-        pachuca: "pachuca",
-        tuzos: "pachuca",
-        
-        // Tijuana
-        "club tijuana": "tijuana",
-        tijuana: "tijuana",
-        xolos: "tijuana",
-        
-        // Atlas
-        "atlas guadalajara": "atlas",
-        "club atlas": "atlas",
-        atlas: "atlas",
-        
-        // Querétaro
-        "queretaro fc": "queretaro",
-        "querétaro fc": "queretaro",
-        queretaro: "queretaro",
-        "querétaro": "queretaro",
-        
-        // Puebla
-        "club puebla": "puebla",
-        puebla: "puebla",
-        
-        // Mazatlán
-        "mazatlan fc": "mazatlan",
-        "mazatlán fc": "mazatlan",
-        mazatlan: "mazatlan",
-        "mazatlán": "mazatlan",
-        
-        // Atlante
-        "cf atlante": "atlante",
-        atlante: "atlante",
+        "san luis": "san luis", "atletico san luis": "san luis", "atlético de san luis": "san luis", "atlético san luis": "san luis", "club atletico san luis": "san luis",
+        "santos": "santos", "santos laguna": "santos", "club santos laguna": "santos",
+        "necaxa": "necaxa", "club necaxa": "necaxa",
+        guadalajara: "chivas", "chivas rayadas del guadalajara": "chivas", "cd guadalajara": "chivas", chivas: "chivas",
+        "tigres uanl": "tigres", tigres: "tigres",
+        "cruz azul": "cruz azul", "cd cruz azul": "cruz azul", "club cruz azul": "cruz azul", cruzazul: "cruz azul",
+        "fc juarez": "juarez", "fc juárez": "juarez", juarez: "juarez", "juárez": "juarez",
+        "club america": "america", "club américa": "america", "cf america": "america", "cf américa": "america", america: "america",
+        "pumas unam": "pumas", "unam pumas": "pumas", pumas: "pumas",
+        "cf monterrey": "monterrey", monterrey: "monterrey", rayados: "monterrey",
+        "deportivo toluca": "toluca", "deportivo toluca fc": "toluca", toluca: "toluca",
+        "club leon": "leon", "club león": "leon", "club leon fc": "leon", leon: "leon", "león": "leon",
+        "cf pachuca": "pachuca", pachuca: "pachuca", tuzos: "pachuca",
+        "club tijuana": "tijuana", tijuana: "tijuana", xolos: "tijuana",
+        "atlas guadalajara": "atlas", "club atlas": "atlas", atlas: "atlas",
+        "queretaro fc": "queretaro", "querétaro fc": "queretaro", queretaro: "queretaro", "querétaro": "queretaro",
+        "club puebla": "puebla", puebla: "puebla",
+        "mazatlan fc": "mazatlan", "mazatlán fc": "mazatlan", mazatlan: "mazatlan", "mazatlán": "mazatlan",
+        "cf atlante": "atlante", atlante: "atlante",
       };
 
       const obtenerEquipo = (nombre) => {
@@ -195,11 +111,9 @@ export default function AdminPronosticosPartidos() {
           if (!localEquipo) faltantes.push(`Local: "${partido.local}"`);
           if (!visitaEquipo) faltantes.push(`Visita: "${partido.visita}"`);
           equiposNoEncontrados.push(`${partido.local} vs ${partido.visita} (${faltantes.join(', ')})`);
-          console.warn(`⚠️ Equipo no encontrado: ${partido.local} vs ${partido.visita}`);
           continue;
         }
 
-        // FACTORES CONTEXTUALES
         const bonoAltitudLocal = localEquipo.factor_altitud || 0;
         const bonoLiguillaLocal = localEquipo.factor_liguilla || 0;
         const bonoValorPlantillaLocal = (Number(localEquipo.valor_plantilla || 50) / 100) * 5;
@@ -301,17 +215,16 @@ export default function AdminPronosticosPartidos() {
     try {
       setGuardando(true);
 
+      // ✅ CORRECCIÓN: Mover la definición de 'normalizar' al principio, antes de ser usada
+      const normalizar = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
       const { data: equiposData } = await supabase.from("pronosticos_equipos").select("*");
       const mapaEquipos = new Map(equiposData.map(e => [normalizar(e.equipo), e]));
       
-      // 🆕 Mismo diccionario de aliases para la función de guardar
       const alias = { 
-        "san luis": "san luis",
-        "atletico san luis": "san luis",
-        "santos": "santos",
-        "santos laguna": "santos",
-        "necaxa": "necaxa",
-        "club necaxa": "necaxa",
+        "san luis": "san luis", "atletico san luis": "san luis",
+        "santos": "santos", "santos laguna": "santos",
+        "necaxa": "necaxa", "club necaxa": "necaxa",
         guadalajara: "chivas",
         "tigres uanl": "tigres",
         "cruz azul": "cruz azul",
@@ -329,8 +242,6 @@ export default function AdminPronosticosPartidos() {
         "mazatlan fc": "mazatlan",
         "cf atlante": "atlante",
       };
-
-      const normalizar = (texto) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
       const promesasPartidos = [];
       const cambiosEquipos = {};
