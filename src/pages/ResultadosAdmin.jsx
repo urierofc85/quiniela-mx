@@ -8,6 +8,11 @@ export default function ResultadosAdmin() {
   const [guardando, setGuardando] = useState(false);
   const [jornadasPendientes, setJornadasPendientes] = useState([]);
 
+  // 🆕 Estados para el modal de reasignación de jornada
+  const [modalReasignar, setModalReasignar] = useState(false);
+  const [partidoReasignar, setPartidoReasignar] = useState(null);
+  const [nuevaJornadaId, setNuevaJornadaId] = useState("");
+
   useEffect(() => {
     cargarJornadas();
   }, []);
@@ -40,10 +45,7 @@ export default function ResultadosAdmin() {
         .from("partidos")
         .select("id, jornada_id, resultado");
 
-      if (error) {
-        console.error("Error calculando jornadas pendientes:", error);
-        return;
-      }
+      if (error) return;
 
       const pendientesPorJornada = {};
       const totalesPorJornada = {};
@@ -51,22 +53,17 @@ export default function ResultadosAdmin() {
       todosPartidos.forEach((partido) => {
         const jId = partido.jornada_id;
         totalesPorJornada[jId] = (totalesPorJornada[jId] || 0) + 1;
-        
         if (!partido.resultado || partido.resultado === "") {
           pendientesPorJornada[jId] = (pendientesPorJornada[jId] || 0) + 1;
         }
       });
 
       const pendientes = jornadasData
-        .map((jornada) => {
-          const pendientes = pendientesPorJornada[jornada.id] || 0;
-          const total = totalesPorJornada[jornada.id] || 0;
-          return {
-            ...jornada,
-            partidosPendientes: pendientes,
-            partidosTotal: total,
-          };
-        })
+        .map((jornada) => ({
+          ...jornada,
+          partidosPendientes: pendientesPorJornada[jornada.id] || 0,
+          partidosTotal: totalesPorJornada[jornada.id] || 0,
+        }))
         .filter((j) => j.partidosPendientes > 0)
         .sort((a, b) => a.id - b.id);
 
@@ -79,10 +76,10 @@ export default function ResultadosAdmin() {
   const cargarPartidos = async (jornadaId) => {
     if (!jornadaId) return;
 
-    // ✅ Agregamos 'pospuesto' y 'reactivado' a la consulta
+    // ✅ Agregamos 'jornada_original' para saber de dónde vino el partido
     const { data, error } = await supabase
       .from("partidos")
-      .select("id, jornada_id, local, visitante, resultado, pospuesto, reactivado")
+      .select("id, jornada_id, jornada_original, local, visitante, resultado, pospuesto, reactivado")
       .eq("jornada_id", jornadaId)
       .order("id");
 
@@ -100,66 +97,91 @@ export default function ResultadosAdmin() {
     );
   };
 
-  // ✅ NUEVA FUNCIÓN: Cambiar estado de pospuesto
   const togglePospuesto = async (partido) => {
     const nuevoEstado = !partido.pospuesto;
-    const updates = { pospuesto: nuevoEstado };
-    
-    // Si se marca como pospuesto, quitamos lo de reactivado
-    if (nuevoEstado) updates.reactivado = false;
+    const updates = { 
+      pospuesto: nuevoEstado, 
+      reactivado: false,
+      // Si se marca como pospuesto, guardamos su jornada original si no la tiene
+      jornada_original: partido.jornada_original || partido.jornada_id 
+    };
+
+    const { error } = await supabase.from("partidos").update(updates).eq("id", partido.id);
+    if (error) alert("Error: " + error.message);
+    else await cargarPartidos(partido.jornada_id);
+  };
+
+  // 🆕 Abrir modal para elegir la nueva jornada
+  const solicitarReasignacion = (partido) => {
+    setPartidoReasignar(partido);
+    const jornadaActiva = jornadas.find((j) => j.activa);
+    setNuevaJornadaId(jornadaActiva ? jornadaActiva.id : "");
+    setModalReasignar(true);
+  };
+
+  // 🆕 Confirmar el movimiento del partido a la nueva jornada
+  const confirmarReasignacion = async () => {
+    if (!nuevaJornadaId) {
+      alert("Debes seleccionar una jornada.");
+      return;
+    }
 
     const { error } = await supabase
       .from("partidos")
-      .update(updates)
-      .eq("id", partido.id);
+      .update({
+        jornada_id: Number(nuevaJornadaId), // 🚀 CAMBIO CLAVE: Se mueve a la nueva jornada
+        reactivado: true,
+        pospuesto: false,
+        jornada_original: partidoReasignar.jornada_original || partidoReasignar.jornada_id
+      })
+      .eq("id", partidoReasignar.id);
 
     if (error) {
       alert("Error al actualizar: " + error.message);
     } else {
-      await cargarPartidos(partido.jornada_id);
+      alert(`✅ Partido movido a la Jornada ${nuevaJornadaId}. Los usuarios podrán editarlo hasta el cierre de esta jornada.`);
+      setModalReasignar(false);
+      // Recargamos la jornada donde estaba originalmente para que desaparezca de esta vista
+      await cargarPartidos(partidoReasignar.jornada_id); 
+      await calcularJornadasPendientes(jornadas);
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: Cambiar estado de reactivado
-  const toggleReactivado = async (partido) => {
-    const nuevoEstado = !partido.reactivado;
-    const updates = { reactivado: nuevoEstado };
+  // 🆕 Revertir el cambio (devolverlo a su jornada original y marcarlo como pospuesto)
+  const cancelarReasignacion = async (partido) => {
+    if (!window.confirm("¿Devolver este partido a su jornada original y marcarlo como pospuesto?")) return;
     
-    // Si se reactiva, automáticamente se quita lo de "pospuesto"
-    if (nuevoEstado) updates.pospuesto = false;
+    const jornadaOriginal = partido.jornada_original || partido.jornada_id;
 
     const { error } = await supabase
       .from("partidos")
-      .update(updates)
+      .update({
+        jornada_id: jornadaOriginal,
+        reactivado: false,
+        pospuesto: true
+      })
       .eq("id", partido.id);
 
-    if (error) {
-      alert("Error al actualizar: " + error.message);
-    } else {
+    if (error) alert("Error: " + error.message);
+    else {
       await cargarPartidos(partido.jornada_id);
-      alert(nuevoEstado 
-        ? "✅ Partido reactivado. Los usuarios ahora pueden modificar su pronóstico." 
-        : "↩️ Partido desmarcado y vuelto a estado normal."
-      );
+      await calcularJornadasPendientes(jornadas);
     }
   };
 
   const guardarResultados = async () => {
     setGuardando(true);
-
     try {
       for (const partido of partidos) {
         const { error } = await supabase
           .from("partidos")
           .update({ resultado: partido.resultado })
           .eq("id", partido.id);
-
         if (error) throw error;
       }
-
       alert("Resultados guardados correctamente");
       await calcularJornadasPendientes(jornadas);
-      await cargarPartidos(jornadaSeleccionada); // Recargar para actualizar estados visuales
+      await cargarPartidos(jornadaSeleccionada);
     } catch (error) {
       alert(error.message);
     } finally {
@@ -171,31 +193,25 @@ export default function ResultadosAdmin() {
     <div className="max-w-5xl mx-auto p-6">
       <div className="flex flex-wrap gap-4 items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Captura de Resultados y Estados</h1>
-
         <div className="flex gap-3">
           <select
             value={jornadaSeleccionada}
             onChange={(e) => {
-              const jornadaId = e.target.value;
-              setJornadaSeleccionada(jornadaId);
-              cargarPartidos(jornadaId);
+              setJornadaSeleccionada(e.target.value);
+              cargarPartidos(e.target.value);
             }}
             className="border px-3 py-2 rounded"
           >
             {jornadas.map((jornada) => {
               const pendiente = jornadasPendientes.find((jp) => jp.id === jornada.id);
-              const numPendientes = pendiente?.partidosPendientes || 0;
-
               return (
                 <option key={jornada.id} value={jornada.id}>
-                  {jornada.nombre}
-                  {jornada.activa ? " (Activa)" : ""}
-                  {numPendientes > 0 ? ` ⚠️ ${numPendientes} pendiente(s)` : " ✅"}
+                  {jornada.nombre} {jornada.activa ? " (Activa)" : ""}
+                  {pendiente?.partidosPendientes > 0 ? ` ⚠️ ${pendiente.partidosPendientes} pendiente(s)` : " ✅"}
                 </option>
               );
             })}
           </select>
-
           <button
             onClick={guardarResultados}
             disabled={guardando}
@@ -211,21 +227,14 @@ export default function ResultadosAdmin() {
           <div className="flex items-start gap-3">
             <div className="text-2xl">⚠️</div>
             <div className="flex-1">
-              <h3 className="font-bold text-yellow-800 mb-2">
-                Jornadas con resultados pendientes de capturar:
-              </h3>
+              <h3 className="font-bold text-yellow-800 mb-2">Jornadas con resultados pendientes:</h3>
               <div className="flex flex-wrap gap-2">
                 {jornadasPendientes.map((jp) => (
                   <button
                     key={jp.id}
-                    onClick={() => {
-                      setJornadaSeleccionada(jp.id);
-                      cargarPartidos(jp.id);
-                    }}
+                    onClick={() => { setJornadaSeleccionada(jp.id); cargarPartidos(jp.id); }}
                     className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold transition ${
-                      jp.id === jornadaSeleccionada
-                        ? "bg-yellow-600 text-white"
-                        : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border border-yellow-300"
+                      jp.id === jornadaSeleccionada ? "bg-yellow-600 text-white" : "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border border-yellow-300"
                     }`}
                   >
                     <span>{jp.nombre}</span>
@@ -235,9 +244,6 @@ export default function ResultadosAdmin() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-yellow-700 mt-2">
-                💡 Haz clic en una jornada para ir directamente a capturar sus resultados.
-              </p>
             </div>
           </div>
         </div>
@@ -246,79 +252,81 @@ export default function ResultadosAdmin() {
           <div className="flex items-center gap-3">
             <div className="text-2xl">✅</div>
             <div>
-              <h3 className="font-bold text-green-800">
-                ¡Todas las jornadas tienen sus resultados capturados!
-              </h3>
-              <p className="text-sm text-green-700">No hay resultados pendientes.</p>
+              <h3 className="font-bold text-green-800">¡Todas las jornadas tienen sus resultados capturados!</h3>
             </div>
           </div>
         </div>
       )}
 
       {partidos.length === 0 ? (
-        <div className="text-center text-gray-500 mt-10">
-          No existen partidos para esta jornada.
-        </div>
+        <div className="text-center text-gray-500 mt-10">No existen partidos para esta jornada.</div>
       ) : (
         partidos.map((partido) => {
           const esPospuesto = partido.pospuesto && !partido.reactivado;
           const esReactivado = partido.reactivado;
+          const tieneResultado = !!partido.resultado;
 
           return (
             <div
               key={partido.id}
               className={`border rounded p-4 mb-4 transition-all ${
-                esPospuesto 
-                  ? "bg-orange-50 border-orange-300" 
-                  : esReactivado 
-                    ? "bg-green-50 border-green-400 border-2" 
-                    : partido.resultado 
-                      ? "bg-green-50 border-green-200" 
-                      : "bg-white"
+                esPospuesto ? "bg-orange-50 border-orange-300" 
+                : esReactivado ? "bg-green-50 border-green-400 border-2" 
+                : tieneResultado ? "bg-blue-50 border-blue-200" 
+                : "bg-white"
               }`}
             >
               <div className="flex justify-between items-start flex-wrap gap-3">
                 <div>
-                  <h3 className="font-semibold text-lg">
-                    {partido.local} vs {partido.visitante}
-                  </h3>
-                  <div className="flex gap-2 mt-1">
+                  <h3 className="font-semibold text-lg">{partido.local} vs {partido.visitante}</h3>
+                  <div className="flex flex-wrap gap-2 mt-1">
                     {esPospuesto && (
-                      <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full font-bold">
-                        ⏸️ POSPUESTO
+                      <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full font-bold">⏸️ POSPUESTO</span>
+                    )}
+                    {esReactivado && !tieneResultado && (
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-bold animate-pulse">
+                        ✅ REACTIVADO (Movido a J{partido.jornada_id})
                       </span>
                     )}
-                    {esReactivado && (
-                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-bold animate-pulse">
-                        ✅ REACTIVADO PARA EDICIÓN
-                      </span>
+                    {tieneResultado && (
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">🔒 RESULTADO CAPTURADO</span>
                     )}
                   </div>
                 </div>
 
-                {/* ✅ BOTONES DE GESTIÓN DE ESTADO DEL PARTIDO */}
                 <div className="flex gap-2">
                   <button
                     onClick={() => togglePospuesto(partido)}
+                    disabled={tieneResultado}
                     className={`text-xs px-3 py-1.5 rounded border font-semibold transition ${
-                      esPospuesto
-                        ? "bg-gray-200 text-gray-700 border-gray-300"
-                        : "bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200"
+                      tieneResultado ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                      : esPospuesto ? "bg-gray-200 text-gray-700 border-gray-300"
+                      : "bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200"
                     }`}
                   >
                     {esPospuesto ? "Quitar Pospuesto" : "Marcar Pospuesto"}
                   </button>
                   
-                  <button
-                    onClick={() => toggleReactivado(partido)}
-                    className={`text-xs px-3 py-1.5 rounded border font-semibold transition ${
-                      esReactivado
-                        ? "bg-gray-200 text-gray-700 border-gray-300"
+                  {esReactivado ? (
+                    <button
+                      onClick={() => cancelarReasignacion(partido)}
+                      disabled={tieneResultado}
+                      className="text-xs px-3 py-1.5 rounded border font-semibold transition bg-gray-200 text-gray-700 border-gray-300 hover:bg-gray-300"
+                    >
+                      Devolver a J. Original
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => solicitarReasignacion(partido)}
+                      disabled={tieneResultado}
+                      className={`text-xs px-3 py-1.5 rounded border font-semibold transition ${
+                        tieneResultado ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                         : "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"
-                    }`}
-                  >
-                    {esReactivado ? "Desmarcar" : "Reactivar"}
-                  </button>
+                      }`}
+                    >
+                      Reactivar y Mover
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -338,6 +346,49 @@ export default function ResultadosAdmin() {
             </div>
           );
         })
+      )}
+
+      {/* 🆕 MODAL PARA REASIGNAR JORNADA */}
+      {modalReasignar && partidoReasignar && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold mb-2 text-gray-800">
+              Reasignar Partido
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              <strong>{partidoReasignar.local} vs {partidoReasignar.visitante}</strong>
+              <br />
+              Selecciona la jornada activa a la que se moverá este partido. Los usuarios podrán editar su pronóstico hasta el cierre de esa jornada.
+            </p>
+            
+            <label className="block text-sm font-medium text-gray-700 mb-1">Mover a la Jornada:</label>
+            <select
+              value={nuevaJornadaId}
+              onChange={(e) => setNuevaJornadaId(e.target.value)}
+              className="w-full border border-gray-300 rounded p-2 mb-6 focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            >
+              <option value="">Selecciona una jornada...</option>
+              {jornadas.filter(j => j.activa).map(j => (
+                <option key={j.id} value={j.id}>{j.nombre} (Activa)</option>
+              ))}
+            </select>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setModalReasignar(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarReasignacion}
+                className="px-4 py-2 text-white bg-green-600 rounded hover:bg-green-700 transition font-semibold"
+              >
+                Confirmar Movimiento
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
