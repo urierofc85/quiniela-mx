@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { obtenerHoraMexico } from "../services/horario";
 
 export default function Survivor() {
-  const [equipos, setEquipos] = useState([]);
+  const [equiposDisponibles, setEquiposDisponibles] = useState([]);
   const [equipoSeleccionado, setEquipoSeleccionado] = useState("");
   const [jornadaActiva, setJornadaActiva] = useState(null);
   const [jornadaCerrada, setJornadaCerrada] = useState(false);
@@ -12,8 +12,11 @@ export default function Survivor() {
   const [usoEquipos, setUsoEquipos] = useState([]);
   const [puntosTotales, setPuntosTotales] = useState(0);
   const [vidasPerdidas, setVidasPerdidas] = useState(0);
+  const [todosLosPartidos, setTodosLosPartidos] = useState([]);
   
-  // Estado para controlar el Popup/Modal de Reglas
+  // 🆕 Estado para mostrar advertencias al usuario
+  const [mensajeAdvertencia, setMensajeAdvertencia] = useState("");
+  
   const [mostrarReglas, setMostrarReglas] = useState(false);
 
   useEffect(() => {
@@ -22,18 +25,15 @@ export default function Survivor() {
 
   const cargarDatos = async () => {
     await cargarJornada();
-    await cargarEquipos();
+    await cargarTodosLosPartidos();
+    await cargarEquiposDisponibles();
+    await cargarSeleccionActual(); // 🆕 Ahora se llama después de tener los partidos
     await cargarHistorial();
     await cargarUsoEquipos();
   };
 
   const cargarJornada = async () => {
-    const { data } = await supabase
-      .from("jornadas")
-      .select("*")
-      .eq("activa", true)
-      .single();
-
+    const { data } = await supabase.from("jornadas").select("*").eq("activa", true).single();
     if (!data) return;
 
     setJornadaActiva(data);
@@ -43,79 +43,121 @@ export default function Survivor() {
       const horaMexico = await obtenerHoraMexico();
       setJornadaCerrada(horaMexico > limite);
     }
-
-    await cargarSeleccionActual(data.id);
   };
 
-  const cargarEquipos = async () => {
-    const { data, error } = await supabase
-      .from("equipos")
-      .select("nombre")
-      .order("nombre", { ascending: true });
-
-    if (error) {
-      console.error("Error cargando equipos:", error);
-      return;
-    }
-
-    setEquipos(data.map((e) => e.nombre));
+  const cargarTodosLosPartidos = async () => {
+    const { data } = await supabase.from("partidos").select("id, jornada_id, local, visitante, pospuesto");
+    setTodosLosPartidos(data || []);
   };
 
-  const cargarSeleccionActual = async (jornadaId) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  const cargarEquiposDisponibles = async () => {
+    if (!jornadaActiva) return;
 
+    const partidosJornada = todosLosPartidos.filter(
+      (p) => Number(p.jornada_id) === Number(jornadaActiva.id)
+    );
+
+    const opciones = [];
+    partidosJornada.forEach((p) => {
+      if (!p.pospuesto) {
+        opciones.push({ nombre: p.local, rival: p.visitante });
+        opciones.push({ nombre: p.visitante, rival: p.local });
+      }
+    });
+
+    const unicos = [];
+    const vistos = new Set();
+    opciones.forEach((op) => {
+      if (!vistos.has(op.nombre)) {
+        vistos.add(op.nombre);
+        unicos.push(op);
+      }
+    });
+
+    unicos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    setEquiposDisponibles(unicos);
+  };
+
+  // 🆕 ACTUALIZADO: Detecta si la selección actual está en un partido pospuesto
+  const cargarSeleccionActual = async () => {
+    if (!jornadaActiva) return;
+    
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data } = await supabase
       .from("survivor")
       .select("*")
       .eq("usuario_id", user.id)
-      .eq("jornada_id", jornadaId)
+      .eq("jornada_id", jornadaActiva.id)
       .maybeSingle();
 
     if (data) {
-      setEquipoSeleccionado(data.equipo);
+      // Buscar si el equipo que eligió está en un partido pospuesto de ESTA jornada
+      const partidoDeMiSeleccion = todosLosPartidos.find(
+        (p) =>
+          Number(p.jornada_id) === Number(jornadaActiva.id) &&
+          (p.local === data.equipo || p.visitante === data.equipo)
+      );
+
+      if (partidoDeMiSeleccion?.pospuesto) {
+        // 🚨 Si está pospuesto, limpiamos el select y avisamos
+        setEquipoSeleccionado("");
+        setMensajeAdvertencia(
+          `⚠️ Tu selección anterior (${data.equipo}) fue pospuesta. Por favor elige un nuevo equipo para esta jornada.`
+        );
+      } else {
+        setEquipoSeleccionado(data.equipo);
+        setMensajeAdvertencia("");
+      }
+    } else {
+      setEquipoSeleccionado("");
+      setMensajeAdvertencia("");
     }
   };
 
   const cargarUsoEquipos = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data } = await supabase
       .from("survivor")
-      .select("equipo")
+      .select("equipo, jornada_id")
       .eq("usuario_id", user.id);
 
-    const conteo = {};
+    const usoDetallado = {};
 
-    // Inicializamos el conteo con los equipos cargados
-    equipos.forEach((equipo) => {
-      conteo[equipo] = 0;
+    data?.forEach((sel) => {
+      const partido = todosLosPartidos.find(
+        (p) =>
+          Number(p.jornada_id) === Number(sel.jornada_id) &&
+          (p.local === sel.equipo || p.visitante === sel.equipo)
+      );
+
+      let clave = sel.equipo;
+      if (partido) {
+        const rival = partido.local === sel.equipo ? partido.visitante : partido.local;
+        clave = `${sel.equipo} (vs ${rival})`;
+      } else {
+        // Si el partido fue movido a otra jornada, buscarlo globalmente
+        const partidoMovido = todosLosPartidos.find(p => p.local === sel.equipo || p.visitante === sel.equipo);
+        if (partidoMovido) {
+           const rival = partidoMovido.local === sel.equipo ? partidoMovido.visitante : partidoMovido.local;
+           clave = `${sel.equipo} (vs ${rival} - Movido J${partidoMovido.jornada_id})`;
+        }
+      }
+      
+      usoDetallado[clave] = (usoDetallado[clave] || 0) + 1;
     });
 
-    data?.forEach((item) => {
-      conteo[item.equipo] = (conteo[item.equipo] || 0) + 1;
-    });
-
-    const resultado = Object.entries(conteo).map(([equipo, usos]) => ({
-      equipo,
-      usos,
-    }));
-
+    const resultado = Object.entries(usoDetallado).map(([detalle, usos]) => ({ detalle, usos }));
+    resultado.sort((a, b) => b.usos - a.usos);
     setUsoEquipos(resultado);
   };
 
+  // 🆕 ACTUALIZADO: Maneja partidos pospuestos y movidos en el historial
   const cargarHistorial = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data: selecciones } = await supabase
@@ -129,21 +171,15 @@ export default function Survivor() {
       .select("*")
       .order("id", { ascending: true });
 
-    const { data: partidos } = await supabase.from("partidos").select("*");
     const horaMexico = await obtenerHoraMexico();
 
     let total = 0;
     let vidas = 0;
 
     const procesado = (jornadas || []).map((jornada) => {
-      // Validamos si esta jornada ya pasó su fecha límite para considerarla cerrada/expirada
       const esPasadaYCerrada = jornada.fecha_limite ? horaMexico > new Date(jornada.fecha_limite) : false;
+      const seleccion = selecciones?.find((s) => Number(s.jornada_id) === Number(jornada.id));
 
-      const seleccion = selecciones?.find(
-        (s) => Number(s.jornada_id) === Number(jornada.id)
-      );
-
-      // CASO 1: No seleccionó equipo y la jornada ya cerró/pasó
       if (!seleccion && esPasadaYCerrada) {
         vidas++;
         return {
@@ -155,7 +191,6 @@ export default function Survivor() {
         };
       }
 
-      // CASO 2: La jornada aún está activa o abierta y no seleccionó nada todavía
       if (!seleccion) {
         return {
           id: `jornada-${jornada.id}`,
@@ -166,8 +201,8 @@ export default function Survivor() {
         };
       }
 
-      // CASO 3: Sí tiene selección, calculamos puntos y resultados normales
-      const partido = partidos?.find(
+      // Buscar el partido en ESTA jornada
+      const partido = todosLosPartidos?.find(
         (p) =>
           Number(p.jornada_id) === Number(jornada.id) &&
           (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
@@ -175,44 +210,46 @@ export default function Survivor() {
 
       let puntos = 0;
       let resultado = "Pendiente";
+      let nombreEquipoConRival = seleccion.equipo;
 
-      if (partido?.resultado) {
-        if (partido.local === seleccion.equipo) {
-          if (partido.resultado === "L") {
-            puntos = 3;
-            resultado = "✅ Ganó";
-          } else if (partido.resultado === "E") {
-            puntos = 1;
-            resultado = "🤝 Empató";
-          } else if (partido.resultado === "V") {
-            puntos = 0;
-            resultado = "❌ Perdió";
+      if (partido) {
+        const rival = partido.local === seleccion.equipo ? partido.visitante : partido.local;
+        nombreEquipoConRival = `${seleccion.equipo} (vs ${rival})`;
+
+        // 🆕 CASO: El partido está pospuesto
+        if (partido.pospuesto) {
+          resultado = "⏸️ Pospuesto";
+          puntos = 0;
+        } else if (partido.resultado) {
+          if (partido.local === seleccion.equipo) {
+            if (partido.resultado === "L") { puntos = 3; resultado = "✅ Ganó"; } 
+            else if (partido.resultado === "E") { puntos = 1; resultado = "🤝 Empató"; } 
+            else if (partido.resultado === "V") { puntos = 0; resultado = "❌ Perdió"; }
+          } else {
+            if (partido.resultado === "V") { puntos = 3; resultado = "✅ Ganó"; } 
+            else if (partido.resultado === "E") { puntos = 1; resultado = "🤝 Empató"; } 
+            else if (partido.resultado === "L") { puntos = 0; resultado = "❌ Perdió"; }
           }
         }
-
-        if (partido.visitante === seleccion.equipo) {
-          if (partido.resultado === "V") {
-            puntos = 3;
-            resultado = "✅ Ganó";
-          } else if (partido.resultado === "E") {
-            puntos = 1;
-            resultado = "🤝 Empató";
-          } else if (partido.resultado === "L") {
-            puntos = 0;
-            resultado = "❌ Perdió";
-          }
+      } else {
+        // 🆕 CASO: El partido fue movido a OTRA jornada
+        const partidoMovido = todosLosPartidos.find(
+          (p) => p.local === seleccion.equipo || p.visitante === seleccion.equipo
+        );
+        if (partidoMovido) {
+          const rival = partidoMovido.local === seleccion.equipo ? partidoMovido.visitante : partidoMovido.local;
+          nombreEquipoConRival = `${seleccion.equipo} (vs ${rival})`;
+          resultado = `⚠️ Movido a J${partidoMovido.jornada_id}`;
         }
       }
 
       total += puntos;
-
-      if (resultado === "❌ Perdió") {
-        vidas++;
-      }
+      if (resultado === "❌ Perdió") vidas++;
 
       return {
         ...seleccion,
         nombreJornada: jornada.nombre || `Jornada ${seleccion.jornada_id}`,
+        equipo: nombreEquipoConRival,
         puntos,
         resultado,
       };
@@ -237,9 +274,7 @@ export default function Survivor() {
       return;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
     const { count } = await supabase
       .from("survivor")
@@ -254,13 +289,10 @@ export default function Survivor() {
       .eq("jornada_id", jornadaActiva.id)
       .maybeSingle();
 
-    const usos =
-      actual?.equipo === equipoSeleccionado ? (count || 0) - 1 : count || 0;
+    const usos = actual?.equipo === equipoSeleccionado ? (count || 0) - 1 : count || 0;
 
     if (usos >= 3) {
-      alert(
-        `Ya no puedes seleccionar ${equipoSeleccionado}. Máximo 3 usos.`
-      );
+      alert(`Ya no puedes seleccionar a ${equipoSeleccionado}. Máximo 3 usos permitidos.`);
       return;
     }
 
@@ -283,7 +315,8 @@ export default function Survivor() {
     }
 
     alert("Selección guardada correctamente");
-
+    setMensajeAdvertencia(""); // 🆕 Limpiar advertencia al guardar
+    await cargarSeleccionActual();
     await cargarHistorial();
     await cargarUsoEquipos();
   };
@@ -292,23 +325,13 @@ export default function Survivor() {
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Survivor Liga MX</h1>
 
-      {/* Enlaces de Navegación y Botón de Reglas */}
       <div className="flex flex-wrap gap-3 mb-6">
-        <Link
-          to="/quiniela"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition"
-        >
+        <Link to="/quiniela" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition">
           Regresar a Quiniela
         </Link>
-
-        <Link
-          to="/ranking-survivor"
-          className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded font-medium flex items-center gap-1 transition"
-        >
+        <Link to="/ranking-survivor" className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded font-medium flex items-center gap-1 transition">
           🏆 Ranking Survivor
         </Link>
-
-        {/* Botón para abrir las Reglas y Premios */}
         <button
           onClick={() => setMostrarReglas(true)}
           className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded font-medium flex items-center gap-1 transition"
@@ -317,57 +340,76 @@ export default function Survivor() {
         </button>
       </div>
 
-      <div className="bg-gray-100 rounded p-4 my-6 border border-gray-200">
-        <p className="font-bold text-lg">🏆 Puntos Totales: {puntosTotales}</p>
-        <p className={`font-bold text-lg mt-2 ${vidasPerdidas >= 3 ? 'text-red-600' : 'text-gray-800'}`}>
+      <div className="bg-gray-100 rounded p-4 my-6 border border-gray-200 flex flex-wrap gap-6">
+        <p className="font-bold text-lg">🏆 Puntos Totales: <span className="text-green-700">{puntosTotales}</span></p>
+        <p className={`font-bold text-lg ${vidasPerdidas >= 3 ? 'text-red-600' : 'text-gray-800'}`}>
           💀 Vidas Perdidas: {vidasPerdidas} {vidasPerdidas >= 3 && "💀"}
         </p>
       </div>
 
       <h2 className="text-xl font-bold mb-3">📊 Uso de Equipos</h2>
-
       <table className="w-full border mb-8 rounded overflow-hidden">
         <thead className="bg-gray-200">
           <tr>
-            <th className="border p-2 text-left">Equipo</th>
-            <th className="border p-2 text-center">Usos</th>
+            <th className="border p-2 text-left">Equipo (vs Rival)</th>
+            <th className="border p-2 text-center w-32">Usos</th>
           </tr>
         </thead>
         <tbody>
-          {usoEquipos.map((item) => (
-            <tr key={item.equipo} className="hover:bg-gray-50">
-              <td className="border p-2">{item.equipo}</td>
+          {usoEquipos.map((item, index) => (
+            <tr key={index} className="hover:bg-gray-50">
+              <td className="border p-2 font-medium">{item.detalle}</td>
               <td className="border p-2 text-center font-semibold">
-                <span className={item.usos >= 3 ? "text-red-600" : "text-gray-700"}>
+                <span className={item.usos >= 3 ? "text-red-600 bg-red-50 px-2 py-1 rounded" : "text-gray-700"}>
                   {item.usos}/3
                 </span>
               </td>
             </tr>
           ))}
+          {usoEquipos.length === 0 && (
+            <tr><td colSpan="2" className="border p-4 text-center text-gray-500">Aún no has seleccionado ningún equipo.</td></tr>
+          )}
         </tbody>
       </table>
 
       {jornadaActiva && (
         <div className="border rounded p-4 mb-8 bg-white shadow-sm">
-          <h2 className="font-bold text-xl mb-4">{jornadaActiva.nombre}</h2>
+          <h2 className="font-bold text-xl mb-4 flex items-center gap-2">
+            {jornadaActiva.nombre}
+            {jornadaCerrada && <span className="text-sm bg-red-100 text-red-700 px-2 py-1 rounded font-normal">Cerrada</span>}
+          </h2>
+
+          {/* 🆕 MENSAJE DE ADVERTENCIA SI SU SELECCIÓN FUE POSPUESTA */}
+          {mensajeAdvertencia && (
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4 rounded text-sm text-yellow-800">
+              {mensajeAdvertencia}
+            </div>
+          )}
 
           <select
             value={equipoSeleccionado}
             onChange={(e) => setEquipoSeleccionado(e.target.value)}
-            className="border p-2 rounded w-full max-w-xs mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+            disabled={jornadaCerrada}
+            className="border p-2 rounded w-full max-w-xs mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
           >
             <option value="">Selecciona un equipo</option>
-            {equipos.map((equipo) => (
-              <option key={equipo} value={equipo}>
-                {equipo}
+            {equiposDisponibles.map((op) => (
+              <option key={op.nombre} value={op.nombre}>
+                {op.nombre} (vs {op.rival})
               </option>
             ))}
           </select>
 
+          {equiposDisponibles.length === 0 && !jornadaCerrada && (
+            <p className="text-orange-600 text-sm mb-4 bg-orange-50 p-3 rounded border border-orange-200">
+              ⚠️ Todos los partidos de esta jornada están pospuestos. No hay equipos disponibles para seleccionar.
+            </p>
+          )}
+
           <div>
             <button
               onClick={guardarSeleccion}
-              disabled={jornadaCerrada}
+              disabled={jornadaCerrada || equiposDisponibles.length === 0}
               className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-semibold shadow-md transition disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               Guardar Selección
@@ -377,14 +419,13 @@ export default function Survivor() {
       )}
 
       <h2 className="text-2xl font-bold mb-4">Historial Survivor</h2>
-
       <table className="w-full border rounded overflow-hidden">
         <thead className="bg-gray-200">
           <tr>
             <th className="border p-2 text-left">Jornada</th>
-            <th className="border p-2 text-left">Equipo</th>
+            <th className="border p-2 text-left">Selección</th>
             <th className="border p-2 text-center">Resultado</th>
-            <th className="border p-2 text-center">Puntos</th>
+            <th className="border p-2 text-center w-24">Puntos</th>
           </tr>
         </thead>
         <tbody>
@@ -399,48 +440,23 @@ export default function Survivor() {
         </tbody>
       </table>
 
-      {/* POPUP / MODAL DE REGLAS Y PREMIOS */}
       {mostrarReglas && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          onClick={() => setMostrarReglas(false)}
-        >
-          <div 
-            className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl relative"
-            onClick={(e) => e.stopPropagation()} // Evita cerrar al hacer clic dentro del modal
-          >
-            {/* Botón de cerrar (X) */}
-            <button
-              onClick={() => setMostrarReglas(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition"
-              aria-label="Cerrar"
-            >
-              &times;
-            </button>
-
-            <h2 className="text-2xl font-bold mb-4 text-center text-purple-700 border-b pb-3">
-              🦖 Survivor Liga MX
-            </h2>
-            
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setMostrarReglas(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setMostrarReglas(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition" aria-label="Cerrar">&times;</button>
+            <h2 className="text-2xl font-bold mb-4 text-center text-purple-700 border-b pb-3">🦖 Survivor Liga MX</h2>
             <div className="space-y-4 text-gray-700 text-sm md:text-base leading-relaxed mb-6">
-              {/* Sección de Reglas */}
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
-                  📋 Reglas del Juego
-                </h3>
+                <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">📋 Reglas del Juego</h3>
                 <ul className="list-disc list-inside space-y-2">
-                  <li>Cada participante puede elegir <strong>3 veces a un mismo equipo</strong> durante todo el torneo, un equipo a elegir por Jornada.</li>
-                  <li>Cada jornada el equipo seleccionado puede tener tres resultados: <strong>Ganar, Empatar o Perder</strong>.</li>
+                  <li>Cada participante puede elegir <strong>3 veces a un mismo equipo</strong> durante todo el torneo.</li>
                   <li>Si Gana obtienes 3 Puntos, si Empata 1 Punto y si Pierde 0 puntos. <strong>Cuando pierde tu equipo, tú pierdes 1 Vida</strong>.</li>
                   <li>Solamente tenemos <strong>3 VIDAS</strong> en la temporada. Gana el que seleccione mejor.</li>
+                  <li>Si un partido es <strong>pospuesto</strong>, no estará disponible para selección hasta que el administrador lo reactive en una jornada futura.</li>
                 </ul>
               </div>
-
-              {/* Sección de Premios */}
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
-                  🏆 Premios Survivor
-                </h3>
+                <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">🏆 Premios Survivor</h3>
                 <ul className="list-decimal list-inside space-y-1 ml-1">
                   <li>Primer Lugar gana <strong>$3,030.00</strong></li>
                   <li>Segundo Lugar gana <strong>$1,550.00</strong></li>
@@ -448,18 +464,10 @@ export default function Survivor() {
                   <li>Cuarto Lugar gana <strong>$360.00</strong></li>
                   <li>Quinto Lugar gana <strong>$200.00</strong></li>
                 </ul>
-                <p className="text-xs text-gray-600 mt-3 italic text-right">
-                  *(Valores calculados sobre 31 participantes)*
-                </p>
+                <p className="text-xs text-gray-600 mt-3 italic text-right">*(Valores calculados sobre 31 participantes)*</p>
               </div>
             </div>
-
-            <button
-              onClick={() => setMostrarReglas(false)}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg transition-colors shadow-md"
-            >
-              ¡Entendido, a sobrevivir!
-            </button>
+            <button onClick={() => setMostrarReglas(false)} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg transition-colors shadow-md">¡Entendido, a sobrevivir!</button>
           </div>
         </div>
       )}
