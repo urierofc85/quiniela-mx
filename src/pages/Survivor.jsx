@@ -16,6 +16,9 @@ export default function Survivor() {
   
   const [mensajeAdvertencia, setMensajeAdvertencia] = useState("");
   const [mostrarReglas, setMostrarReglas] = useState(false);
+  
+  // 🆕 Estado para el modal divertido de eliminación
+  const [mostrarModalEliminado, setMostrarModalEliminado] = useState(false);
 
   useEffect(() => {
     cargarDatos();
@@ -166,7 +169,6 @@ export default function Survivor() {
     setUsoEquipos(resultado);
   };
 
-  // ✅ MEJORADO: Búsqueda robusta que ignora mayúsculas, minúsculas y acentos
   const cargarHistorial = async (partidos = todosLosPartidos) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -212,7 +214,6 @@ export default function Survivor() {
         };
       }
 
-      // Limpiamos el nombre del equipo para comparar (quitamos " (vs Rival)" si existe)
       const nombreEquipoLimpio = seleccion.equipo.split(' (vs ')[0].trim().toLowerCase();
 
       const partido = partidos?.find(
@@ -245,12 +246,8 @@ export default function Survivor() {
             else if (res === "E") { puntos = 1; resultado = "🤝 Empató"; } 
             else if (res === "L") { puntos = 0; resultado = "❌ Perdió"; }
           }
-        } else {
-          // 🚨 ALERTA: El partido existe pero no tiene resultado capturado
-          console.warn(`⚠️ El partido ${partido.local} vs ${partido.visitante} (Jornada ${jornada.id}) no tiene resultado capturado en la BD.`);
         }
       } else {
-        // Buscar si fue movido a otra jornada
         const partidoMovido = partidos.find(
           (p) => p.local.trim().toLowerCase() === nombreEquipoLimpio || p.visitante.trim().toLowerCase() === nombreEquipoLimpio
         );
@@ -258,8 +255,6 @@ export default function Survivor() {
           const rival = partidoMovido.local.trim().toLowerCase() === nombreEquipoLimpio ? partidoMovido.visitante : partidoMovido.local;
           nombreEquipoConRival = `${seleccion.equipo.split(' (vs ')[0].trim()} (vs ${rival})`;
           resultado = `⚠️ Movido a J${partidoMovido.jornada_id}`;
-        } else {
-          console.error(`❌ No se encontró el partido para el equipo: ${nombreEquipoLimpio} en la jornada ${jornada.id}`);
         }
       }
 
@@ -343,6 +338,9 @@ export default function Survivor() {
     await cargarUsoEquipos(todosLosPartidos);
   };
 
+  // 🆕 Variable para saber si el usuario ya está eliminado
+  const estaEliminado = vidasPerdidas >= 3;
+
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Survivor Liga MX</h1>
@@ -364,8 +362,8 @@ export default function Survivor() {
 
       <div className="bg-gray-100 rounded p-4 my-6 border border-gray-200 flex flex-wrap gap-6">
         <p className="font-bold text-lg">🏆 Puntos Totales: <span className="text-green-700">{puntosTotales}</span></p>
-        <p className={`font-bold text-lg ${vidasPerdidas >= 3 ? 'text-red-600' : 'text-gray-800'}`}>
-          💀 Vidas Perdidas: {vidasPerdidas} {vidasPerdidas >= 3 && "💀"}
+        <p className={`font-bold text-lg ${estaEliminado ? 'text-red-600 animate-pulse' : (vidasPerdidas >= 2 ? 'text-orange-600' : 'text-gray-800')}`}>
+          💀 Vidas Perdidas: {vidasPerdidas} {estaEliminado && "💀"}
         </p>
       </div>
 
@@ -395,47 +393,63 @@ export default function Survivor() {
       </table>
 
       {jornadaActiva && (
-        <div className="border rounded p-4 mb-8 bg-white shadow-sm">
+        <div className={`border rounded p-4 mb-8 shadow-sm transition-all ${estaEliminado ? 'bg-gray-100 border-gray-300 opacity-90' : 'bg-white'}`}>
           <h2 className="font-bold text-xl mb-4 flex items-center gap-2">
             {jornadaActiva.nombre}
             {jornadaCerrada && <span className="text-sm bg-red-100 text-red-700 px-2 py-1 rounded font-normal">Cerrada</span>}
+            {estaEliminado && <span className="text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded font-bold">🏳️ Eliminado</span>}
           </h2>
 
-          {mensajeAdvertencia && (
+          {mensajeAdvertencia && !estaEliminado && (
             <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4 rounded text-sm text-yellow-800">
               {mensajeAdvertencia}
             </div>
           )}
 
-          <select
-            value={equipoSeleccionado}
-            onChange={(e) => setEquipoSeleccionado(e.target.value)}
-            disabled={jornadaCerrada}
-            className="border p-2 rounded w-full max-w-xs mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-          >
-            <option value="">Selecciona un equipo</option>
-            {equiposDisponibles.map((op) => (
-              <option key={op.nombre} value={op.nombre}>
-                {op.nombre} (vs {op.rival})
-              </option>
-            ))}
-          </select>
+          {/* 🆕 LÓGICA: Si está eliminado, mostramos el botón divertido. Si no, el selector normal */}
+          {estaEliminado ? (
+            <div className="text-center py-6">
+              <p className="text-gray-600 mb-4 text-lg">Has agotado tus 3 vidas. Ya no puedes hacer más selecciones en este torneo.</p>
+              <button
+                onClick={() => setMostrarModalEliminado(true)}
+                className="bg-gray-500 hover:bg-gray-600 text-white text-lg font-bold px-8 py-3 rounded-full shadow-lg transition transform hover:scale-105 flex items-center gap-2 mx-auto"
+              >
+                🏳️ Ver Estado de Eliminación
+              </button>
+            </div>
+          ) : (
+            <>
+              <select
+                value={equipoSeleccionado}
+                onChange={(e) => setEquipoSeleccionado(e.target.value)}
+                disabled={jornadaCerrada}
+                className="border p-2 rounded w-full max-w-xs mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              >
+                <option value="">Selecciona un equipo</option>
+                {equiposDisponibles.map((op) => (
+                  <option key={op.nombre} value={op.nombre}>
+                    {op.nombre} (vs {op.rival})
+                  </option>
+                ))}
+              </select>
 
-          {equiposDisponibles.length === 0 && !jornadaCerrada && (
-            <p className="text-orange-600 text-sm mb-4 bg-orange-50 p-3 rounded border border-orange-200">
-              ⚠️ No se encontraron equipos disponibles.
-            </p>
+              {equiposDisponibles.length === 0 && !jornadaCerrada && (
+                <p className="text-orange-600 text-sm mb-4 bg-orange-50 p-3 rounded border border-orange-200">
+                  ⚠️ No se encontraron equipos disponibles.
+                </p>
+              )}
+
+              <div>
+                <button
+                  onClick={guardarSeleccion}
+                  disabled={jornadaCerrada || equiposDisponibles.length === 0}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-semibold shadow-md transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  Guardar Selección
+                </button>
+              </div>
+            </>
           )}
-
-          <div>
-            <button
-              onClick={guardarSeleccion}
-              disabled={jornadaCerrada || equiposDisponibles.length === 0}
-              className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-semibold shadow-md transition disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              Guardar Selección
-            </button>
-          </div>
         </div>
       )}
 
@@ -461,6 +475,42 @@ export default function Survivor() {
         </tbody>
       </table>
 
+      {/* 🆕 MODAL DIVERTIDO DE ELIMINACIÓN */}
+      {mostrarModalEliminado && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 animate-fade-in"
+          onClick={() => setMostrarModalEliminado(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative border-4 border-yellow-400 transform transition-all scale-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Animación de rebote en el emoji */}
+            <div className="text-7xl mb-4 animate-bounce">🦖💀</div>
+            
+            <h2 className="text-3xl font-extrabold text-gray-800 mb-3">
+              ¡Gracias por Participar!
+            </h2>
+            
+            <p className="text-xl text-gray-600 mb-2">
+              Has perdido tus <span className="font-bold text-red-500">Tres Vidas</span> de Este Torneo.
+            </p>
+            
+            <p className="text-lg text-green-600 font-semibold mb-8 bg-green-50 p-3 rounded-lg border border-green-200">
+              ¡Pero no te preocupes, nos vemos en el próximo torneo! 🎉🍻
+            </p>
+            
+            <button
+              onClick={() => setMostrarModalEliminado(false)}
+              className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-extrabold text-lg py-3 px-6 rounded-full shadow-lg transition transform hover:scale-105 active:scale-95"
+            >
+              ¡Entendido! 👍
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Reglas (Existente) */}
       {mostrarReglas && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setMostrarReglas(false)}>
           <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
