@@ -16,8 +16,6 @@ export default function Survivor() {
   
   const [mensajeAdvertencia, setMensajeAdvertencia] = useState("");
   const [mostrarReglas, setMostrarReglas] = useState(false);
-  
-  // 🆕 Estado para el modal divertido de eliminación
   const [mostrarModalEliminado, setMostrarModalEliminado] = useState(false);
 
   useEffect(() => {
@@ -66,6 +64,7 @@ export default function Survivor() {
     await cargarUsoEquipos(partidosData);
   };
 
+  // 🆕 FUNCIÓN MEJORADA CON DIAGNÓSTICO DETALLADO
   const cargarEquiposDisponibles = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
     if (!jornada) return;
 
@@ -73,24 +72,45 @@ export default function Survivor() {
       (p) => String(p.jornada_id) === String(jornada.id)
     );
 
+    console.log(`\n🔍 === DIAGNÓSTICO DE EQUIPOS DISPONIBLES ===`);
+    console.log(`Jornada: ${jornada.nombre} (ID: ${jornada.id})`);
+    console.log(`Total de partidos en BD para esta jornada: ${partidosJornada.length}`);
+
     const opciones = [];
     partidosJornada.forEach((p) => {
-      if (p.pospuesto !== true) {
-        opciones.push({ nombre: p.local, rival: p.visitante });
-        opciones.push({ nombre: p.visitante, rival: p.local });
+      if (p.pospuesto === true) {
+        console.log(`   ⏸️ OMITIDO (Pospuesto): ${p.local} vs ${p.visitante}`);
+      } else {
+        if (p.local && p.visitante) {
+          opciones.push({ nombre: p.local, rival: p.visitante });
+          opciones.push({ nombre: p.visitante, rival: p.local });
+        } else {
+          console.warn(`   ⚠️ PARTIDO CON DATOS FALTANTES:`, p);
+        }
       }
     });
+
+    console.log(`Total de opciones generadas (Local + Visitante): ${opciones.length}`);
 
     const unicos = [];
     const vistos = new Set();
     opciones.forEach((op) => {
-      if (!vistos.has(op.nombre)) {
-        vistos.add(op.nombre);
+      // Normalizamos para evitar que "Leon " y "Leon" se traten como diferentes
+      const nombreNormalizado = op.nombre.trim().toLowerCase();
+      if (!vistos.has(nombreNormalizado)) {
+        vistos.add(nombreNormalizado);
         unicos.push(op);
+      } else {
+        console.log(`   🔄 DUPLICADO OMITIDO: ${op.nombre}`);
       }
     });
 
     unicos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    
+    console.log(`✅ Equipos únicos finales para el selector: ${unicos.length}`);
+    console.log(`Lista:`, unicos.map(u => `${u.nombre} (vs ${u.rival})`));
+    console.log(`=== FIN DIAGNÓSTICO ===\n`);
+
     setEquiposDisponibles(unicos);
   };
 
@@ -338,7 +358,6 @@ export default function Survivor() {
     await cargarUsoEquipos(todosLosPartidos);
   };
 
-  // 🆕 Variable para saber si el usuario ya está eliminado
   const estaEliminado = vidasPerdidas >= 3;
 
   return (
@@ -406,7 +425,6 @@ export default function Survivor() {
             </div>
           )}
 
-          {/* 🆕 LÓGICA: Si está eliminado, mostramos el botón divertido. Si no, el selector normal */}
           {estaEliminado ? (
             <div className="text-center py-6">
               <p className="text-gray-600 mb-4 text-lg">Has agotado tus 3 vidas. Ya no puedes hacer más selecciones en este torneo.</p>
@@ -475,7 +493,6 @@ export default function Survivor() {
         </tbody>
       </table>
 
-      {/* 🆕 MODAL DIVERTIDO DE ELIMINACIÓN */}
       {mostrarModalEliminado && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 animate-fade-in"
@@ -485,21 +502,16 @@ export default function Survivor() {
             className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative border-4 border-yellow-400 transform transition-all scale-100"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Animación de rebote en el emoji */}
             <div className="text-7xl mb-4 animate-bounce">🦖💀</div>
-            
             <h2 className="text-3xl font-extrabold text-gray-800 mb-3">
               ¡Gracias por Participar!
             </h2>
-            
             <p className="text-xl text-gray-600 mb-2">
               Has perdido tus <span className="font-bold text-red-500">Tres Vidas</span> de Este Torneo.
             </p>
-            
             <p className="text-lg text-green-600 font-semibold mb-8 bg-green-50 p-3 rounded-lg border border-green-200">
               ¡Pero no te preocupes, nos vemos en el próximo torneo! 🎉🍻
             </p>
-            
             <button
               onClick={() => setMostrarModalEliminado(false)}
               className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-extrabold text-lg py-3 px-6 rounded-full shadow-lg transition transform hover:scale-105 active:scale-95"
@@ -510,7 +522,6 @@ export default function Survivor() {
         </div>
       )}
 
-      {/* Modal de Reglas (Existente) */}
       {mostrarReglas && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setMostrarReglas(false)}>
           <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
