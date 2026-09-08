@@ -64,7 +64,7 @@ export default function Survivor() {
     await cargarUsoEquipos(partidosData);
   };
 
-  // 🆕 FUNCIÓN MEJORADA CON DIAGNÓSTICO DETALLADO
+  // ✅ CORREGIDO: Ahora permite que un equipo aparezca dos veces si juega contra rivales distintos
   const cargarEquiposDisponibles = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
     if (!jornada) return;
 
@@ -94,14 +94,17 @@ export default function Survivor() {
 
     const unicos = [];
     const vistos = new Set();
+    
     opciones.forEach((op) => {
-      // Normalizamos para evitar que "Leon " y "Leon" se traten como diferentes
-      const nombreNormalizado = op.nombre.trim().toLowerCase();
-      if (!vistos.has(nombreNormalizado)) {
-        vistos.add(nombreNormalizado);
+      // ✅ CLAVE ÚNICA: Combinamos equipo Y rival. 
+      // Así, "Puebla vs Toluca" y "Puebla vs Santos" se tratan como opciones distintas.
+      const claveUnica = `${op.nombre.trim().toLowerCase()}_vs_${op.rival.trim().toLowerCase()}`;
+      
+      if (!vistos.has(claveUnica)) {
+        vistos.add(claveUnica);
         unicos.push(op);
       } else {
-        console.log(`   🔄 DUPLICADO OMITIDO: ${op.nombre}`);
+        console.log(`   🔄 DUPLICADO REAL OMITIDO: ${op.nombre} vs ${op.rival}`);
       }
     });
 
@@ -445,7 +448,7 @@ export default function Survivor() {
               >
                 <option value="">Selecciona un equipo</option>
                 {equiposDisponibles.map((op) => (
-                  <option key={op.nombre} value={op.nombre}>
+                  <option key={`${op.nombre}_vs_${op.rival}`} value={op.nombre}>
                     {op.nombre} (vs {op.rival})
                   </option>
                 ))}
