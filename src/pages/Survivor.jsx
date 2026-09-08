@@ -44,7 +44,6 @@ export default function Survivor() {
       .select("id, jornada_id, local, visitante, pospuesto, resultado");
     
     if (error) {
-      console.warn("⚠️ Error con columna 'pospuesto':", error.message);
       const { data: fallbackData } = await supabase
         .from("partidos")
         .select("id, jornada_id, local, visitante, resultado");
@@ -64,7 +63,6 @@ export default function Survivor() {
     await cargarUsoEquipos(partidosData);
   };
 
-  // ✅ CORREGIDO: Ahora permite que un equipo aparezca dos veces si juega contra rivales distintos
   const cargarEquiposDisponibles = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
     if (!jornada) return;
 
@@ -72,51 +70,33 @@ export default function Survivor() {
       (p) => String(p.jornada_id) === String(jornada.id)
     );
 
-    console.log(`\n🔍 === DIAGNÓSTICO DE EQUIPOS DISPONIBLES ===`);
-    console.log(`Jornada: ${jornada.nombre} (ID: ${jornada.id})`);
-    console.log(`Total de partidos en BD para esta jornada: ${partidosJornada.length}`);
-
     const opciones = [];
     partidosJornada.forEach((p) => {
-      if (p.pospuesto === true) {
-        console.log(`   ⏸️ OMITIDO (Pospuesto): ${p.local} vs ${p.visitante}`);
-      } else {
+      if (p.pospuesto !== true) {
         if (p.local && p.visitante) {
           opciones.push({ nombre: p.local, rival: p.visitante });
           opciones.push({ nombre: p.visitante, rival: p.local });
-        } else {
-          console.warn(`   ⚠️ PARTIDO CON DATOS FALTANTES:`, p);
         }
       }
     });
-
-    console.log(`Total de opciones generadas (Local + Visitante): ${opciones.length}`);
 
     const unicos = [];
     const vistos = new Set();
     
     opciones.forEach((op) => {
-      // ✅ CLAVE ÚNICA: Combinamos equipo Y rival. 
-      // Así, "Puebla vs Toluca" y "Puebla vs Santos" se tratan como opciones distintas.
+      // ✅ CLAVE ÚNICA: Combinamos equipo Y rival
       const claveUnica = `${op.nombre.trim().toLowerCase()}_vs_${op.rival.trim().toLowerCase()}`;
-      
       if (!vistos.has(claveUnica)) {
         vistos.add(claveUnica);
         unicos.push(op);
-      } else {
-        console.log(`   🔄 DUPLICADO REAL OMITIDO: ${op.nombre} vs ${op.rival}`);
       }
     });
 
     unicos.sort((a, b) => a.nombre.localeCompare(b.nombre));
-    
-    console.log(`✅ Equipos únicos finales para el selector: ${unicos.length}`);
-    console.log(`Lista:`, unicos.map(u => `${u.nombre} (vs ${u.rival})`));
-    console.log(`=== FIN DIAGNÓSTICO ===\n`);
-
     setEquiposDisponibles(unicos);
   };
 
+  // ✅ CORREGIDO: Ahora busca el partido exacto (Equipo + Rival)
   const cargarSeleccionActual = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
     if (!jornada) return;
     
@@ -131,19 +111,38 @@ export default function Survivor() {
       .maybeSingle();
 
     if (data) {
-      const nombreLimpio = data.equipo.trim().toLowerCase();
-      const partidoDeMiSeleccion = partidos.find(
-        (p) =>
-          String(p.jornada_id) === String(jornada.id) &&
-          (p.local.trim().toLowerCase() === nombreLimpio || p.visitante.trim().toLowerCase() === nombreLimpio)
-      );
+      // ✅ Parsear el formato "Equipo (vs Rival)" si existe
+      let nombreEquipo = data.equipo;
+      let nombreRival = null;
+      
+      if (data.equipo.includes(' (vs ')) {
+        const partes = data.equipo.split(' (vs ');
+        nombreEquipo = partes[0].trim();
+        nombreRival = partes[1].replace(')', '').trim();
+      }
+
+      // Buscar el partido exacto
+      const partidoDeMiSeleccion = partidos.find((p) => {
+        const matchJornada = String(p.jornada_id) === String(jornada.id);
+        const matchEquipo = p.local.trim().toLowerCase() === nombreEquipo.trim().toLowerCase() || 
+                           p.visitante.trim().toLowerCase() === nombreEquipo.trim().toLowerCase();
+        
+        // Si tenemos rival guardado, también debe coincidir
+        if (nombreRival) {
+          const matchRival = p.local.trim().toLowerCase() === nombreRival.trim().toLowerCase() || 
+                            p.visitante.trim().toLowerCase() === nombreRival.trim().toLowerCase();
+          return matchJornada && matchEquipo && matchRival;
+        }
+        return matchJornada && matchEquipo;
+      });
 
       if (partidoDeMiSeleccion?.pospuesto === true) {
         setEquipoSeleccionado("");
         setMensajeAdvertencia(
-          `⚠️ Tu selección anterior (${data.equipo}) fue pospuesta. Por favor elige un nuevo equipo para esta jornada.`
+          `⚠️ Tu selección anterior (${data.equipo}) fue pospuesta. Por favor elige un nuevo equipo.`
         );
       } else {
+        // ✅ Restaurar el valor completo "Equipo (vs Rival)" en el selector
         setEquipoSeleccionado(data.equipo);
         setMensajeAdvertencia("");
       }
@@ -165,23 +164,33 @@ export default function Survivor() {
     const usoDetallado = {};
 
     data?.forEach((sel) => {
-      const nombreLimpio = sel.equipo.trim().toLowerCase();
-      const partido = partidos.find(
-        (p) =>
-          String(p.jornada_id) === String(sel.jornada_id) &&
-          (p.local.trim().toLowerCase() === nombreLimpio || p.visitante.trim().toLowerCase() === nombreLimpio)
-      );
+      let nombreEquipo = sel.equipo;
+      let nombreRival = null;
+      
+      if (sel.equipo.includes(' (vs ')) {
+        const partes = sel.equipo.split(' (vs ');
+        nombreEquipo = partes[0].trim().toLowerCase();
+        nombreRival = partes[1].replace(')', '').trim().toLowerCase();
+      } else {
+        nombreEquipo = sel.equipo.trim().toLowerCase();
+      }
+
+      const partido = partidos.find((p) => {
+        const matchEquipo = p.local.trim().toLowerCase() === nombreEquipo || 
+                           p.visitante.trim().toLowerCase() === nombreEquipo;
+        if (nombreRival) {
+          const matchRival = p.local.trim().toLowerCase() === nombreRival || 
+                            p.visitante.trim().toLowerCase() === nombreRival;
+          return matchEquipo && matchRival;
+        }
+        return matchEquipo;
+      });
 
       let clave = sel.equipo;
       if (partido) {
-        const rival = partido.local.trim().toLowerCase() === nombreLimpio ? partido.visitante : partido.local;
-        clave = `${sel.equipo} (vs ${rival})`;
-      } else {
-        const partidoMovido = partidos.find(p => p.local.trim().toLowerCase() === nombreLimpio || p.visitante.trim().toLowerCase() === nombreLimpio);
-        if (partidoMovido) {
-           const rival = partidoMovido.local.trim().toLowerCase() === nombreLimpio ? partidoMovido.visitante : partidoMovido.local;
-           clave = `${sel.equipo} (vs ${rival} - Movido J${partidoMovido.jornada_id})`;
-        }
+        const rival = partido.local.trim().toLowerCase() === nombreEquipo ? partido.visitante : partido.local;
+        const equipoOriginal = sel.equipo.includes(' (vs ') ? sel.equipo.split(' (vs ')[0].trim() : sel.equipo;
+        clave = `${equipoOriginal} (vs ${rival})`;
       }
       
       usoDetallado[clave] = (usoDetallado[clave] || 0) + 1;
@@ -237,13 +246,30 @@ export default function Survivor() {
         };
       }
 
-      const nombreEquipoLimpio = seleccion.equipo.split(' (vs ')[0].trim().toLowerCase();
+      // ✅ Parsear formato "Equipo (vs Rival)"
+      let nombreEquipoLimpio = seleccion.equipo;
+      let nombreRival = null;
+      
+      if (seleccion.equipo.includes(' (vs ')) {
+        const partes = seleccion.equipo.split(' (vs ');
+        nombreEquipoLimpio = partes[0].trim().toLowerCase();
+        nombreRival = partes[1].replace(')', '').trim().toLowerCase();
+      } else {
+        nombreEquipoLimpio = seleccion.equipo.trim().toLowerCase();
+      }
 
-      const partido = partidos?.find(
-        (p) =>
-          String(p.jornada_id) === String(jornada.id) &&
-          (p.local.trim().toLowerCase() === nombreEquipoLimpio || p.visitante.trim().toLowerCase() === nombreEquipoLimpio)
-      );
+      // ✅ Buscar el partido exacto (Equipo + Rival)
+      const partido = partidos?.find((p) => {
+        const matchJornada = String(p.jornada_id) === String(jornada.id);
+        const matchEquipo = p.local.trim().toLowerCase() === nombreEquipoLimpio || 
+                           p.visitante.trim().toLowerCase() === nombreEquipoLimpio;
+        if (nombreRival) {
+          const matchRival = p.local.trim().toLowerCase() === nombreRival || 
+                            p.visitante.trim().toLowerCase() === nombreRival;
+          return matchJornada && matchEquipo && matchRival;
+        }
+        return matchJornada && matchEquipo;
+      });
 
       let puntos = 0;
       let resultado = "Pendiente";
@@ -251,7 +277,8 @@ export default function Survivor() {
 
       if (partido) {
         const rival = partido.local.trim().toLowerCase() === nombreEquipoLimpio ? partido.visitante : partido.local;
-        nombreEquipoConRival = `${seleccion.equipo.split(' (vs ')[0].trim()} (vs ${rival})`;
+        const equipoOriginal = seleccion.equipo.includes(' (vs ') ? seleccion.equipo.split(' (vs ')[0].trim() : seleccion.equipo;
+        nombreEquipoConRival = `${equipoOriginal} (vs ${rival})`;
 
         if (partido.pospuesto === true) {
           resultado = "⏸️ Pospuesto";
@@ -269,15 +296,6 @@ export default function Survivor() {
             else if (res === "E") { puntos = 1; resultado = "🤝 Empató"; } 
             else if (res === "L") { puntos = 0; resultado = "❌ Perdió"; }
           }
-        }
-      } else {
-        const partidoMovido = partidos.find(
-          (p) => p.local.trim().toLowerCase() === nombreEquipoLimpio || p.visitante.trim().toLowerCase() === nombreEquipoLimpio
-        );
-        if (partidoMovido) {
-          const rival = partidoMovido.local.trim().toLowerCase() === nombreEquipoLimpio ? partidoMovido.visitante : partidoMovido.local;
-          nombreEquipoConRival = `${seleccion.equipo.split(' (vs ')[0].trim()} (vs ${rival})`;
-          resultado = `⚠️ Movido a J${partidoMovido.jornada_id}`;
         }
       }
 
@@ -298,6 +316,7 @@ export default function Survivor() {
     setVidasPerdidas(vidas);
   };
 
+  // ✅ CORREGIDO: Ahora guarda el equipo en formato "Equipo (vs Rival)"
   const guardarSeleccion = async () => {
     if (!jornadaActiva) return;
     
@@ -316,23 +335,42 @@ export default function Survivor() {
 
     const { data: { user } } = await supabase.auth.getUser();
 
-    const { count } = await supabase
+    // ✅ Parsear el valor seleccionado para extraer equipo y rival
+    let nombreEquipo, nombreRival;
+    if (equipoSeleccionado.includes(' (vs ')) {
+      const partes = equipoSeleccionado.split(' (vs ');
+      nombreEquipo = partes[0].trim();
+      nombreRival = partes[1].replace(')', '').trim();
+    } else {
+      nombreEquipo = equipoSeleccionado;
+      // Buscar el rival automáticamente
+      const partido = todosLosPartidos.find(p => 
+        String(p.jornada_id) === String(jornadaActiva.id) &&
+        (p.local.trim().toLowerCase() === nombreEquipo.trim().toLowerCase() || 
+         p.visitante.trim().toLowerCase() === nombreEquipo.trim().toLowerCase())
+      );
+      if (partido) {
+        nombreRival = partido.local.trim().toLowerCase() === nombreEquipo.trim().toLowerCase() 
+          ? partido.visitante : partido.local;
+      }
+    }
+
+    // ✅ El valor que se guarda en BD incluye el rival
+    const valorAGuardar = `${nombreEquipo} (vs ${nombreRival})`;
+
+    // ✅ Validar usos: ahora contamos solo selecciones del MISMO equipo (sin importar rival)
+    const { data: seleccionesUsuario } = await supabase
       .from("survivor")
-      .select("*", { count: "exact", head: true })
-      .eq("usuario_id", user.id)
-      .eq("equipo", equipoSeleccionado);
+      .select("equipo")
+      .eq("usuario_id", user.id);
 
-    const { data: actual } = await supabase
-      .from("survivor")
-      .select("*")
-      .eq("usuario_id", user.id)
-      .eq("jornada_id", jornadaActiva.id)
-      .maybeSingle();
+    const usosActuales = seleccionesUsuario?.filter(s => {
+      const nombre = s.equipo.includes(' (vs ') ? s.equipo.split(' (vs ')[0].trim() : s.equipo.trim();
+      return nombre.toLowerCase() === nombreEquipo.toLowerCase();
+    }).length || 0;
 
-    const usos = actual?.equipo === equipoSeleccionado ? (count || 0) - 1 : count || 0;
-
-    if (usos >= 3) {
-      alert(`Ya no puedes seleccionar a ${equipoSeleccionado}. Máximo 3 usos permitidos.`);
+    if (usosActuales >= 3) {
+      alert(`Ya no puedes seleccionar a ${nombreEquipo}. Máximo 3 usos permitidos.`);
       return;
     }
 
@@ -346,7 +384,7 @@ export default function Survivor() {
       usuario_id: user.id,
       usuario: user.email,
       jornada_id: jornadaActiva.id,
-      equipo: equipoSeleccionado,
+      equipo: valorAGuardar, // ✅ Guardamos con el rival
     });
 
     if (error) {
@@ -354,7 +392,7 @@ export default function Survivor() {
       return;
     }
 
-    alert("Selección guardada correctamente");
+    alert(`Selección guardada: ${valorAGuardar}`);
     setMensajeAdvertencia("");
     await cargarSeleccionActual(jornadaActiva, todosLosPartidos);
     await cargarHistorial(todosLosPartidos);
@@ -447,11 +485,15 @@ export default function Survivor() {
                 className="border p-2 rounded w-full max-w-xs mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
               >
                 <option value="">Selecciona un equipo</option>
-                {equiposDisponibles.map((op) => (
-                  <option key={`${op.nombre}_vs_${op.rival}`} value={op.nombre}>
-                    {op.nombre} (vs {op.rival})
-                  </option>
-                ))}
+                {equiposDisponibles.map((op, idx) => {
+                  // ✅ El value ahora incluye el rival para identificar el partido exacto
+                  const valorCompleto = `${op.nombre} (vs ${op.rival})`;
+                  return (
+                    <option key={`${op.nombre}_${op.rival}_${idx}`} value={valorCompleto}>
+                      {op.nombre} (vs {op.rival})
+                    </option>
+                  );
+                })}
               </select>
 
               {equiposDisponibles.length === 0 && !jornadaCerrada && (
@@ -498,17 +540,15 @@ export default function Survivor() {
 
       {mostrarModalEliminado && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 animate-fade-in"
+          className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50"
           onClick={() => setMostrarModalEliminado(false)}
         >
           <div 
-            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative border-4 border-yellow-400 transform transition-all scale-100"
+            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative border-4 border-yellow-400"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-7xl mb-4 animate-bounce">🦖💀</div>
-            <h2 className="text-3xl font-extrabold text-gray-800 mb-3">
-              ¡Gracias por Participar!
-            </h2>
+            <h2 className="text-3xl font-extrabold text-gray-800 mb-3">¡Gracias por Participar!</h2>
             <p className="text-xl text-gray-600 mb-2">
               Has perdido tus <span className="font-bold text-red-500">Tres Vidas</span> de Este Torneo.
             </p>
@@ -528,7 +568,7 @@ export default function Survivor() {
       {mostrarReglas && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setMostrarReglas(false)}>
           <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setMostrarReglas(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition" aria-label="Cerrar">&times;</button>
+            <button onClick={() => setMostrarReglas(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition">&times;</button>
             <h2 className="text-2xl font-bold mb-4 text-center text-purple-700 border-b pb-3">🦖 Survivor Liga MX</h2>
             <div className="space-y-4 text-gray-700 text-sm md:text-base leading-relaxed mb-6">
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
@@ -537,7 +577,7 @@ export default function Survivor() {
                   <li>Cada participante puede elegir <strong>3 veces a un mismo equipo</strong> durante todo el torneo.</li>
                   <li>Si Gana obtienes 3 Puntos, si Empata 1 Punto y si Pierde 0 puntos. <strong>Cuando pierde tu equipo, tú pierdes 1 Vida</strong>.</li>
                   <li>Solamente tenemos <strong>3 VIDAS</strong> en la temporada. Gana el que seleccione mejor.</li>
-                  <li>Si un partido es <strong>pospuesto</strong>, no estará disponible para selección hasta que el administrador lo reactive en una jornada futura.</li>
+                  <li>Si un partido es <strong>pospuesto</strong>, no estará disponible hasta que el administrador lo reactive.</li>
                 </ul>
               </div>
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
@@ -549,7 +589,6 @@ export default function Survivor() {
                   <li>Cuarto Lugar gana <strong>$360.00</strong></li>
                   <li>Quinto Lugar gana <strong>$200.00</strong></li>
                 </ul>
-                <p className="text-xs text-gray-600 mt-3 italic text-right">*(Valores calculados sobre 31 participantes)*</p>
               </div>
             </div>
             <button onClick={() => setMostrarReglas(false)} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg transition-colors shadow-md">¡Entendido, a sobrevivir!</button>
