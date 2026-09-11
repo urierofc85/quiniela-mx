@@ -71,9 +71,6 @@ export default function AdminDashboard() {
     return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
   };
 
-  //---------------------------------------
-  // CARGA DEL DASHBOARD CON PAGINACIÓN AUTOMÁTICA
-  //---------------------------------------
   const cargarDashboard = async () => {
     setCargando(true);
     const t0 = performance.now();
@@ -163,9 +160,6 @@ export default function AdminDashboard() {
     }
   };
 
-  //---------------------------------------
-  // PROCESAMIENTO DE DATOS
-  //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
     perfilesData,
@@ -247,7 +241,7 @@ export default function AdminDashboard() {
           });
         }
 
-        // --- SURVIVOR (CON NORMALIZACIÓN DE NOMBRES) ---
+        // --- SURVIVOR (CON NORMALIZACIÓN Y LOGS) ---
         if (!esJugadorSurvivor) return;
 
         const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
@@ -255,7 +249,6 @@ export default function AdminDashboard() {
           reg.survivorEnviados++;
           survivorPorJornadaCount[jornadaId].add(usuario.id);
           if (esPasadaYCerrada) {
-            // 🚨 NORMALIZACIÓN: Elimina acentos, espacios extra y convierte a minúsculas para comparar
             const equipoLimpio = seleccionSurvivor.equipo.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             
             const partido = partidosDeJornada.find(p => {
@@ -271,14 +264,33 @@ export default function AdminDashboard() {
               if (esLocal && partido.resultado === "V") perdio = true;
               if (!esLocal && partido.resultado === "L") perdio = true;
               
-              if (perdio && reg.vidas < 3) reg.vidas++;
+              if (perdio && reg.vidas < 3) {
+                reg.vidas++;
+                // 🚨 LOG: Usuario específico que perdió vida
+                if (usuario.email && usuario.email.includes("CORREO_O_NOMBRE_DEL_USUARIO")) {
+                  console.log(`💀 ${reg.nombre} perdió vida en ${jornada.nombre}: ${seleccionSurvivor.equipo} (equipo limpio: ${equipoLimpio})`);
+                }
+              }
             }
           }
         } else if (esPasadaYCerrada && reg.vidas < 3) {
           reg.vidas++;
+          // 🚨 LOG: Usuario específico que no seleccionó
+          if (usuario.email && usuario.email.includes("CORREO_O_NOMBRE_DEL_USUARIO")) {
+            console.log(`💀 ${reg.nombre} perdió vida en ${jornada.nombre}: No seleccionó equipo`);
+          }
         }
       });
     });
+
+    // 🚨 LOG FINAL: Mostrar vidas totales de todos los usuarios
+    console.log("\n📊 RESUMEN DE VIDAS PERDIDAS:");
+    Object.values(acumulado).forEach(reg => {
+      if (reg.vidas > 0) {
+        console.log(`  ${reg.nombre}: ${reg.vidas} vidas perdidas`);
+      }
+    });
+    console.log("=== FIN RESUMEN ===\n");
 
     const rankingQuinielas = Object.values(acumulado)
       .filter(u => !u.soloSurvivor)
@@ -334,7 +346,6 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // ✅ CORRECCIÓN: Excluir a los usuarios que ya tienen 3 vidas perdidas (eliminados)
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
@@ -342,7 +353,7 @@ export default function AdminDashboard() {
           if (survivorActivaSet.has(p.id)) return false;
           
           const reg = acumulado[p.id];
-          if (reg && reg.vidas >= 3) return false; // <-- NO mostrar si ya está eliminado
+          if (reg && reg.vidas >= 3) return false;
           
           return true;
         })
@@ -372,9 +383,6 @@ export default function AdminDashboard() {
     return p.nombre_usuario || p.nombre || (p.email ? p.email.split('@')[0] : 'Usuario');
   };
 
-  //---------------------------------------
-  // EXPORTAR A IMAGEN (JPEG)
-  //---------------------------------------
   const exportarImagen = async () => {
     try {
       const rankingOrdenado = [...rankingQuinielas].sort((a, b) => {
@@ -504,18 +512,12 @@ export default function AdminDashboard() {
     }
   };
 
-  //---------------------------------------
-  // ABRIR MODAL DE SELECCIÓN DE JORNADA PARA PDF
-  //---------------------------------------
   const abrirModalPDF = () => {
     const preSeleccion = jornadaActiva?.id || (jornadas.length > 0 ? jornadas[0].id : "");
     setJornadaParaPDF(preSeleccion);
     setModalPDFAbierto(true);
   };
 
-  //---------------------------------------
-  // ✅ EXPORTAR PDF REDISEÑADO (USUARIOS EN FILAS, PARTIDOS EN COLUMNAS)
-  //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
       alert("Selecciona una jornada.");
@@ -689,9 +691,6 @@ export default function AdminDashboard() {
     }
   };
 
-  //---------------------------------------
-  // INTERFAZ
-  //---------------------------------------
   if (cargando) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
