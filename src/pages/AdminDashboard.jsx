@@ -503,7 +503,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // ✅ EXPORTAR PDF REDISEÑADO (USUARIOS EN FILAS, PARTIDOS EN COLUMNAS)
+  // ✅ EXPORTAR PDF REDISEÑADO (CON CORRECCIÓN DE NOMBRES)
   //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
@@ -592,7 +592,12 @@ export default function AdminDashboard() {
       // 4. Construir filas de datos
       const body = usuariosConPuntajes.map(u => {
         const perfil = perfiles?.find(p => p.id === u.usuarioId);
-        const nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || u.usuarioId;
+        let nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || u.usuarioId;
+        
+        // ✅ CORRECCIÓN: Truncar nombres largos para evitar cortes extraños en el PDF
+        if (nombre && nombre.length > 15) {
+          nombre = nombre.substring(0, 14) + "..";
+        }
         
         const row = {
           pos: `#${posiciones[u.usuarioId]}`,
@@ -625,7 +630,7 @@ export default function AdminDashboard() {
         startY: 26,
         theme: "grid",
         styles: {
-          fontSize: 6.5, // Reducido ligeramente para que quepan los 9 partidos + columnas
+          fontSize: 6.5,
           halign: "center",
           valign: "middle",
           cellPadding: 1.5,
@@ -642,8 +647,8 @@ export default function AdminDashboard() {
           minCellHeight: 28,
         },
         columnStyles: {
-          0: { halign: "center", fontStyle: "bold", fillColor: [240, 240, 240] }, // Posición
-          1: { halign: "left", fontStyle: "bold", fillColor: [240, 240, 240] },   // Usuario
+          0: { halign: "center", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 12 }, // ✅ Ancho fijo para Pos
+          1: { halign: "left", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 35 },   // ✅ Ancho fijo para Usuario (evita cortes)
         },
         didParseCell: (data) => {
           // Estilo para la columna TOTAL (última columna)
@@ -653,16 +658,6 @@ export default function AdminDashboard() {
             data.cell.styles.textColor = [22, 101, 52];
             data.cell.styles.fontSize = 7.5;
             return;
-          }
-
-          // Estilo para el 1er lugar (texto dorado en el header)
-          if (data.section === "head" && data.row.index === 0 && data.column.index >= 2 && data.column.index < columnasDef.length - 1) {
-            // Encontrar el usuario de esta columna
-            const colDataKey = columnasDef[data.column.index].dataKey;
-            const primerUsuario = usuariosConPuntajes.find(u => posiciones[u.usuarioId] === 1);
-            if (primerUsuario) {
-               // Lógica simplificada: si es la columna del primer usuario, destacar (opcional, aquí lo dejamos blanco estándar)
-            }
           }
 
           // Resaltar aciertos en verde dentro del cuerpo de la tabla
