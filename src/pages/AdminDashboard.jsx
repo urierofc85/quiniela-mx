@@ -510,7 +510,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR PDF (USUARIOS EN FILAS, PARTIDOS EN COLUMNAS)
+  // ✅ EXPORTAR PDF (AHORA INCLUYE TODOS LOS PARTIDOS, INCLUSO POSPUESTOS)
   //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
@@ -526,11 +526,11 @@ export default function AdminDashboard() {
 
       const { data: jornadaActivaPDF } = await supabase.from("jornadas").select("*").eq("id", jornadaId).single();
       
+      // ✅ CAMBIO: Se eliminó .eq("pospuesto", false) para traer TODOS los partidos de la jornada
       const { data: partidos } = await supabase
         .from("partidos")
         .select("id, local, visitante, resultado, pospuesto")
         .eq("jornada_id", jornadaId)
-        .eq("pospuesto", false)
         .order("id");
         
       const { data: quinielasData } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico").eq("jornada_id", jornadaId);
@@ -665,6 +665,7 @@ export default function AdminDashboard() {
             const partidoId = Number(colDataKey.replace('p_', ''));
             const partido = partidos?.find(p => p.id === partidoId);
             
+            // Solo resalta en verde si hay resultado y el pronóstico coincide
             if (partido && partido.resultado && data.cell.raw === partido.resultado) {
               data.cell.styles.textColor = [0, 128, 0];
               data.cell.styles.fontStyle = "bold";
