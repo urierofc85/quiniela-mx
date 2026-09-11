@@ -75,8 +75,6 @@ export default function AdminDashboard() {
   // CARGA DEL DASHBOARD CON PAGINACIÓN AUTOMÁTICA
   //---------------------------------------
   const cargarDashboard = async () => {
-    console.log("🚀 VERSIÓN CON PAGINACIÓN AUTOMÁTICA (SIN LÍMITE DE 1000)");
-    
     setCargando(true);
     const t0 = performance.now();
 
@@ -126,7 +124,7 @@ export default function AdminDashboard() {
       const [todasQuinielas, todosSurvivor, todosPartidos] = await Promise.all([
         fetchAllRows("quinielas", "jornada_id, usuario_id, partido_id, pronostico"),
         fetchAllRows("survivor", "jornada_id, usuario_id, equipo"),
-        fetchAllRows("partidos", "id, jornada_id, local, visitante, resultado, pospuesto") // ✅ Agregamos 'pospuesto'
+        fetchAllRows("partidos", "id, jornada_id, local, visitante, resultado, pospuesto")
       ]);
 
       const jornadasData = jornadasRes.data || [];
@@ -157,7 +155,6 @@ export default function AdminDashboard() {
 
       const t1 = performance.now();
       console.log(`⚡ Dashboard cargado en ${Math.round(t1 - t0)}ms`);
-      console.log("🔍 Total real de filas de quinielas cargadas:", todasQuinielas.length);
 
     } catch (error) {
       console.error("Error cargando dashboard:", error);
@@ -223,7 +220,6 @@ export default function AdminDashboard() {
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
-      // ✅ FILTRO CLAVE: Excluir partidos pospuestos del cálculo de aciertos
       const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId) && !p.pospuesto);
       const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
       const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
@@ -327,18 +323,23 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
+      // ✅ CORRECCIÓN: Excluir a los usuarios que ya tienen 3 vidas perdidas (eliminados)
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
           if (!usuariosQueJueganSurvivor.has(p.id)) return false;
           if (survivorActivaSet.has(p.id)) return false;
+          
+          const reg = acumulado[p.id];
+          if (reg && reg.vidas >= 3) return false; // <-- NO mostrar si ya está eliminado
+          
           return true;
         })
         .map(p => {
           const reg = acumulado[p.id];
           let motivo = "Falta en jornada actual";
           let tipo = "normal";
-          if (reg.vidas >= 3) {
+          if (reg && reg.vidas >= 3) {
             motivo = "Eliminado (3 vidas)";
             tipo = "eliminado";
           }
@@ -502,7 +503,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // EXPORTAR PDF (ORDENADO POR ACIERTOS, EXCLUYE POSPUESTOS)
+  // ✅ EXPORTAR PDF REDISEÑADO (USUARIOS EN FILAS, PARTIDOS EN COLUMNAS)
   //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
@@ -518,7 +519,6 @@ export default function AdminDashboard() {
 
       const { data: jornadaActivaPDF } = await supabase.from("jornadas").select("*").eq("id", jornadaId).single();
       
-      // ✅ FILTRO CLAVE: .eq("pospuesto", false) para que solo salgan los partidos jugados
       const { data: partidos } = await supabase
         .from("partidos")
         .select("id, local, visitante, resultado, pospuesto")
@@ -537,64 +537,75 @@ export default function AdminDashboard() {
         return;
       }
 
-      const aciertos = {};
-      usuarios.forEach(usuarioId => { aciertos[usuarioId] = 0; });
-
-      (partidos || []).forEach(partido => {
-        if (!partido.resultado) return;
-        usuarios.forEach(usuarioId => {
-          const pronostico = quinielasData?.find(
-            q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
-          );
-          if (pronostico && pronostico.pronostico === partido.resultado) {
-            aciertos[usuarioId]++;
+      // 1. Calcular aciertos por usuario y ordenar
+      const usuariosConPuntajes = usuarios.map(usuarioId => {
+        let aciertos = 0;
+        const pronosticosUsuario = {};
+        
+        (partidos || []).forEach(partido => {
+          if (!partido.resultado) {
+            pronosticosUsuario[partido.id] = "-";
+            return;
+          }
+          const pronostico = quinielasData?.find(q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId);
+          if (pronostico) {
+            pronosticosUsuario[partido.id] = pronostico.pronostico;
+            if (pronostico.pronostico === partido.resultado) {
+              aciertos++;
+            }
+          } else {
+            pronosticosUsuario[partido.id] = "-";
           }
         });
+        
+        return { usuarioId, aciertos, pronosticosUsuario };
       });
 
-      const usuariosOrdenados = [...usuarios].sort((a, b) => aciertos[b] - aciertos[a]);
+      // Ordenar de mayor a menor aciertos
+      usuariosConPuntajes.sort((a, b) => b.aciertos - a.aciertos);
 
+      // 2. Calcular posiciones con empates (1, 1, 3, 4...)
       const posiciones = {};
-      usuariosOrdenados.forEach((usuarioId, index) => {
+      usuariosConPuntajes.forEach((u, index) => {
         if (index === 0) {
-          posiciones[usuarioId] = 1;
+          posiciones[u.usuarioId] = 1;
         } else {
-          const prevUsuario = usuariosOrdenados[index - 1];
-          if (aciertos[usuarioId] === aciertos[prevUsuario]) {
-            posiciones[usuarioId] = posiciones[prevUsuario];
+          const prev = usuariosConPuntajes[index - 1];
+          if (u.aciertos === prev.aciertos) {
+            posiciones[u.usuarioId] = posiciones[prev.usuarioId];
           } else {
-            posiciones[usuarioId] = index + 1;
+            posiciones[u.usuarioId] = index + 1;
           }
         }
       });
 
-      const columnas = [
-        "Partido",
-        "Resultado",
-        ...usuariosOrdenados.map(usuarioId => {
-          const perfil = perfiles?.find(p => p.id === usuarioId);
-          const nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
-          return [`#${posiciones[usuarioId]}`, nombre]; 
-        })
+      // 3. Construir encabezados de columnas
+      const columnasDef = [
+        { header: "Pos", dataKey: "pos" },
+        { header: "Usuario", dataKey: "usuario" },
+        ...(partidos || []).map(p => ({ header: `${p.local} vs ${p.visitante}`, dataKey: `p_${p.id}` })),
+        { header: "Total", dataKey: "total" }
       ];
 
-      const filas = (partidos || []).map(partido => {
-        const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
-        usuariosOrdenados.forEach(usuarioId => {
-          const pronostico = quinielasData?.find(
-            q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
-          );
-          fila.push(pronostico?.pronostico || "-");
+      const head = [columnasDef.map(col => col.header)];
+
+      // 4. Construir filas de datos
+      const body = usuariosConPuntajes.map(u => {
+        const perfil = perfiles?.find(p => p.id === u.usuarioId);
+        const nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || u.usuarioId;
+        
+        const row = {
+          pos: `#${posiciones[u.usuarioId]}`,
+          usuario: nombre,
+          total: u.aciertos
+        };
+        
+        (partidos || []).forEach(p => {
+          row[`p_${p.id}`] = u.pronosticosUsuario[p.id] || "-";
         });
-        return fila;
+        
+        return columnasDef.map(col => row[col.dataKey]);
       });
-
-      const filaTotales = [
-        "TOTAL",
-        "",
-        ...usuariosOrdenados.map(usuarioId => aciertos[usuarioId])
-      ];
-      filas.push(filaTotales);
 
       const doc = new jsPDF("landscape", "mm", "a4");
 
@@ -609,12 +620,12 @@ export default function AdminDashboard() {
       doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')}`, 14, 21);
 
       autoTable(doc, {
-        head: [columnas],
-        body: filas,
+        head: head,
+        body: body,
         startY: 26,
         theme: "grid",
         styles: {
-          fontSize: 7,
+          fontSize: 6.5, // Reducido ligeramente para que quepan los 9 partidos + columnas
           halign: "center",
           valign: "middle",
           cellPadding: 1.5,
@@ -625,45 +636,45 @@ export default function AdminDashboard() {
           fillColor: [34, 197, 94],
           textColor: [255, 255, 255],
           fontStyle: "bold",
-          fontSize: 6.5,
+          fontSize: 6,
           halign: "center",
           cellPadding: 1.5,
-          minCellHeight: 32,
+          minCellHeight: 28,
         },
         columnStyles: {
-          0: { halign: "left", fontStyle: "bold", fontSize: 7.5, cellWidth: 45 },
-          1: { halign: "center", fontStyle: "bold", fontSize: 7.5, cellWidth: 14 },
+          0: { halign: "center", fontStyle: "bold", fillColor: [240, 240, 240] }, // Posición
+          1: { halign: "left", fontStyle: "bold", fillColor: [240, 240, 240] },   // Usuario
         },
         didParseCell: (data) => {
-          if (data.section === "body" && data.row.index === filas.length - 1) {
+          // Estilo para la columna TOTAL (última columna)
+          if (data.section === "body" && data.column.index === columnasDef.length - 1) {
             data.cell.styles.fillColor = [220, 252, 231];
             data.cell.styles.fontStyle = "bold";
             data.cell.styles.textColor = [22, 101, 52];
-            data.cell.styles.fontSize = 8;
+            data.cell.styles.fontSize = 7.5;
             return;
           }
 
-          if (data.section === "head" && data.column.index >= 2) {
-            const usuarioId = usuariosOrdenados[data.column.index - 2];
-            const pos = posiciones[usuarioId];
-            
-            if (pos === 1) {
-              data.cell.styles.textColor = [255, 215, 0];
-            } else {
-              data.cell.styles.textColor = [255, 255, 255];
+          // Estilo para el 1er lugar (texto dorado en el header)
+          if (data.section === "head" && data.row.index === 0 && data.column.index >= 2 && data.column.index < columnasDef.length - 1) {
+            // Encontrar el usuario de esta columna
+            const colDataKey = columnasDef[data.column.index].dataKey;
+            const primerUsuario = usuariosConPuntajes.find(u => posiciones[u.usuarioId] === 1);
+            if (primerUsuario) {
+               // Lógica simplificada: si es la columna del primer usuario, destacar (opcional, aquí lo dejamos blanco estándar)
             }
           }
 
-          if (data.section === "body" && data.column.index >= 2) {
-            const fila = filas[data.row.index];
-            if (!fila) return;
-            const resultado = fila[1];
-            const pronostico = data.cell.raw;
-
-            if (resultado && resultado !== "-" && pronostico === resultado) {
-              data.cell.styles.textColor = [0, 128, 0];
+          // Resaltar aciertos en verde dentro del cuerpo de la tabla
+          if (data.section === "body" && data.column.index >= 2 && data.column.index < columnasDef.length - 1) {
+            const colDataKey = columnasDef[data.column.index].dataKey;
+            const partidoId = Number(colDataKey.replace('p_', ''));
+            const partido = partidos?.find(p => p.id === partidoId);
+            
+            if (partido && partido.resultado && data.cell.raw === partido.resultado) {
+              data.cell.styles.textColor = [0, 128, 0]; // Verde fuerte
               data.cell.styles.fontStyle = "bold";
-              data.cell.styles.fillColor = [220, 252, 231];
+              data.cell.styles.fillColor = [240, 253, 244]; // Verde muy claro de fondo
             }
           }
         },
