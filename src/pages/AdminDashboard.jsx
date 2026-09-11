@@ -247,7 +247,7 @@ export default function AdminDashboard() {
           });
         }
 
-        // --- SURVIVOR ---
+        // --- SURVIVOR (CON NORMALIZACIÓN DE NOMBRES) ---
         if (!esJugadorSurvivor) return;
 
         const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
@@ -255,11 +255,22 @@ export default function AdminDashboard() {
           reg.survivorEnviados++;
           survivorPorJornadaCount[jornadaId].add(usuario.id);
           if (esPasadaYCerrada) {
-            const partido = partidosDeJornada.find(p => p.local === seleccionSurvivor.equipo || p.visitante === seleccionSurvivor.equipo);
+            // 🚨 NORMALIZACIÓN: Elimina acentos, espacios extra y convierte a minúsculas para comparar
+            const equipoLimpio = seleccionSurvivor.equipo.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            
+            const partido = partidosDeJornada.find(p => {
+              const localLimpio = p.local.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const visitaLimpio = p.visitante.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              return localLimpio === equipoLimpio || visitaLimpio === equipoLimpio;
+            });
+
             if (partido?.resultado) {
               let perdio = false;
-              if (partido.local === seleccionSurvivor.equipo && partido.resultado === "V") perdio = true;
-              if (partido.visitante === seleccionSurvivor.equipo && partido.resultado === "L") perdio = true;
+              const esLocal = partido.local.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === equipoLimpio;
+              
+              if (esLocal && partido.resultado === "V") perdio = true;
+              if (!esLocal && partido.resultado === "L") perdio = true;
+              
               if (perdio && reg.vidas < 3) reg.vidas++;
             }
           }
@@ -503,7 +514,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // ✅ EXPORTAR PDF REDISEÑADO (CON CORRECCIÓN DE NOMBRES)
+  // ✅ EXPORTAR PDF REDISEÑADO (USUARIOS EN FILAS, PARTIDOS EN COLUMNAS)
   //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
@@ -537,7 +548,6 @@ export default function AdminDashboard() {
         return;
       }
 
-      // 1. Calcular aciertos por usuario y ordenar
       const usuariosConPuntajes = usuarios.map(usuarioId => {
         let aciertos = 0;
         const pronosticosUsuario = {};
@@ -561,10 +571,8 @@ export default function AdminDashboard() {
         return { usuarioId, aciertos, pronosticosUsuario };
       });
 
-      // Ordenar de mayor a menor aciertos
       usuariosConPuntajes.sort((a, b) => b.aciertos - a.aciertos);
 
-      // 2. Calcular posiciones con empates (1, 1, 3, 4...)
       const posiciones = {};
       usuariosConPuntajes.forEach((u, index) => {
         if (index === 0) {
@@ -579,7 +587,6 @@ export default function AdminDashboard() {
         }
       });
 
-      // 3. Construir encabezados de columnas
       const columnasDef = [
         { header: "Pos", dataKey: "pos" },
         { header: "Usuario", dataKey: "usuario" },
@@ -589,12 +596,10 @@ export default function AdminDashboard() {
 
       const head = [columnasDef.map(col => col.header)];
 
-      // 4. Construir filas de datos
       const body = usuariosConPuntajes.map(u => {
         const perfil = perfiles?.find(p => p.id === u.usuarioId);
         let nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || u.usuarioId;
         
-        // ✅ CORRECCIÓN: Truncar nombres largos para evitar cortes extraños en el PDF
         if (nombre && nombre.length > 15) {
           nombre = nombre.substring(0, 14) + "..";
         }
@@ -647,11 +652,10 @@ export default function AdminDashboard() {
           minCellHeight: 28,
         },
         columnStyles: {
-          0: { halign: "center", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 12 }, // ✅ Ancho fijo para Pos
-          1: { halign: "left", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 35 },   // ✅ Ancho fijo para Usuario (evita cortes)
+          0: { halign: "center", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 12 },
+          1: { halign: "left", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 35 },
         },
         didParseCell: (data) => {
-          // Estilo para la columna TOTAL (última columna)
           if (data.section === "body" && data.column.index === columnasDef.length - 1) {
             data.cell.styles.fillColor = [220, 252, 231];
             data.cell.styles.fontStyle = "bold";
@@ -660,16 +664,15 @@ export default function AdminDashboard() {
             return;
           }
 
-          // Resaltar aciertos en verde dentro del cuerpo de la tabla
           if (data.section === "body" && data.column.index >= 2 && data.column.index < columnasDef.length - 1) {
             const colDataKey = columnasDef[data.column.index].dataKey;
             const partidoId = Number(colDataKey.replace('p_', ''));
             const partido = partidos?.find(p => p.id === partidoId);
             
             if (partido && partido.resultado && data.cell.raw === partido.resultado) {
-              data.cell.styles.textColor = [0, 128, 0]; // Verde fuerte
+              data.cell.styles.textColor = [0, 128, 0];
               data.cell.styles.fontStyle = "bold";
-              data.cell.styles.fillColor = [240, 253, 244]; // Verde muy claro de fondo
+              data.cell.styles.fillColor = [240, 253, 244];
             }
           }
         },
