@@ -82,13 +82,18 @@ export default function CorregirPronosticos() {
 
       const survivorData = survivorRows && survivorRows.length > 0 ? survivorRows[0] : null;
 
-      const equipos = [];
+      // 🆕 MEJORA: Generar lista de equipos INCLUYENDO al rival para diferenciar reprogramaciones
+      const equiposConRival = [];
       partidos.forEach((p) => {
-        if (p.local && !equipos.includes(p.local)) equipos.push(p.local);
-        if (p.visitante && !equipos.includes(p.visitante)) equipos.push(p.visitante);
+        if (p.local && p.visitante) {
+          equiposConRival.push(`${p.local} (vs ${p.visitante})`);
+          equiposConRival.push(`${p.visitante} (vs ${p.local})`);
+        }
       });
 
-      setEquiposDisponibles(equipos.sort());
+      // Eliminar duplicados exactos y ordenar alfabéticamente
+      const unicos = [...new Set(equiposConRival)].sort();
+      setEquiposDisponibles(unicos);
 
       if (survivorData) {
         setSurvivorId(survivorData.id);
@@ -147,11 +152,9 @@ export default function CorregirPronosticos() {
       // ==========================================
       for (const item of pronosticos) {
         if (item.id) {
-          // Si ya existía en la base de datos
           const pronósticoLimpio = (item.pronostico || "").trim();
           
           if (!pronósticoLimpio) {
-            // Si se cambió a vacío, LO BORRAMOS
             console.log("🗑️ Eliminando quiniela ID:", item.id, "Partido:", item.partido_id);
             const { error } = await supabase
               .from("quinielas")
@@ -164,7 +167,6 @@ export default function CorregirPronosticos() {
             }
             eliminacionesRealizadas++;
           } else {
-            // Si tiene un valor, lo actualizamos
             console.log("✏️ Actualizando quiniela ID:", item.id, "a:", pronósticoLimpio);
             const { error } = await supabase
               .from("quinielas")
@@ -175,7 +177,6 @@ export default function CorregirPronosticos() {
             cambiosRealizados++;
           }
         } else if (item.pronostico && item.pronostico.trim()) {
-          // Si no existía pero ahora se le asignó un valor, lo insertamos
           console.log("➕ Insertando nueva quiniela para partido:", item.partido_id);
           const { error } = await supabase
             .from("quinielas")
@@ -199,7 +200,6 @@ export default function CorregirPronosticos() {
         const equipoLimpio = (equipoSurvivor || "").trim();
         
         if (!equipoLimpio) {
-          // Si se cambió a vacío, borramos el survivor
           console.log("🗑️ Eliminando survivor ID:", survivorId);
           const { error } = await supabase
             .from("survivor")
@@ -209,7 +209,6 @@ export default function CorregirPronosticos() {
           if (error) throw error;
           eliminacionesRealizadas++;
         } else {
-          // Si tiene valor, actualizamos
           console.log("✏️ Actualizando survivor ID:", survivorId, "a:", equipoLimpio);
           const { error } = await supabase
             .from("survivor")
@@ -220,7 +219,6 @@ export default function CorregirPronosticos() {
           cambiosRealizados++;
         }
       } else if (equipoSurvivor && equipoSurvivor.trim()) {
-        // Si no existía pero ahora se le asignó un valor, lo insertamos
         console.log("➕ Insertando nuevo survivor:", equipoSurvivor);
         const { error } = await supabase
           .from("survivor")
@@ -228,7 +226,7 @@ export default function CorregirPronosticos() {
             usuario_id: usuarioSeleccionado,
             usuario: usuarioObj?.email || "",
             jornada_id: Number(jornadaSeleccionada),
-            equipo: equipoSurvivor.trim(),
+            equipo: equipoSurvivor.trim(), // Se guardará como "Equipo (vs Rival)"
           });
         
         if (error) throw error;
@@ -237,7 +235,6 @@ export default function CorregirPronosticos() {
 
       console.log("✅ Guardado completado. Cambios:", cambiosRealizados, "Eliminaciones:", eliminacionesRealizadas);
 
-      // Forzar recarga completa
       await new Promise(resolve => setTimeout(resolve, 300));
       await cargarPronosticos(usuarioSeleccionado, jornadaSeleccionada);
       
@@ -337,18 +334,26 @@ export default function CorregirPronosticos() {
 
           <div className="mt-6 border rounded p-4 bg-gray-50">
             <h2 className="text-xl font-bold mb-3">Survivor</h2>
+            
+            {/* 🆕 AVISO INFORMATIVO PARA EL ADMIN */}
+            <p className="text-sm text-blue-700 mb-3 bg-blue-50 p-2 rounded border border-blue-200">
+              💡 <strong>Nota:</strong> Si un equipo juega dos veces en esta jornada (por reprogramación), 
+              selecciónalo indicando su rival para evitar ambigüedades (ej. "Puebla (vs Toluca)").
+            </p>
+
             <div className="mb-3 text-green-700 font-semibold">
               Survivor actual: {equipoSurvivor || "Sin selección"}
             </div>
+            
             <select
-              className="border p-2 rounded w-full max-w-xs"
+              className="border p-2 rounded w-full max-w-md"
               value={equipoSurvivor}
               onChange={(e) => setEquipoSurvivor(e.target.value)}
             >
               <option value="">-- Seleccionar (Borrar) --</option>
-              {equiposDisponibles.map((equipo) => (
-                <option key={equipo} value={equipo}>
-                  {equipo}
+              {equiposDisponibles.map((equipoConRival) => (
+                <option key={equipoConRival} value={equipoConRival}>
+                  {equipoConRival}
                 </option>
               ))}
             </select>
