@@ -220,7 +220,6 @@ export default function AdminDashboard() {
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
-      // Excluir partidos pospuestos del cálculo de aciertos
       const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId) && !p.pospuesto);
       const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
       const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
@@ -232,7 +231,37 @@ export default function AdminDashboard() {
 
         const esJugadorSurvivor = usuariosQueJueganSurvivor.has(usuario.id);
 
+        // ✅ CORRECCIÓN: Procesar Survivor PRIMERO, antes del return de soloSurvivor
+        if (esJugadorSurvivor) {
+          const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
+          if (seleccionSurvivor && seleccionSurvivor.equipo) {
+            reg.survivorEnviados++;
+            survivorPorJornadaCount[jornadaId].add(usuario.id);
+            if (esPasadaYCerrada) {
+              const normalizar = (texto) => texto.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const equipoLimpio = normalizar(seleccionSurvivor.equipo);
+              
+              const partido = partidosDeJornada.find(p => {
+                return normalizar(p.local) === equipoLimpio || normalizar(p.visitante) === equipoLimpio;
+              });
+
+              if (partido?.resultado) {
+                let perdio = false;
+                const esLocal = normalizar(partido.local) === equipoLimpio;
+                
+                if (esLocal && partido.resultado === "V") perdio = true;
+                if (!esLocal && partido.resultado === "L") perdio = true;
+                
+                if (perdio && reg.vidas < 3) reg.vidas++;
+              }
+            }
+          } else if (esPasadaYCerrada && reg.vidas < 3) {
+            reg.vidas++;
+          }
+        }
+
         // --- QUINIELA ---
+        // Ahora este return solo salta la quiniela, pero el survivor ya se procesó
         if (reg.soloSurvivor) return;
 
         const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
@@ -246,37 +275,6 @@ export default function AdminDashboard() {
               reg.totalAciertos++;
             }
           });
-        }
-
-        // --- SURVIVOR (CON NORMALIZACIÓN DE NOMBRES) ---
-        if (!esJugadorSurvivor) return;
-
-        const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
-        if (seleccionSurvivor && seleccionSurvivor.equipo) {
-          reg.survivorEnviados++;
-          survivorPorJornadaCount[jornadaId].add(usuario.id);
-          if (esPasadaYCerrada) {
-            // Normalización: elimina acentos, espacios extra, convierte a minúsculas
-            const normalizar = (texto) => texto.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const equipoLimpio = normalizar(seleccionSurvivor.equipo);
-            
-            const partido = partidosDeJornada.find(p => {
-              return normalizar(p.local) === equipoLimpio || normalizar(p.visitante) === equipoLimpio;
-            });
-
-            if (partido?.resultado) {
-              let perdio = false;
-              const esLocal = normalizar(partido.local) === equipoLimpio;
-              
-              if (esLocal && partido.resultado === "V") perdio = true;
-              if (!esLocal && partido.resultado === "L") perdio = true;
-              
-              if (perdio && reg.vidas < 3) reg.vidas++;
-            }
-          }
-        } else if (esPasadaYCerrada && reg.vidas < 3) {
-          // No seleccionó nada y la jornada ya cerró: pierde vida
-          reg.vidas++;
         }
       });
     });
