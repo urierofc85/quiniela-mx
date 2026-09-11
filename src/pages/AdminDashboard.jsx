@@ -510,7 +510,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // ✅ EXPORTAR PDF (AHORA INCLUYE TODOS LOS PARTIDOS, INCLUSO POSPUESTOS)
+  // ✅ EXPORTAR PDF (CORREGIDO: MUESTRA PRONÓSTICOS INCLUSO SIN RESULTADO)
   //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
@@ -526,7 +526,7 @@ export default function AdminDashboard() {
 
       const { data: jornadaActivaPDF } = await supabase.from("jornadas").select("*").eq("id", jornadaId).single();
       
-      // ✅ CAMBIO: Se eliminó .eq("pospuesto", false) para traer TODOS los partidos de la jornada
+      // Traer TODOS los partidos de la jornada (incluyendo pospuestos o sin resultado)
       const { data: partidos } = await supabase
         .from("partidos")
         .select("id, local, visitante, resultado, pospuesto")
@@ -544,22 +544,24 @@ export default function AdminDashboard() {
         return;
       }
 
+      // ✅ CORRECCIÓN: Buscar el pronóstico del usuario SIN importar si el partido ya tiene resultado
       const usuariosConPuntajes = usuarios.map(usuarioId => {
         let aciertos = 0;
         const pronosticosUsuario = {};
         
         (partidos || []).forEach(partido => {
-          if (!partido.resultado) {
-            pronosticosUsuario[partido.id] = "-";
-            return;
-          }
+          // 1. Siempre buscamos si el usuario hizo un pronóstico para este partido
           const pronostico = quinielasData?.find(q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId);
+          
           if (pronostico) {
             pronosticosUsuario[partido.id] = pronostico.pronostico;
-            if (pronostico.pronostico === partido.resultado) {
+            
+            // 2. Solo sumamos acierto si el partido YA tiene resultado Y el pronóstico coincide
+            if (partido.resultado && pronostico.pronostico === partido.resultado) {
               aciertos++;
             }
           } else {
+            // Si no hizo pronóstico, mostramos guion
             pronosticosUsuario[partido.id] = "-";
           }
         });
@@ -652,6 +654,7 @@ export default function AdminDashboard() {
           1: { halign: "left", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 35 },
         },
         didParseCell: (data) => {
+          // Estilo para la columna TOTAL
           if (data.section === "body" && data.column.index === columnasDef.length - 1) {
             data.cell.styles.fillColor = [220, 252, 231];
             data.cell.styles.fontStyle = "bold";
@@ -660,12 +663,12 @@ export default function AdminDashboard() {
             return;
           }
 
+          // Resaltar aciertos en verde (solo si el partido ya tiene resultado)
           if (data.section === "body" && data.column.index >= 2 && data.column.index < columnasDef.length - 1) {
             const colDataKey = columnasDef[data.column.index].dataKey;
             const partidoId = Number(colDataKey.replace('p_', ''));
             const partido = partidos?.find(p => p.id === partidoId);
             
-            // Solo resalta en verde si hay resultado y el pronóstico coincide
             if (partido && partido.resultado && data.cell.raw === partido.resultado) {
               data.cell.styles.textColor = [0, 128, 0];
               data.cell.styles.fontStyle = "bold";
