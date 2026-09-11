@@ -71,6 +71,9 @@ export default function AdminDashboard() {
     return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
   };
 
+  //---------------------------------------
+  // CARGA DEL DASHBOARD CON PAGINACIÓN AUTOMÁTICA
+  //---------------------------------------
   const cargarDashboard = async () => {
     setCargando(true);
     const t0 = performance.now();
@@ -160,6 +163,9 @@ export default function AdminDashboard() {
     }
   };
 
+  //---------------------------------------
+  // PROCESAMIENTO DE DATOS
+  //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
     perfilesData,
@@ -214,6 +220,7 @@ export default function AdminDashboard() {
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
 
+      // Excluir partidos pospuestos del cálculo de aciertos
       const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId) && !p.pospuesto);
       const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
       const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
@@ -241,7 +248,7 @@ export default function AdminDashboard() {
           });
         }
 
-        // --- SURVIVOR (CON NORMALIZACIÓN Y LOGS) ---
+        // --- SURVIVOR (CON NORMALIZACIÓN DE NOMBRES) ---
         if (!esJugadorSurvivor) return;
 
         const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
@@ -249,41 +256,32 @@ export default function AdminDashboard() {
           reg.survivorEnviados++;
           survivorPorJornadaCount[jornadaId].add(usuario.id);
           if (esPasadaYCerrada) {
-            const equipoLimpio = seleccionSurvivor.equipo.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            // Normalización: elimina acentos, espacios extra, convierte a minúsculas
+            const normalizar = (texto) => texto.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const equipoLimpio = normalizar(seleccionSurvivor.equipo);
             
             const partido = partidosDeJornada.find(p => {
-              const localLimpio = p.local.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-              const visitaLimpio = p.visitante.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-              return localLimpio === equipoLimpio || visitaLimpio === equipoLimpio;
+              return normalizar(p.local) === equipoLimpio || normalizar(p.visitante) === equipoLimpio;
             });
 
             if (partido?.resultado) {
               let perdio = false;
-              const esLocal = partido.local.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") === equipoLimpio;
+              const esLocal = normalizar(partido.local) === equipoLimpio;
               
               if (esLocal && partido.resultado === "V") perdio = true;
               if (!esLocal && partido.resultado === "L") perdio = true;
               
-              if (perdio && reg.vidas < 3) {
-                reg.vidas++;
-                // 🚨 LOG: Usuario específico que perdió vida
-                if (usuario.email && usuario.email.includes("CORREO_O_NOMBRE_DEL_USUARIO")) {
-                  console.log(`💀 ${reg.nombre} perdió vida en ${jornada.nombre}: ${seleccionSurvivor.equipo} (equipo limpio: ${equipoLimpio})`);
-                }
-              }
+              if (perdio && reg.vidas < 3) reg.vidas++;
             }
           }
         } else if (esPasadaYCerrada && reg.vidas < 3) {
+          // No seleccionó nada y la jornada ya cerró: pierde vida
           reg.vidas++;
-          // 🚨 LOG: Usuario específico que no seleccionó
-          if (usuario.email && usuario.email.includes("CORREO_O_NOMBRE_DEL_USUARIO")) {
-            console.log(`💀 ${reg.nombre} perdió vida en ${jornada.nombre}: No seleccionó equipo`);
-          }
         }
       });
     });
 
-    // 🚨 LOG FINAL: Mostrar vidas totales de todos los usuarios
+    // Resumen de vidas perdidas en consola
     console.log("\n📊 RESUMEN DE VIDAS PERDIDAS:");
     Object.values(acumulado).forEach(reg => {
       if (reg.vidas > 0) {
@@ -346,6 +344,7 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
+      // Faltan Survivor: excluir eliminados (3+ vidas)
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
@@ -383,6 +382,9 @@ export default function AdminDashboard() {
     return p.nombre_usuario || p.nombre || (p.email ? p.email.split('@')[0] : 'Usuario');
   };
 
+  //---------------------------------------
+  // EXPORTAR A IMAGEN (JPEG)
+  //---------------------------------------
   const exportarImagen = async () => {
     try {
       const rankingOrdenado = [...rankingQuinielas].sort((a, b) => {
@@ -438,31 +440,19 @@ export default function AdminDashboard() {
         let fontWeight = 'normal';
 
         if (pos === 1) {
-          bgColor = '#22c55e';
-          textColor = '#ffffff';
-          fontWeight = 'bold';
+          bgColor = '#22c55e'; textColor = '#ffffff'; fontWeight = 'bold';
         } else if (pos === 2) {
-          bgColor = '#eab308';
-          textColor = '#000000';
-          fontWeight = 'bold';
+          bgColor = '#eab308'; textColor = '#000000'; fontWeight = 'bold';
         } else if (pos === 3) {
-          bgColor = '#f97316';
-          textColor = '#ffffff';
-          fontWeight = 'bold';
+          bgColor = '#f97316'; textColor = '#ffffff'; fontWeight = 'bold';
         } else if (pos === 4) {
-          bgColor = '#3b82f6';
-          textColor = '#ffffff';
-          fontWeight = 'bold';
+          bgColor = '#3b82f6'; textColor = '#ffffff'; fontWeight = 'bold';
         } else if (pos === 5) {
-          bgColor = '#8b5cf6';
-          textColor = '#ffffff';
-          fontWeight = 'bold';
+          bgColor = '#8b5cf6'; textColor = '#ffffff'; fontWeight = 'bold';
         }
 
         if (liderScore - fila.totalAciertos > 11) {
-          bgColor = '#ef4444';
-          textColor = '#ffffff';
-          fontWeight = 'bold';
+          bgColor = '#ef4444'; textColor = '#ffffff'; fontWeight = 'bold';
         }
 
         const tr = document.createElement('tr');
@@ -512,12 +502,18 @@ export default function AdminDashboard() {
     }
   };
 
+  //---------------------------------------
+  // MODAL PDF
+  //---------------------------------------
   const abrirModalPDF = () => {
     const preSeleccion = jornadaActiva?.id || (jornadas.length > 0 ? jornadas[0].id : "");
     setJornadaParaPDF(preSeleccion);
     setModalPDFAbierto(true);
   };
 
+  //---------------------------------------
+  // EXPORTAR PDF (USUARIOS EN FILAS, PARTIDOS EN COLUMNAS)
+  //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
       alert("Selecciona una jornada.");
@@ -691,6 +687,9 @@ export default function AdminDashboard() {
     }
   };
 
+  //---------------------------------------
+  // INTERFAZ
+  //---------------------------------------
   if (cargando) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
