@@ -209,6 +209,33 @@ export default function AdminSurvivor() {
       });
     }
 
+    // ==========================================
+    // 🚨 PENALIZACIÓN POR USO EXCESIVO DE EQUIPO (> 3 VECES)
+    // ==========================================
+    const usosPorUsuario = {};
+    rawSurvivor.forEach(s => {
+      if (!usosPorUsuario[s.usuario_id]) usosPorUsuario[s.usuario_id] = {};
+      // Extraemos el nombre base del equipo para el conteo global
+      const baseTeam = s.equipo.split(' (vs ')[0].trim().toLowerCase();
+      usosPorUsuario[s.usuario_id][baseTeam] = (usosPorUsuario[s.usuario_id][baseTeam] || 0) + 1;
+    });
+
+    Object.keys(acumulado).forEach(userId => {
+      if (usosPorUsuario[userId]) {
+        let infraccion = false;
+        Object.values(usosPorUsuario[userId]).forEach(count => {
+          if (count > 3) infraccion = true;
+        });
+        
+        if (infraccion) {
+          // Se suma 1 vida por la infracción de usar un equipo más de 3 veces
+          if (acumulado[userId].vidas < 3) {
+            acumulado[userId].vidas += 1;
+          }
+        }
+      }
+    });
+
     // 3. ORDEN DE CLASIFICACIÓN:
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
       // Primero: Menor cantidad de vidas perdidas (0 es el mejor lugar)
