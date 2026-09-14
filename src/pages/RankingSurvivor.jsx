@@ -154,23 +154,49 @@ export default function RankingSurvivor() {
           return;
         }
 
-        // CASO C: Sí seleccionó, calculamos puntos y resultados
-        const partido = rawPartidos.find(
-          (p) =>
-            Number(p.jornada_id) === Number(jornada.id) &&
-            (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
-        );
+        // ✅ CORRECCIÓN DEFINITIVA: Extraer equipo Y rival para evitar falsos positivos
+        // Ejemplo: "Leon (vs San Luis)" -> equipo: "leon", rival: "san luis"
+        const partes = seleccion.equipo.split(' (vs ');
+        const nombreEquipoBase = partes[0].trim().toLowerCase();
+        const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
+
+        // ✅ CORRECCIÓN: Buscar el partido que coincida con AMBOS equipos
+        const partido = rawPartidos.find((p) => {
+          const esMismaJornada = Number(p.jornada_id) === Number(jornada.id);
+          if (!esMismaJornada) return false;
+
+          const localLimpio = p.local.trim().toLowerCase();
+          const visitaLimpio = p.visitante.trim().toLowerCase();
+
+          const esEquipoLocal = localLimpio === nombreEquipoBase;
+          const esEquipoVisita = visitaLimpio === nombreEquipoBase;
+
+          if (!esEquipoLocal && !esEquipoVisita) return false;
+
+          // Si tenemos el rival en la selección, debe coincidir con el otro equipo del partido
+          if (nombreRivalBase) {
+            const esRivalCorrecto = (esEquipoLocal && visitaLimpio === nombreRivalBase) || 
+                                    (esEquipoVisita && localLimpio === nombreRivalBase);
+            return esRivalCorrecto;
+          }
+
+          // Fallback por compatibilidad con selecciones antiguas sin rival
+          return true;
+        });
 
         if (!partido || !partido.resultado) return;
 
         let puntos = 0;
         let perdio = false;
 
-        if (partido.local === seleccion.equipo) {
+        // Determinar si el equipo elegido era el local o el visitante
+        const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
+
+        if (esLocal) {
           if (partido.resultado === "L") puntos = 3;
           else if (partido.resultado === "E") puntos = 1;
           else if (partido.resultado === "V") perdio = true;
-        } else if (partido.visitante === seleccion.equipo) {
+        } else {
           if (partido.resultado === "V") puntos = 3;
           else if (partido.resultado === "E") puntos = 1;
           else if (partido.resultado === "L") perdio = true;
