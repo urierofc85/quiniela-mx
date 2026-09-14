@@ -150,10 +150,16 @@ export default function AdminSurvivor() {
           return;
         }
 
+        // ✅ CORRECCIÓN: Extraer el nombre base del equipo (antes de " (vs ")
+        // Ejemplo: "Puebla (vs Toluca)" -> "puebla"
+        const nombreEquipoBase = seleccion.equipo.split(' (vs ')[0].trim().toLowerCase();
+
+        // ✅ CORRECCIÓN: Comparar usando el nombre base normalizado
         const partido = rawPartidos.find(
           (p) =>
             Number(p.jornada_id) === Number(jornada.id) &&
-            (p.local === seleccion.equipo || p.visitante === seleccion.equipo)
+            (p.local.trim().toLowerCase() === nombreEquipoBase || 
+             p.visitante.trim().toLowerCase() === nombreEquipoBase)
         );
 
         if (!partido || !partido.resultado) return;
@@ -161,11 +167,14 @@ export default function AdminSurvivor() {
         let puntos = 0;
         let perdio = false;
 
-        if (partido.local === seleccion.equipo) {
+        // Determinar si el equipo elegido era el local o el visitante
+        const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
+
+        if (esLocal) {
           if (partido.resultado === "L") puntos = 3;
           else if (partido.resultado === "E") puntos = 1;
           else if (partido.resultado === "V") perdio = true;
-        } else if (partido.visitante === seleccion.equipo) {
+        } else {
           if (partido.resultado === "V") puntos = 3;
           else if (partido.resultado === "E") puntos = 1;
           else if (partido.resultado === "L") perdio = true;
@@ -182,7 +191,7 @@ export default function AdminSurvivor() {
       });
     }
 
-    // 3. NUEVO ORDEN DE CLASIFICACIÓN:
+    // 3. ORDEN DE CLASIFICACIÓN:
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
       // Primero: Menor cantidad de vidas perdidas (0 es el mejor lugar)
       if (a.vidas !== b.vidas) {
@@ -250,14 +259,16 @@ export default function AdminSurvivor() {
     const conteo = {};
     rawSurvivor.forEach((registro) => {
       const usuarioId = registro.usuario_id;
-      const equipoElegido = registro.equipo;
+      // Extraemos el nombre base del equipo para el conteo, ignorando el rival
+      const equipoBase = registro.equipo.split(' (vs ')[0].trim();
+      
       if (!conteo[usuarioId]) {
         conteo[usuarioId] = {};
       }
-      if (!conteo[usuarioId][equipoElegido]) {
-        conteo[usuarioId][equipoElegido] = 0;
+      if (!conteo[usuarioId][equipoBase]) {
+        conteo[usuarioId][equipoBase] = 0;
       }
-      conteo[usuarioId][equipoElegido]++;
+      conteo[usuarioId][equipoBase]++;
     });
 
     const resultado = equiposLigaMx.map((equipo) => {
