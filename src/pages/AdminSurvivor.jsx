@@ -150,17 +150,35 @@ export default function AdminSurvivor() {
           return;
         }
 
-        // ✅ CORRECCIÓN: Extraer el nombre base del equipo (antes de " (vs ")
-        // Ejemplo: "Puebla (vs Toluca)" -> "puebla"
-        const nombreEquipoBase = seleccion.equipo.split(' (vs ')[0].trim().toLowerCase();
+        // ✅ CORRECCIÓN DEFINITIVA: Extraer equipo Y rival para evitar falsos positivos
+        // Ejemplo: "Leon (vs San Luis)" -> equipo: "leon", rival: "san luis"
+        const partes = seleccion.equipo.split(' (vs ');
+        const nombreEquipoBase = partes[0].trim().toLowerCase();
+        const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
 
-        // ✅ CORRECCIÓN: Comparar usando el nombre base normalizado
-        const partido = rawPartidos.find(
-          (p) =>
-            Number(p.jornada_id) === Number(jornada.id) &&
-            (p.local.trim().toLowerCase() === nombreEquipoBase || 
-             p.visitante.trim().toLowerCase() === nombreEquipoBase)
-        );
+        // ✅ CORRECCIÓN: Buscar el partido que coincida con AMBOS equipos
+        const partido = rawPartidos.find((p) => {
+          const esMismaJornada = Number(p.jornada_id) === Number(jornada.id);
+          if (!esMismaJornada) return false;
+
+          const localLimpio = p.local.trim().toLowerCase();
+          const visitaLimpio = p.visitante.trim().toLowerCase();
+
+          const esEquipoLocal = localLimpio === nombreEquipoBase;
+          const esEquipoVisita = visitaLimpio === nombreEquipoBase;
+
+          if (!esEquipoLocal && !esEquipoVisita) return false;
+
+          // Si tenemos el rival en la selección, debe coincidir con el otro equipo del partido
+          if (nombreRivalBase) {
+            const esRivalCorrecto = (esEquipoLocal && visitaLimpio === nombreRivalBase) || 
+                                    (esEquipoVisita && localLimpio === nombreRivalBase);
+            return esRivalCorrecto;
+          }
+
+          // Fallback por compatibilidad con selecciones antiguas sin rival
+          return true;
+        });
 
         if (!partido || !partido.resultado) return;
 
