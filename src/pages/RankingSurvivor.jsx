@@ -97,6 +97,9 @@ export default function RankingSurvivor() {
       return Number(j.id) === Number(jornadaSeleccionada);
     });
 
+    // 🚨 Aseguramos que las jornadas se procesen en orden cronológico
+    const jornadasOrdenadas = [...jornadasAProcesar].sort((a, b) => Number(a.id) - Number(b.id));
+
     const acumulado = {};
 
     rawPerfiles.forEach((usuario) => {
@@ -112,13 +115,37 @@ export default function RankingSurvivor() {
         puntos: 0,
         vidas: 0,
         equipoElegido: "-",
+        tuvoInfraccion: false, // 🚨 NUEVA BANDERA PARA LA MARCA VISUAL
       };
     });
 
-    // 🚨 CONTEO EN TIEMPO REAL DE USOS POR EQUIPO
-    const usosEnTiempoReal = {};
+    // 🚨 PASO 1: Identificar cuáles selecciones específicas son "infracciones" (4ta vez o más)
+    const seleccionesPorUsuarioYEquipo = {};
+    rawSurvivor.forEach(s => {
+      if (!seleccionesPorUsuarioYEquipo[s.usuario_id]) {
+        seleccionesPorUsuarioYEquipo[s.usuario_id] = {};
+      }
+      const baseTeam = s.equipo.split(' (vs ')[0].trim().toLowerCase();
+      if (!seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam]) {
+        seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam] = [];
+      }
+      seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam].push(s);
+    });
 
-    for (const jornada of jornadasAProcesar) {
+    // Marcamos las selecciones que son infracción (índice >= 3, es decir, la 4ta en adelante)
+    const seleccionesInfraccion = new Set();
+    Object.keys(seleccionesPorUsuarioYEquipo).forEach(userId => {
+      Object.keys(seleccionesPorUsuarioYEquipo[userId]).forEach(team => {
+        const selecciones = seleccionesPorUsuarioYEquipo[userId][team].sort((a, b) => Number(a.jornada_id) - Number(b.jornada_id));
+        for (let i = 3; i < selecciones.length; i++) {
+          // Guardamos un identificador único: "userId_jornadaId"
+          seleccionesInfraccion.add(`${userId}_${selecciones[i].jornada_id}`);
+        }
+      });
+    });
+
+    // 🚨 PASO 2: Procesar jornadas y aplicar lógica
+    for (const jornada of jornadasOrdenadas) {
       const esPasadaYCerrada = jornada.fecha_limite
         ? referenciaTiempo > new Date(jornada.fecha_limite)
         : jornada.cerrada === true || jornada.estado === "cerrada";
@@ -152,18 +179,12 @@ export default function RankingSurvivor() {
           return;
         }
 
+        // 🚨 VERIFICAR SI ESTA SELECCIÓN ES UNA INFRACCIÓN
+        const esInfraccion = seleccionesInfraccion.has(`${usuario.id}_${jornada.id}`);
+
         const partes = seleccion.equipo.split(' (vs ');
         const nombreEquipoBase = partes[0].trim().toLowerCase();
         const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
-
-        // 🚨 ACTUALIZAR CONTEO EN TIEMPO REAL
-        if (!usosEnTiempoReal[usuario.id]) {
-          usosEnTiempoReal[usuario.id] = {};
-        }
-        usosEnTiempoReal[usuario.id][nombreEquipoBase] = (usosEnTiempoReal[usuario.id][nombreEquipoBase] || 0) + 1;
-        
-        // Verificar si esta selección en particular es la que rompe la regla (> 3)
-        const esInfraccion = usosEnTiempoReal[usuario.id][nombreEquipoBase] > 3;
 
         // Buscar el partido que coincida con AMBOS equipos
         const partido = rawPartidos.find((p) => {
@@ -194,9 +215,10 @@ export default function RankingSurvivor() {
 
         // 🚨 LÓGICA DE PUNTUACIÓN CONDICIONAL
         if (esInfraccion) {
-          // Si es la 4ta vez o más: 0 puntos y se marca como pérdida de vida
+          // Si es la 4ta vez o más: 0 puntos, se marca como pérdida de vida y se activa la bandera visual
           puntos = 0;
           perdio = true; 
+          registroAcumulado.tuvoInfraccion = true; // 🚨 ACTIVAR MARCA VISUAL
         } else {
           // Cálculo normal si está dentro del límite de 3
           const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
@@ -408,15 +430,30 @@ export default function RankingSurvivor() {
                           : "🔒 Oculto"}
                       </td>
                     )}
+                    
+                    {/* 🚨 COLUMNA DE PUNTOS CON MARCA VISUAL DE PENALIZACIÓN */}
                     <td
-                      className="p-2 text-center font-bold"
+                      className="p-2 text-center"
                       style={{
                         border: "1px solid #e5e7eb",
-                        color: "#111827",
                       }}
                     >
-                      {fila.puntos}
+                      <div 
+                        className="font-bold" 
+                        style={{ color: fila.tuvoInfraccion ? "#dc2626" : "#111827" }}
+                      >
+                        {fila.puntos}
+                      </div>
+                      {fila.tuvoInfraccion && (
+                        <div 
+                          className="text-[10px] text-red-600 font-semibold mt-1" 
+                          title="Penalizado por elegir el mismo equipo más de 3 veces en la temporada"
+                        >
+                          ⚠️ Penalizado
+                        </div>
+                      )}
                     </td>
+
                     <td
                       className="p-2 text-center font-semibold"
                       style={{
