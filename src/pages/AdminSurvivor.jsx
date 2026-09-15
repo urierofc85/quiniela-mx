@@ -116,6 +116,9 @@ export default function AdminSurvivor() {
       };
     });
 
+    // 🚨 CONTEO EN TIEMPO REAL DE USOS POR EQUIPO
+    const usosEnTiempoReal = {};
+
     for (const jornada of jornadasAProcesar) {
       const esPasadaYCerrada = jornada.fecha_limite
         ? horaMexico > new Date(jornada.fecha_limite)
@@ -156,6 +159,15 @@ export default function AdminSurvivor() {
         const nombreEquipoBase = partes[0].trim().toLowerCase();
         const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
 
+        // 🚨 ACTUALIZAR CONTEO EN TIEMPO REAL
+        if (!usosEnTiempoReal[usuario.id]) {
+          usosEnTiempoReal[usuario.id] = {};
+        }
+        usosEnTiempoReal[usuario.id][nombreEquipoBase] = (usosEnTiempoReal[usuario.id][nombreEquipoBase] || 0) + 1;
+        
+        // Verificar si esta selección en particular es la que rompe la regla (> 3)
+        const esInfraccion = usosEnTiempoReal[usuario.id][nombreEquipoBase] > 3;
+
         // ✅ CORRECCIÓN: Buscar el partido que coincida con AMBOS equipos
         const partido = rawPartidos.find((p) => {
           const esMismaJornada = Number(p.jornada_id) === Number(jornada.id);
@@ -185,22 +197,29 @@ export default function AdminSurvivor() {
         let puntos = 0;
         let perdio = false;
 
-        // Determinar si el equipo elegido era el local o el visitante
-        const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
-
-        if (esLocal) {
-          if (partido.resultado === "L") puntos = 3;
-          else if (partido.resultado === "E") puntos = 1;
-          else if (partido.resultado === "V") perdio = true;
+        // 🚨 LÓGICA DE PUNTUACIÓN CONDICIONAL
+        if (esInfraccion) {
+          // Si es la 4ta vez o más: 0 puntos y se marca como pérdida de vida
+          puntos = 0;
+          perdio = true; 
         } else {
-          if (partido.resultado === "V") puntos = 3;
-          else if (partido.resultado === "E") puntos = 1;
-          else if (partido.resultado === "L") perdio = true;
+          // Cálculo normal si está dentro del límite de 3
+          const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
+
+          if (esLocal) {
+            if (partido.resultado === "L") puntos = 3;
+            else if (partido.resultado === "E") puntos = 1;
+            else if (partido.resultado === "V") perdio = true;
+          } else {
+            if (partido.resultado === "V") puntos = 3;
+            else if (partido.resultado === "E") puntos = 1;
+            else if (partido.resultado === "L") perdio = true;
+          }
         }
 
         registroAcumulado.puntos += puntos;
         
-        // 2. Si perdió el partido, suma una vida perdida (con tope de 3)
+        // 2. Si perdió el partido (o fue infracción), suma una vida perdida (con tope de 3)
         if (perdio) {
           if (registroAcumulado.vidas < 3) {
             registroAcumulado.vidas += 1;
@@ -208,33 +227,6 @@ export default function AdminSurvivor() {
         }
       });
     }
-
-    // ==========================================
-    // 🚨 PENALIZACIÓN POR USO EXCESIVO DE EQUIPO (> 3 VECES)
-    // ==========================================
-    const usosPorUsuario = {};
-    rawSurvivor.forEach(s => {
-      if (!usosPorUsuario[s.usuario_id]) usosPorUsuario[s.usuario_id] = {};
-      // Extraemos el nombre base del equipo para el conteo global
-      const baseTeam = s.equipo.split(' (vs ')[0].trim().toLowerCase();
-      usosPorUsuario[s.usuario_id][baseTeam] = (usosPorUsuario[s.usuario_id][baseTeam] || 0) + 1;
-    });
-
-    Object.keys(acumulado).forEach(userId => {
-      if (usosPorUsuario[userId]) {
-        let infraccion = false;
-        Object.values(usosPorUsuario[userId]).forEach(count => {
-          if (count > 3) infraccion = true;
-        });
-        
-        if (infraccion) {
-          // Se suma 1 vida por la infracción de usar un equipo más de 3 veces
-          if (acumulado[userId].vidas < 3) {
-            acumulado[userId].vidas += 1;
-          }
-        }
-      }
-    });
 
     // 3. ORDEN DE CLASIFICACIÓN:
     const rankingFinal = Object.values(acumulado).sort((a, b) => {
