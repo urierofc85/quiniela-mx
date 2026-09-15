@@ -98,41 +98,59 @@ export default function AdminSurvivor() {
       return Number(j.id) === Number(jornadaSeleccionada);
     });
 
+    // Aseguramos que las jornadas a procesar estén en orden cronológico
+    const jornadasOrdenadas = [...jornadasAProcesar].sort((a, b) => Number(a.id) - Number(b.id));
+
     const acumulado = {};
-
     rawPerfiles.forEach((usuario) => {
-      const nombre =
-        usuario?.nombre_usuario ||
-        usuario?.nombre ||
-        usuario?.nombre_completo ||
-        "Sin nombre";
-
       acumulado[usuario.id] = {
         usuario_id: usuario.id,
-        nombre,
+        nombre: usuario?.nombre_usuario || usuario?.nombre || usuario?.nombre_completo || "Sin nombre",
         puntos: 0,
         vidas: 0,
         equipoElegido: "-",
       };
     });
 
-    // 🚨 CONTEO EN TIEMPO REAL DE USOS POR EQUIPO
-    const usosEnTiempoReal = {};
+    // 🚨 PASO 1: Identificar cuáles selecciones específicas son "infracciones" (4ta vez o más)
+    // Agrupamos todas las selecciones de survivor por usuario y por equipo base
+    const seleccionesPorUsuarioYEquipo = {};
+    rawSurvivor.forEach(s => {
+      if (!seleccionesPorUsuarioYEquipo[s.usuario_id]) {
+        seleccionesPorUsuarioYEquipo[s.usuario_id] = {};
+      }
+      const baseTeam = s.equipo.split(' (vs ')[0].trim().toLowerCase();
+      if (!seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam]) {
+        seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam] = [];
+      }
+      seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam].push(s);
+    });
 
-    for (const jornada of jornadasAProcesar) {
+    // Marcamos las selecciones que son infracción (índice >= 3, es decir, la 4ta en adelante)
+    // Ordenamos por jornada_id para asegurar que las primeras 3 cronológicas son las válidas
+    const seleccionesInfraccion = new Set();
+    Object.keys(seleccionesPorUsuarioYEquipo).forEach(userId => {
+      Object.keys(seleccionesPorUsuarioYEquipo[userId]).forEach(team => {
+        const selecciones = seleccionesPorUsuarioYEquipo[userId][team].sort((a, b) => Number(a.jornada_id) - Number(b.jornada_id));
+        for (let i = 3; i < selecciones.length; i++) {
+          // Guardamos un identificador único de la selección infractora: "userId_jornadaId"
+          seleccionesInfraccion.add(`${userId}_${selecciones[i].jornada_id}`);
+        }
+      });
+    });
+
+    // 🚨 PASO 2: Procesar jornadas y aplicar lógica
+    for (const jornada of jornadasOrdenadas) {
       const esPasadaYCerrada = jornada.fecha_limite
         ? horaMexico > new Date(jornada.fecha_limite)
-        : false;
+        : jornada.cerrada === true || jornada.estado === "cerrada";
 
       const eleccionesJornada = rawSurvivor.filter(
         (s) => Number(s.jornada_id) === Number(jornada.id)
       );
 
       rawPerfiles.forEach((usuario) => {
-        const seleccion = eleccionesJornada.find(
-          (s) => s.usuario_id === usuario.id
-        );
-
+        const seleccion = eleccionesJornada.find((s) => s.usuario_id === usuario.id);
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
@@ -153,22 +171,14 @@ export default function AdminSurvivor() {
           return;
         }
 
-        // ✅ CORRECCIÓN DEFINITIVA: Extraer equipo Y rival para evitar falsos positivos
-        // Ejemplo: "Leon (vs San Luis)" -> equipo: "leon", rival: "san luis"
+        // 🚨 VERIFICAR SI ESTA SELECCIÓN ES UNA INFRACCIÓN
+        const esInfraccion = seleccionesInfraccion.has(`${usuario.id}_${jornada.id}`);
+
         const partes = seleccion.equipo.split(' (vs ');
         const nombreEquipoBase = partes[0].trim().toLowerCase();
         const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
 
-        // 🚨 ACTUALIZAR CONTEO EN TIEMPO REAL
-        if (!usosEnTiempoReal[usuario.id]) {
-          usosEnTiempoReal[usuario.id] = {};
-        }
-        usosEnTiempoReal[usuario.id][nombreEquipoBase] = (usosEnTiempoReal[usuario.id][nombreEquipoBase] || 0) + 1;
-        
-        // Verificar si esta selección en particular es la que rompe la regla (> 3)
-        const esInfraccion = usosEnTiempoReal[usuario.id][nombreEquipoBase] > 3;
-
-        // ✅ CORRECCIÓN: Buscar el partido que coincida con AMBOS equipos
+        // Buscar el partido que coincida con AMBOS equipos
         const partido = rawPartidos.find((p) => {
           const esMismaJornada = Number(p.jornada_id) === Number(jornada.id);
           if (!esMismaJornada) return false;
@@ -181,14 +191,12 @@ export default function AdminSurvivor() {
 
           if (!esEquipoLocal && !esEquipoVisita) return false;
 
-          // Si tenemos el rival en la selección, debe coincidir con el otro equipo del partido
           if (nombreRivalBase) {
             const esRivalCorrecto = (esEquipoLocal && visitaLimpio === nombreRivalBase) || 
                                     (esEquipoVisita && localLimpio === nombreRivalBase);
             return esRivalCorrecto;
           }
 
-          // Fallback por compatibilidad con selecciones antiguas sin rival
           return true;
         });
 
@@ -199,7 +207,7 @@ export default function AdminSurvivor() {
 
         // 🚨 LÓGICA DE PUNTUACIÓN CONDICIONAL
         if (esInfraccion) {
-          // Si es la 4ta vez o más: 0 puntos y se marca como pérdida de vida
+          // Si es la 4ta vez o más: 0 puntos y se marca como pérdida de vida, SIN IMPORTAR EL RESULTADO
           puntos = 0;
           perdio = true; 
         } else {
@@ -296,7 +304,6 @@ export default function AdminSurvivor() {
     const conteo = {};
     rawSurvivor.forEach((registro) => {
       const usuarioId = registro.usuario_id;
-      // Extraemos el nombre base del equipo para el conteo, ignorando el rival
       const equipoBase = registro.equipo.split(' (vs ')[0].trim();
       
       if (!conteo[usuarioId]) {
