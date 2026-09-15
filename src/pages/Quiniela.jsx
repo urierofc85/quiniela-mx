@@ -139,10 +139,9 @@ export default function Quiniela() {
       return;
     }
 
-    const hayPartidosReactivados = partidos.some((p) => p.reactivado);
-    
-    if (jornadaCerrada && !hayPartidosReactivados) {
-      alert("La jornada ya fue cerrada");
+    // 🚨 BLOQUEO TOTAL: Si la jornada está cerrada, NO se puede guardar nada
+    if (jornadaCerrada) {
+      alert("🔒 La jornada ya fue cerrada. No se permiten modificaciones.");
       return;
     }
 
@@ -292,8 +291,8 @@ export default function Quiniela() {
     );
   }
 
-  const hayPartidosReactivados = partidos.some((p) => p.reactivado);
-  const puedeGuardar = !jornadaCerrada || hayPartidosReactivados;
+  // 🚨 BLOQUEO TOTAL: Una vez cerrada la jornada, NADA es editable
+  const puedeGuardar = !jornadaCerrada;
 
   return (
     <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen relative">
@@ -372,8 +371,9 @@ export default function Quiniela() {
             // ✅ Detectar si el partido fue movido desde otra jornada
             const fueMovido = partido.jornada_original && partido.jornada_original !== partido.jornada_id;
             
-            // ✅ Se bloquea si: (Jornada cerrada Y no reactivado) O (Ya tiene resultado) O (Está pospuesto sin reactivar)
-            const estaDeshabilitado = (jornadaCerrada && !estaReactivado) || tieneResultado || estaPospuesto;
+            // 🚨 BLOQUEO TOTAL: Si la jornada está cerrada, TODO está deshabilitado (incluso los reactivados)
+            // Si la jornada está abierta, se bloquea solo si: ya tiene resultado O está pospuesto sin reactivar
+            const estaDeshabilitado = jornadaCerrada || tieneResultado || estaPospuesto;
 
             return (
               <div 
@@ -397,17 +397,19 @@ export default function Quiniela() {
                     )}
                     
                     {/* 🆕 ETIQUETA: Partido que fue movido desde otra jornada */}
-                    {fueMovido && (
+                    {fueMovido && !jornadaCerrada && (
                       <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded font-bold">
-                        ⚠️ Pospuesto de la J{partido.jornada_original}
+                        ⚠️ Reprogramado de la J{partido.jornada_original}
                       </span>
                     )}
                     
-                    {estaReactivado && !tieneResultado && (
+                    {/* Solo mostrar "EDITABLE" si la jornada NO está cerrada */}
+                    {estaReactivado && !tieneResultado && !jornadaCerrada && (
                       <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold animate-pulse">
                         ✅ EDITABLE
                       </span>
                     )}
+                    
                     {tieneResultado && (
                       <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold">
                         🔒 RESULTADO CAPTURADO
@@ -445,15 +447,9 @@ export default function Quiniela() {
             );
           })}
 
-          {jornadaCerrada && !hayPartidosReactivados && (
+          {jornadaCerrada && (
             <p className="text-red-600 font-bold mt-4 bg-red-50 p-3 rounded border border-red-200">
-              🔒 La jornada activa ya fue cerrada. Puedes descargar la quiniela en el selector superior.
-            </p>
-          )}
-          
-          {jornadaCerrada && hayPartidosReactivados && (
-            <p className="text-green-700 font-bold mt-4 bg-green-50 p-3 rounded border border-green-200">
-              ✅ Tienes partidos reactivados (pospuestos). Puedes modificar solo esos juegos y guardar los cambios.
+              🔒 La jornada activa ya fue cerrada. Todos los pronósticos están bloqueados. Puedes descargar la quiniela en el selector superior.
             </p>
           )}
 
@@ -486,7 +482,7 @@ export default function Quiniela() {
                           <td className="p-2 border">
                             {partido ? `${partido.local} vs ${partido.visitante}` : "Partido no encontrado"}
                             {partido?.jornada_original && partido.jornada_original !== partido.jornada_id && (
-                              <span className="block text-xs text-orange-600 font-semibold">(Pospuesto J{partido.jornada_original})</span>
+                              <span className="block text-xs text-orange-600 font-semibold">(Reprogramado de J{partido.jornada_original})</span>
                             )}
                           </td>
                           <td className="p-2 border font-semibold">
