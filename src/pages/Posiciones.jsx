@@ -68,14 +68,22 @@ export default function Posiciones() {
   const cargarRanking = async () => {
     setCargando(true);
     try {
-      // 1. Traer todos los datos necesarios en paralelo
+      // 1. Traer todos los datos necesarios (agregamos 'rol' y 'solo_survivor')
       const [perfilesRes, todasQuinielas, todosPartidos] = await Promise.all([
-        supabase.from("profiles").select("id, nombre, nombre_usuario, email"),
+        supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor"),
         fetchAllRows("quinielas", "usuario_id, partido_id, pronostico"),
         fetchAllRows("partidos", "id, jornada_id, resultado, pospuesto")
       ]);
 
       const perfiles = perfilesRes.data || [];
+
+      // Función auxiliar para identificar admins (misma lógica que en AdminDashboard)
+      const esAdmin = (p) => {
+        const rol = (p.rol || "").toLowerCase();
+        const email = (p.email || "").toLowerCase();
+        const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
+        return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
+      };
 
       // 2. Filtrar partidos válidos: NO pospuestos y CON resultado
       const partidosValidos = todosPartidos.filter(
@@ -90,9 +98,13 @@ export default function Posiciones() {
               (p) => String(p.jornada_id) === String(jornadaSeleccionada)
             );
 
-      // 4. Inicializar marcador para todos los usuarios
+      // 4. Inicializar marcador SOLO para usuarios válidos
       const scores = {};
       perfiles.forEach((p) => {
+        // 🚨 EXCLUIR ADMINS Y USUARIOS SOLO SURVIVOR
+        if (esAdmin(p)) return;
+        if (p.solo_survivor === true) return;
+
         scores[p.id] = {
           usuario_id: p.id,
           nombre_usuario: p.nombre_usuario || p.nombre || p.email || "Usuario",
