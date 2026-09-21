@@ -163,6 +163,7 @@ export default function RankingSurvivor() {
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
+        // 🚨 Asignamos el equipo elegido O "Sin selección" para esta jornada específica
         if (jornadaSeleccionada !== "general") {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
@@ -245,21 +246,23 @@ export default function RankingSurvivor() {
 
     if (jornadaSeleccionada !== "general") {
       rankingFinal = rankingFinal.filter((fila) => {
-        // 1. Verificar DIRECTAMENTE en los datos crudos si el usuario tiene selección en esta jornada
-        const tieneSeleccion = rawSurvivor.some(
-          (s) => s.usuario_id === fila.usuario_id && Number(s.jornada_id) === Number(jornadaSeleccionada)
-        );
-        if (!tieneSeleccion) return false; // 🚨 Si no jugó, se elimina de la tabla
-        
-        // 2. No debe estar eliminado (menos de 3 vidas)
+        // 1. 🚨 VERIFICACIÓN DIRECTA: Si no eligió equipo, se oculta de la vista por jornada
+        if (fila.equipoElegido === "Sin selección" || fila.equipoElegido === "-") {
+          return false;
+        }
+
+        // 2. No debe estar eliminado (3 o más vidas)
         if (fila.vidas >= 3) return false;
 
         // 3. No debe ser administrador
-        const esAdm = 
-          (fila.rol || "").toLowerCase() === "admin" ||
-          (fila.email || "").toLowerCase().includes("admin") ||
-          (fila.nombre || "").toLowerCase().includes("admin") ||
-          (fila.email || "").toLowerCase().includes("root");
+        const rolLower = (fila.rol || "").toLowerCase();
+        const emailLower = (fila.email || "").toLowerCase();
+        const nombreLower = (fila.nombre || "").toLowerCase();
+        
+        const esAdm = rolLower === "admin" || 
+                      emailLower.includes("admin") || 
+                      nombreLower.includes("admin") || 
+                      emailLower.includes("root");
         
         if (esAdm) return false;
 
