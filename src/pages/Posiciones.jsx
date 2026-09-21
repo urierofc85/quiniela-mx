@@ -68,7 +68,7 @@ export default function Posiciones() {
   const cargarRanking = async () => {
     setCargando(true);
     try {
-      // 1. Traer todos los datos necesarios (agregamos 'rol' y 'solo_survivor')
+      // 1. Traer todos los datos necesarios
       const [perfilesRes, todasQuinielas, todosPartidos] = await Promise.all([
         supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor"),
         fetchAllRows("quinielas", "usuario_id, partido_id, pronostico"),
@@ -77,7 +77,7 @@ export default function Posiciones() {
 
       const perfiles = perfilesRes.data || [];
 
-      // Función auxiliar para identificar admins (misma lógica que en AdminDashboard)
+      // Función auxiliar para identificar admins
       const esAdmin = (p) => {
         const rol = (p.rol || "").toLowerCase();
         const email = (p.email || "").toLowerCase();
@@ -85,10 +85,11 @@ export default function Posiciones() {
         return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
       };
 
-      // 2. Filtrar partidos válidos: NO pospuestos y CON resultado
-      const partidosValidos = todosPartidos.filter(
-        (p) => p.pospuesto !== true && p.resultado
-      );
+      // 2. 🚨 FILTRO BLINDADO: NO pospuestos (ni boolean true ni string "true") y CON resultado
+      const partidosValidos = todosPartidos.filter((p) => {
+        const esPospuesto = p.pospuesto === true || String(p.pospuesto).toLowerCase() === 'true';
+        return !esPospuesto && p.resultado;
+      });
 
       // 3. Si es una jornada específica, filtrar aún más
       const partidosAContar =
@@ -101,7 +102,6 @@ export default function Posiciones() {
       // 4. Inicializar marcador SOLO para usuarios válidos
       const scores = {};
       perfiles.forEach((p) => {
-        // 🚨 EXCLUIR ADMINS Y USUARIOS SOLO SURVIVOR
         if (esAdmin(p)) return;
         if (p.solo_survivor === true) return;
 
@@ -112,14 +112,24 @@ export default function Posiciones() {
         };
       });
 
-      // 5. Contar aciertos solo en partidos válidos
+      // 5. 🚨 Contar aciertos evitando DUPLICADOS y diferencias de mayúsculas
+      const quinielasProcesadas = new Set(); 
+      
       todasQuinielas.forEach((q) => {
+        // Clave única para evitar contar 2 veces el mismo partido al mismo usuario
+        const uniqueKey = `${q.usuario_id}_${q.partido_id}`;
+        if (quinielasProcesadas.has(uniqueKey)) return; 
+        quinielasProcesadas.add(uniqueKey);
+
         const partido = partidosAContar.find(
           (p) => String(p.id) === String(q.partido_id)
         );
         
-        // Si el partido es válido y el pronóstico coincide con el resultado
-        if (partido && q.pronostico === partido.resultado) {
+        // Comparación robusta en mayúsculas y sin espacios
+        const pronosticoLimpio = String(q.pronostico || "").trim().toUpperCase();
+        const resultadoLimpio = String(partido?.resultado || "").trim().toUpperCase();
+
+        if (partido && pronosticoLimpio === resultadoLimpio) {
           if (scores[q.usuario_id]) {
             scores[q.usuario_id].aciertos += 1;
           }
