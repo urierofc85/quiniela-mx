@@ -231,7 +231,6 @@ export default function AdminDashboard() {
 
         const esJugadorSurvivor = usuariosQueJueganSurvivor.has(usuario.id);
 
-        // ✅ CORRECCIÓN: Procesar Survivor PRIMERO, antes del return de soloSurvivor
         if (esJugadorSurvivor) {
           const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
           if (seleccionSurvivor && seleccionSurvivor.equipo) {
@@ -260,8 +259,6 @@ export default function AdminDashboard() {
           }
         }
 
-        // --- QUINIELA ---
-        // Ahora este return solo salta la quiniela, pero el survivor ya se procesó
         if (reg.soloSurvivor) return;
 
         const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
@@ -279,7 +276,6 @@ export default function AdminDashboard() {
       });
     });
 
-    // Resumen de vidas perdidas en consola
     console.log("\n📊 RESUMEN DE VIDAS PERDIDAS:");
     Object.values(acumulado).forEach(reg => {
       if (reg.vidas > 0) {
@@ -342,7 +338,6 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // Faltan Survivor: excluir eliminados (3+ vidas)
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
@@ -510,7 +505,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // ✅ EXPORTAR PDF (CORREGIDO: MUESTRA PRONÓSTICOS INCLUSO SIN RESULTADO)
+  // ✅ EXPORTAR PDF (OPTIMIZADO PARA UNA SOLA HOJA)
   //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
@@ -526,7 +521,6 @@ export default function AdminDashboard() {
 
       const { data: jornadaActivaPDF } = await supabase.from("jornadas").select("*").eq("id", jornadaId).single();
       
-      // Traer TODOS los partidos de la jornada (incluyendo pospuestos o sin resultado)
       const { data: partidos } = await supabase
         .from("partidos")
         .select("id, local, visitante, resultado, pospuesto")
@@ -544,24 +538,19 @@ export default function AdminDashboard() {
         return;
       }
 
-      // ✅ CORRECCIÓN: Buscar el pronóstico del usuario SIN importar si el partido ya tiene resultado
       const usuariosConPuntajes = usuarios.map(usuarioId => {
         let aciertos = 0;
         const pronosticosUsuario = {};
         
         (partidos || []).forEach(partido => {
-          // 1. Siempre buscamos si el usuario hizo un pronóstico para este partido
           const pronostico = quinielasData?.find(q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId);
           
           if (pronostico) {
             pronosticosUsuario[partido.id] = pronostico.pronostico;
-            
-            // 2. Solo sumamos acierto si el partido YA tiene resultado Y el pronóstico coincide
             if (partido.resultado && pronostico.pronostico === partido.resultado) {
               aciertos++;
             }
           } else {
-            // Si no hizo pronóstico, mostramos guion
             pronosticosUsuario[partido.id] = "-";
           }
         });
@@ -615,28 +604,29 @@ export default function AdminDashboard() {
         return columnasDef.map(col => row[col.dataKey]);
       });
 
+      // 🚨 Configuración optimizada para UNA SOLA HOJA HORIZONTAL
       const doc = new jsPDF("landscape", "mm", "a4");
 
-      doc.setFontSize(16);
+      doc.setFontSize(14); // Ligeramente más pequeño para el título
       doc.setFont("helvetica", "bold");
       doc.setTextColor(34, 197, 94);
-      doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 15);
+      doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 12);
 
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(100, 100, 100);
-      doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')}`, 14, 21);
+      doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')}`, 14, 17);
 
       autoTable(doc, {
         head: head,
         body: body,
-        startY: 26,
+        startY: 20, // Empezar más arriba para ganar espacio vertical
         theme: "grid",
         styles: {
-          fontSize: 6.5,
+          fontSize: 5, // 🚨 Fuente más pequeña para que quepa todo
           halign: "center",
           valign: "middle",
-          cellPadding: 1.5,
+          cellPadding: 0.5, // 🚨 Relleno mínimo para ahorrar espacio
           lineColor: [200, 200, 200],
           lineWidth: 0.1,
         },
@@ -644,26 +634,24 @@ export default function AdminDashboard() {
           fillColor: [34, 197, 94],
           textColor: [255, 255, 255],
           fontStyle: "bold",
-          fontSize: 6,
+          fontSize: 5,
           halign: "center",
-          cellPadding: 1.5,
-          minCellHeight: 28,
+          cellPadding: 0.5,
+          // 🚨 Se eliminó minCellHeight para que el encabezado no ocupe espacio innecesario
         },
         columnStyles: {
           0: { halign: "center", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 12 },
           1: { halign: "left", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 35 },
         },
         didParseCell: (data) => {
-          // Estilo para la columna TOTAL
           if (data.section === "body" && data.column.index === columnasDef.length - 1) {
             data.cell.styles.fillColor = [220, 252, 231];
             data.cell.styles.fontStyle = "bold";
             data.cell.styles.textColor = [22, 101, 52];
-            data.cell.styles.fontSize = 7.5;
+            data.cell.styles.fontSize = 6;
             return;
           }
 
-          // Resaltar aciertos en verde (solo si el partido ya tiene resultado)
           if (data.section === "body" && data.column.index >= 2 && data.column.index < columnasDef.length - 1) {
             const colDataKey = columnasDef[data.column.index].dataKey;
             const partidoId = Number(colDataKey.replace('p_', ''));
@@ -676,7 +664,8 @@ export default function AdminDashboard() {
             }
           }
         },
-        margin: { top: 26, left: 8, right: 8, bottom: 10 },
+        // 🚨 Márgenes mínimos para aprovechar todo el ancho de la hoja A4 horizontal
+        margin: { top: 20, left: 5, right: 5, bottom: 5 },
       });
 
       doc.save(`Quinielas_${jornadaActivaPDF?.nombre || 'Jornada'}.pdf`);
