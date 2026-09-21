@@ -139,7 +139,6 @@ export default function Quiniela() {
       return;
     }
 
-    // 🚨 BLOQUEO TOTAL: Si la jornada está cerrada, NO se puede guardar nada
     if (jornadaCerrada) {
       alert("🔒 La jornada ya fue cerrada. No se permiten modificaciones.");
       return;
@@ -285,62 +284,90 @@ export default function Quiniela() {
 
   if (cargandoPerfil) {
     return (
-      <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen flex items-center justify-center">
-        <p className="text-xl font-semibold text-gray-600">Cargando configuración de usuario...</p>
+      <div className="min-h-screen bg-[#F4F6F8] flex items-center justify-center">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#F97316] border-t-transparent mx-auto mb-4"></div>
+          <p className="text-lg font-semibold text-[#111827]">Cargando configuración...</p>
+        </div>
       </div>
     );
   }
 
-  // 🚨 BLOQUEO TOTAL: Una vez cerrada la jornada, NADA es editable
   const puedeGuardar = !jornadaCerrada;
 
   return (
-    <div className="max-w-4xl mx-auto p-4 bg-white min-h-screen relative">
-      <h1 className="text-3xl font-bold mb-4">Captura tu Quiniela</h1>
-
-      <button
-        onClick={() => setMostrarModal(true)}
-        className="mb-6 bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-lg shadow-md transition duration-200 flex items-center gap-2"
-      >
-        📜 Reglas, Premios y Costos
-      </button>
-
-      <div className="flex flex-wrap gap-3 mb-6 items-center">
-        <Link to="/posiciones" className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded transition">Ranking General</Link>
-        <Link to="/historico" className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded transition"> Histórico</Link>
-        <Link to="/perfil" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition">Mi Perfil</Link>
-        <Link to="/survivor" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded transition">Survivor</Link>
-        <button onClick={cerrarSesion} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded transition">Cerrar Sesión</button>
-      </div>
-
-      {esSoloSurvivor ? (
-        <div className="bg-purple-50 border-l-4 border-purple-600 text-purple-800 p-6 rounded-lg shadow-md mb-8">
-          <h2 className="text-2xl font-bold mb-3 flex items-center gap-2">🦖 Modo Solo Survivor Activado</h2>
-          <p className="mb-4 text-lg">
-            Tu cuenta está configurada por el administrador para participar <strong>únicamente en el juego de Survivor</strong>. 
-            No tienes permitido realizar selecciones de quiniela.
-          </p>
-          <Link to="/survivor" className="inline-block bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg shadow transition">
-            Ir a hacer mi selección de Survivor →
-          </Link>
+    <div className="min-h-screen bg-[#F4F6F8] pb-12">
+      {/* HEADER MODERNO */}
+      <header className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-30">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight flex items-center gap-2">
+                <span className="text-[#F97316]">⚽</span> Captura tu Quiniela
+              </h1>
+              {jornadaActiva && (
+                <p className="text-[#64748B] font-medium mt-1 flex items-center gap-2">
+                  <span className="bg-[#F97316] text-white text-xs font-bold px-2 py-0.5 rounded-md">
+                    {jornadaActiva.nombre}
+                  </span>
+                  <span>Jornada Activa</span>
+                </p>
+              )}
+            </div>
+            
+            {/* NAVEGACIÓN COMPACTA */}
+            <nav className="flex flex-wrap items-center gap-2">
+              <Link to="/posiciones" className="px-4 py-2 text-sm font-semibold text-[#111827] bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                Ranking
+              </Link>
+              <Link to="/historico" className="px-4 py-2 text-sm font-semibold text-[#111827] bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                Histórico
+              </Link>
+              <Link to="/perfil" className="px-4 py-2 text-sm font-semibold text-[#111827] bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                Mi Perfil
+              </Link>
+              <Link to="/survivor" className="px-4 py-2 text-sm font-semibold text-white bg-[#2563EB] hover:bg-blue-700 rounded-lg shadow-sm transition-colors">
+                Survivor
+              </Link>
+              <button 
+                onClick={cerrarSesion} 
+                className="px-4 py-2 text-sm font-medium text-[#64748B] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+              >
+                Cerrar Sesión
+              </button>
+            </nav>
+          </div>
         </div>
-      ) : (
-        <>
-          <div className="bg-gray-50 border p-4 rounded-lg mb-6 flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-[200px]">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descargar Quiniela General (PDF):</label>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+        
+        {/* ACCIONES SUPERIORES */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={() => setMostrarModal(true)}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-white border border-gray-200 text-[#111827] font-semibold rounded-xl shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all duration-200"
+          >
+            <span>📋</span> Reglas, premios y costos
+          </button>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-bold text-[#64748B] uppercase tracking-wider mb-1.5">
+                Descargar quiniela general
+              </label>
               <select
                 value={jornadaSeleccionadaPDF}
                 onChange={(e) => setJornadaSeleccionadaPDF(e.target.value)}
                 disabled={jornadas.length === 0}
-                className="w-full border rounded p-2 text-gray-800 bg-white"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#111827] bg-gray-50 focus:ring-2 focus:ring-[#F97316] focus:border-[#F97316] outline-none transition-all disabled:opacity-50"
               >
                 {jornadas.length === 0 ? (
-                  <option value="">Sin jornadas cerradas disponibles</option>
+                  <option value="">Sin jornadas cerradas</option>
                 ) : (
                   jornadas.map((j) => (
                     <option key={j.id} value={j.id}>
-                      {j.nombre} {j.id === jornadaActiva?.id ? "(Jornada Actual)" : ""}
+                      {j.nombre} {j.id === jornadaActiva?.id ? "(Actual)" : ""}
                     </option>
                   ))
                 )}
@@ -349,190 +376,346 @@ export default function Quiniela() {
             <button
               onClick={exportarPDF}
               disabled={jornadas.length === 0 || cargandoPDF}
-              className={`px-4 py-2 rounded text-white self-end flex items-center gap-2 ${
-                jornadas.length > 0 && !cargandoPDF ? "bg-red-600 hover:bg-red-700 cursor-pointer transition" : "bg-gray-400 cursor-not-allowed"
+              className={`w-full sm:w-auto px-5 py-2.5 rounded-lg text-sm font-bold text-white shadow-sm transition-all duration-200 flex items-center justify-center gap-2 ${
+                jornadas.length > 0 && !cargandoPDF 
+                  ? "bg-[#111827] hover:bg-gray-800 hover:shadow-md" 
+                  : "bg-gray-300 cursor-not-allowed"
               }`}
             >
-              📄 {cargandoPDF ? "Generando..." : "Descargar PDF"}
+              {cargandoPDF ? "Generando..." : "📄 Descargar PDF"}
             </button>
           </div>
+        </div>
 
-          {jornadaActiva && (
-            <p className="mb-4 text-red-600 font-semibold">
-              ⏰ Fecha límite ({jornadaActiva.nombre}): {new Date(jornadaActiva.fecha_limite).toLocaleString("es-MX")}
+        {/* ALERTA DE FECHA LÍMITE */}
+        {jornadaActiva && (
+          <div className={`rounded-xl p-4 flex items-start sm:items-center gap-4 border transition-colors ${
+            jornadaCerrada 
+              ? "bg-red-50 border-red-100" 
+              : "bg-blue-50 border-blue-100"
+          }`}>
+            <div className={`p-2 rounded-full ${jornadaCerrada ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-600"}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className={`text-sm font-bold ${jornadaCerrada ? "text-red-800" : "text-blue-900"}`}>
+                {jornadaCerrada ? "Jornada Cerrada" : "Cierre de jornada"}
+              </p>
+              <p className={`text-sm ${jornadaCerrada ? "text-red-700" : "text-blue-700"}`}>
+                {jornadaActiva.nombre} · {new Date(jornadaActiva.fecha_limite).toLocaleString("es-MX")}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* MODO SOLO SURVIVOR */}
+        {esSoloSurvivor ? (
+          <div className="bg-purple-50 border border-purple-100 rounded-2xl p-8 text-center shadow-sm">
+            <div className="text-5xl mb-4">🦖</div>
+            <h2 className="text-2xl font-bold text-purple-900 mb-3">Modo Solo Survivor Activado</h2>
+            <p className="text-purple-800 mb-6 max-w-lg mx-auto leading-relaxed">
+              Tu cuenta está configurada para participar <strong>únicamente en el juego de Survivor</strong>. 
+              No tienes permitido realizar selecciones de quiniela.
             </p>
-          )}
+            <Link 
+              to="/survivor" 
+              className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg shadow-purple-200 transition-all transform hover:-translate-y-0.5"
+            >
+              Ir a mi selección de Survivor
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* LISTA DE PARTIDOS */}
+            <div className="space-y-4">
+              {partidos.map((partido, index) => {
+                const estaPospuesto = partido.pospuesto && !partido.reactivado;
+                const estaReactivado = partido.reactivado;
+                const tieneResultado = !!partido.resultado;
+                const fueMovido = partido.jornada_original && partido.jornada_original !== partido.jornada_id;
+                const estaDeshabilitado = jornadaCerrada || tieneResultado || estaPospuesto;
 
-          {partidos.map((partido) => {
-            const estaPospuesto = partido.pospuesto && !partido.reactivado;
-            const estaReactivado = partido.reactivado;
-            const tieneResultado = !!partido.resultado;
-            
-            // ✅ Detectar si el partido fue movido desde otra jornada
-            const fueMovido = partido.jornada_original && partido.jornada_original !== partido.jornada_id;
-            
-            // 🚨 BLOQUEO TOTAL: Si la jornada está cerrada, TODO está deshabilitado (incluso los reactivados)
-            // Si la jornada está abierta, se bloquea solo si: ya tiene resultado O está pospuesto sin reactivar
-            const estaDeshabilitado = jornadaCerrada || tieneResultado || estaPospuesto;
+                return (
+                  <div 
+                    key={partido.id} 
+                    className={`relative bg-white rounded-2xl border p-5 sm:p-6 transition-all duration-200 ${
+                      estaDeshabilitado 
+                        ? "border-gray-100 bg-gray-50/50" 
+                        : "border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300"
+                    } ${estaReactivado && !tieneResultado ? "ring-2 ring-[#22C55E] ring-offset-2" : ""}`}
+                  >
+                    {/* Numeración Visual */}
+                    <span className="absolute -top-3 -left-3 bg-[#111827] text-white text-xs font-bold w-8 h-8 rounded-full flex items-center justify-center shadow-md border-2 border-white">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
 
-            return (
-              <div 
-                key={partido.id} 
-                className={`border rounded p-4 mb-3 transition-all ${
-                  estaPospuesto 
-                    ? "bg-orange-50 border-orange-300 opacity-80" 
-                    : estaReactivado 
-                      ? "bg-green-50 border-2 border-green-400" 
-                      : "bg-white"
+                    {/* Encabezado del Partido */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                      <h3 className="text-xl sm:text-2xl font-black text-[#111827] text-center sm:text-left tracking-tight">
+                        {partido.local.toUpperCase()} <span className="text-[#64748B] font-medium text-lg">vs</span> {partido.visitante.toUpperCase()}
+                      </h3>
+                      
+                      <div className="flex flex-wrap justify-center sm:justify-end gap-2">
+                        {estaPospuesto && !fueMovido && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">
+                            ⏸️ Pospuesto
+                          </span>
+                        )}
+                        {fueMovido && !jornadaCerrada && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            ⚠️ Reprogramado J{partido.jornada_original}
+                          </span>
+                        )}
+                        {estaReactivado && !tieneResultado && !jornadaCerrada && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200 animate-pulse">
+                            ✅ Editable
+                          </span>
+                        )}
+                        {tieneResultado && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                            🔒 Resultado Capturado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Mensaje Pospuesto */}
+                    {estaPospuesto && !fueMovido && (
+                      <div className="bg-orange-50 border-l-4 border-orange-400 p-3 mb-4 rounded-r-lg text-sm text-orange-800 flex items-start gap-2">
+                        <span className="text-lg">ℹ️</span>
+                        <span>Este partido fue pospuesto. No puedes hacer pronóstico hasta que sea reactivado en otra jornada.</span>
+                      </div>
+                    )}
+                    
+                    {/* Botones de Pronóstico */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {["L", "E", "V"].map((valor) => {
+                        const isSelected = pronosticos[partido.id] === valor;
+                        const labels = { L: "LOCAL", E: "EMPATE", V: "VISITANTE" };
+                        
+                        return (
+                          <label 
+                            key={valor}
+                            className={`relative flex flex-col items-center justify-center py-4 px-2 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                              estaDeshabilitado 
+                                ? "opacity-60 cursor-not-allowed bg-gray-100 border-gray-200" 
+                                : isSelected 
+                                  ? "border-[#F97316] bg-orange-50 text-[#F97316] shadow-sm scale-[1.02]" 
+                                  : "border-gray-200 bg-white text-[#64748B] hover:border-gray-300 hover:bg-gray-50"
+                            }`}
+                          >
+                            <input 
+                              type="radio" 
+                              name={`partido-${partido.id}`} 
+                              value={valor}
+                              checked={isSelected} 
+                              onChange={() => actualizarPronostico(partido.id, valor)} 
+                              disabled={estaDeshabilitado} 
+                              className="sr-only" 
+                            />
+                            <span className="text-xs font-bold tracking-wider mb-1">{labels[valor]}</span>
+                            {isSelected && (
+                              <span className="absolute top-2 right-2 text-[#F97316]">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ALERTA JORNADA CERRADA */}
+            {jornadaCerrada && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 text-red-800 font-medium">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span>La jornada activa ya fue cerrada. Todos los pronósticos están bloqueados.</span>
+              </div>
+            )}
+
+            {/* BOTÓN GUARDAR (CTA PRINCIPAL) */}
+            <div className="pt-4 pb-8">
+              <button
+                disabled={!puedeGuardar}
+                onClick={guardarQuiniela}
+                className={`w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-bold text-lg shadow-lg transition-all duration-200 transform ${
+                  puedeGuardar 
+                    ? "bg-[#F97316] hover:bg-orange-600 text-white hover:shadow-orange-200 hover:-translate-y-0.5" 
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed shadow-none"
                 }`}
               >
-                <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                  <h3 className="font-semibold text-lg">{partido.local} vs {partido.visitante}</h3>
-                  <div className="flex gap-2 flex-wrap">
-                    {/* 🆕 ETIQUETA: Partido pospuesto en su jornada original */}
-                    {estaPospuesto && !fueMovido && (
-                      <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded font-bold">
-                        ⏸️ PARTIDO POSPUESTO
-                      </span>
-                    )}
-                    
-                    {/* 🆕 ETIQUETA: Partido que fue movido desde otra jornada */}
-                    {fueMovido && !jornadaCerrada && (
-                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded font-bold">
-                        ⚠️ Reprogramado de la J{partido.jornada_original}
-                      </span>
-                    )}
-                    
-                    {/* Solo mostrar "EDITABLE" si la jornada NO está cerrada */}
-                    {estaReactivado && !tieneResultado && !jornadaCerrada && (
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-bold animate-pulse">
-                        ✅ EDITABLE
-                      </span>
-                    )}
-                    
-                    {tieneResultado && (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold">
-                        🔒 RESULTADO CAPTURADO
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* 🆕 MENSAJE EXPLICATIVO PARA PARTIDOS POSPUESTOS */}
-                {estaPospuesto && !fueMovido && (
-                  <div className="bg-orange-100 border-l-4 border-orange-400 p-2 mb-3 rounded text-sm text-orange-800">
-                    ⏸️ Este partido fue pospuesto por el administrador. No puedes hacer pronóstico hasta que sea reactivado en otra jornada.
-                  </div>
-                )}
-                
-                <div className="flex gap-4 mt-3">
-                  {["L", "E", "V"].map((valor) => (
-                    <label 
-                      key={valor} 
-                      className={`cursor-pointer flex items-center gap-1 ${estaDeshabilitado ? "opacity-50 cursor-not-allowed" : ""}`}
-                    >
-                      <input 
-                        type="radio" 
-                        name={`partido-${partido.id}`} 
-                        checked={pronosticos[partido.id] === valor} 
-                        onChange={() => actualizarPronostico(partido.id, valor)} 
-                        disabled={estaDeshabilitado} 
-                        className="cursor-pointer" 
-                      /> 
-                      {valor === "L" ? "Local" : valor === "E" ? "Empate" : "Visitante"}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-
-          {jornadaCerrada && (
-            <p className="text-red-600 font-bold mt-4 bg-red-50 p-3 rounded border border-red-200">
-              🔒 La jornada activa ya fue cerrada. Todos los pronósticos están bloqueados. Puedes descargar la quiniela en el selector superior.
-            </p>
-          )}
-
-          <button
-            disabled={!puedeGuardar}
-            onClick={guardarQuiniela}
-            className={`px-5 py-2 rounded mt-6 text-white font-semibold shadow-md transition ${
-              puedeGuardar ? "bg-green-600 hover:bg-green-700" : "bg-gray-400 cursor-not-allowed"
-            }`}
-          >
-            Guardar Quiniela
-          </button>
-
-          {quinielaGuardada.length > 0 && (
-            <div className="mt-10">
-              <h2 className="text-2xl font-bold mb-4">✅ Mis Pronósticos Enviados</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full border rounded">
-                  <thead className="bg-gray-200">
-                    <tr>
-                      <th className="p-2 border">Partido</th>
-                      <th className="p-2 border">Pronóstico</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quinielaGuardada.map((item) => {
-                      const partido = partidos.find((p) => String(p.id) === String(item.partido_id));
-                      return (
-                        <tr key={item.id}>
-                          <td className="p-2 border">
-                            {partido ? `${partido.local} vs ${partido.visitante}` : "Partido no encontrado"}
-                            {partido?.jornada_original && partido.jornada_original !== partido.jornada_id && (
-                              <span className="block text-xs text-orange-600 font-semibold">(Reprogramado de J{partido.jornada_original})</span>
-                            )}
-                          </td>
-                          <td className="p-2 border font-semibold">
-                            {item.pronostico === "L" && "🏠 Local"}
-                            {item.pronostico === "E" && "🤝 Empate"}
-                            {item.pronostico === "V" && "✈️ Visitante"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                GUARDAR QUINIELA
+              </button>
             </div>
-          )}
-        </>
-      )}
 
-      {mostrarModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setMostrarModal(false)}>
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setMostrarModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition" aria-label="Cerrar">&times;</button>
-            <div className="p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-green-700 mb-6 text-center border-b pb-3">📜 Reglas, Premios y Costos</h2>
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">🏆 Pronósticos y Premios</h3>
-                  <ul className="list-decimal list-inside space-y-2 text-gray-700 bg-green-50 p-4 rounded-lg border border-green-200">
-                    <li>Premio semanal de <strong>$180.00</strong>.</li>
-                    <li>Ganador de liguilla se lleva <strong>$250.00</strong>.</li>
-                    <li>Se elimina el ganador a 4to lugar.</li>
-                    <li>Primer Lugar gana <strong>$3,620.00</strong>.</li>
-                    <li>Segundo Lugar gana <strong>$1,300.00</strong>.</li>
-                    <li>Tercer Lugar gana <strong>$550.00</strong>.</li>
-                  </ul>
-                  <p className="text-sm text-gray-600 mt-2 italic text-right">*(Valores calculados sobre 32 jugadores)*</p>
+            {/* RESUMEN DE PRONÓSTICOS ENVIADOS */}
+            {quinielaGuardada.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h2 className="text-lg font-bold text-[#111827] flex items-center gap-2">
+                    <span className="text-[#22C55E]">✓</span> Mis Pronósticos Enviados
+                  </h2>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-[#111827] text-white">
+                    {quinielaGuardada.length} / {partidos.filter(p => !p.pospuesto || p.reactivado).length} enviados
+                  </span>
                 </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-3 flex items-center gap-2">📋 Reglas del Juego</h3>
-                  <ul className="list-disc list-inside space-y-3 text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <li>Cada jornada el participante hará la selección de sus pronósticos: <strong>Local, Empate o Visitante</strong>.</li>
-                    <li>Se llevará un <strong>ranking semanal</strong>.</li>
-                    <li>Los aciertos semanales se sumarán al acumulado de pronósticos acertados.</li>
-                    <li>En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>.</li>
-                  </ul>
-                  <p className="text-center text-lg font-bold text-green-700 mt-4">¡Es una quiniela entre amigos! ⚽🍻</p>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50/50 text-[#64748B] text-xs font-bold uppercase tracking-wider">
+                        <th className="px-6 py-4 border-b border-gray-100">Partido</th>
+                        <th className="px-6 py-4 border-b border-gray-100 text-center">Tu Pronóstico</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {quinielaGuardada.map((item) => {
+                        const partido = partidos.find((p) => String(p.id) === String(item.partido_id));
+                        let badgeColor = "bg-gray-100 text-gray-700";
+                        let badgeText = "Empate";
+                        
+                        if (item.pronostico === "L") { badgeColor = "bg-blue-100 text-blue-800"; badgeText = "Local"; }
+                        if (item.pronostico === "V") { badgeColor = "bg-orange-100 text-orange-800"; badgeText = "Visitante"; }
+
+                        return (
+                          <tr key={item.id} className="hover:bg-gray-50/80 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="font-bold text-[#111827]">
+                                {partido ? `${partido.local} vs ${partido.visitante}` : "Partido no encontrado"}
+                              </p>
+                              {partido?.jornada_original && partido.jornada_original !== partido.jornada_id && (
+                                <span className="inline-block mt-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                                  Reprogramado de J{partido.jornada_original}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className={`inline-flex items-center px-3 py-1 rounded-lg text-sm font-bold ${badgeColor}`}>
+                                {badgeText}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
+            )}
+          </>
+        )}
+      </main>
+
+      {/* MODAL DE REGLAS */}
+      {mostrarModal && (
+        <div 
+          className="fixed inset-0 bg-[#111827]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" 
+          onClick={() => setMostrarModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative animate-in fade-in zoom-in-95 duration-200" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => setMostrarModal(false)} 
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full p-1 transition-colors" 
+              aria-label="Cerrar"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            <div className="p-6 sm:p-8">
+              <div className="text-center mb-8">
+                <span className="text-4xl mb-2 block">📜</span>
+                <h2 className="text-2xl font-black text-[#111827]">Reglas, Premios y Costos</h2>
+                <div className="h-1 w-20 bg-[#F97316] mx-auto mt-3 rounded-full"></div>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="bg-green-50 rounded-xl p-5 border border-green-100">
+                  <h3 className="text-lg font-bold text-green-900 mb-3 flex items-center gap-2">
+                    🏆 Pronósticos y Premios
+                  </h3>
+                  <ul className="space-y-2 text-green-800">
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold mt-0.5">•</span>
+                      <span>Premio semanal de <strong>$180.00</strong>.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold mt-0.5">•</span>
+                      <span>Ganador de liguilla se lleva <strong>$250.00</strong>.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold mt-0.5">•</span>
+                      <span>Se elimina el ganador a 4to lugar.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold mt-0.5">•</span>
+                      <span>Primer Lugar gana <strong>$3,620.00</strong>.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold mt-0.5">•</span>
+                      <span>Segundo Lugar gana <strong>$1,300.00</strong>.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold mt-0.5">•</span>
+                      <span>Tercer Lugar gana <strong>$550.00</strong>.</span>
+                    </li>
+                  </ul>
+                  <p className="text-xs text-green-700 mt-4 italic text-right border-t border-green-200 pt-2">
+                    *(Valores calculados sobre 32 jugadores)*
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
+                  <h3 className="text-lg font-bold text-[#111827] mb-3 flex items-center gap-2">
+                    📋 Reglas del Juego
+                  </h3>
+                  <ul className="space-y-3 text-gray-700">
+                    <li className="flex items-start gap-2">
+                      <span className="bg-[#F97316] text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</span>
+                      <span>Cada jornada el participante hará la selección de sus pronósticos: <strong>Local, Empate o Visitante</strong>.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="bg-[#F97316] text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</span>
+                      <span>Se llevará un <strong>ranking semanal</strong>.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="bg-[#F97316] text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</span>
+                      <span>Los aciertos semanales se sumarán al acumulado de pronósticos acertados.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="bg-[#F97316] text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">4</span>
+                      <span>En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>.</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
               <div className="mt-8 text-center">
-                <button onClick={() => setMostrarModal(false)} className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg shadow transition">Entendido, ¡a jugar!</button>
+                <button 
+                  onClick={() => setMostrarModal(false)} 
+                  className="w-full sm:w-auto bg-[#111827] hover:bg-gray-800 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
+                >
+                  Entendido, ¡a jugar! ⚽
+                </button>
               </div>
             </div>
           </div>
