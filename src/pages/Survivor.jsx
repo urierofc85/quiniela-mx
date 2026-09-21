@@ -22,6 +22,15 @@ export default function Survivor() {
     cargarDatos();
   }, []);
 
+  // 🚨 NUEVO: Mostrar el modal automáticamente si el usuario ya está eliminado
+  const estaEliminado = vidasPerdidas >= 3;
+
+  useEffect(() => {
+    if (estaEliminado) {
+      setMostrarModalEliminado(true);
+    }
+  }, [estaEliminado]);
+
   const cargarDatos = async () => {
     const { data: jornadaData } = await supabase
       .from("jornadas")
@@ -84,7 +93,6 @@ export default function Survivor() {
     const vistos = new Set();
     
     opciones.forEach((op) => {
-      // ✅ CLAVE ÚNICA: Combinamos equipo Y rival
       const claveUnica = `${op.nombre.trim().toLowerCase()}_vs_${op.rival.trim().toLowerCase()}`;
       if (!vistos.has(claveUnica)) {
         vistos.add(claveUnica);
@@ -96,7 +104,6 @@ export default function Survivor() {
     setEquiposDisponibles(unicos);
   };
 
-  // ✅ CORREGIDO: Ahora busca el partido exacto (Equipo + Rival)
   const cargarSeleccionActual = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
     if (!jornada) return;
     
@@ -111,7 +118,6 @@ export default function Survivor() {
       .maybeSingle();
 
     if (data) {
-      // ✅ Parsear el formato "Equipo (vs Rival)" si existe
       let nombreEquipo = data.equipo;
       let nombreRival = null;
       
@@ -121,13 +127,11 @@ export default function Survivor() {
         nombreRival = partes[1].replace(')', '').trim();
       }
 
-      // Buscar el partido exacto
       const partidoDeMiSeleccion = partidos.find((p) => {
         const matchJornada = String(p.jornada_id) === String(jornada.id);
         const matchEquipo = p.local.trim().toLowerCase() === nombreEquipo.trim().toLowerCase() || 
                            p.visitante.trim().toLowerCase() === nombreEquipo.trim().toLowerCase();
         
-        // Si tenemos rival guardado, también debe coincidir
         if (nombreRival) {
           const matchRival = p.local.trim().toLowerCase() === nombreRival.trim().toLowerCase() || 
                             p.visitante.trim().toLowerCase() === nombreRival.trim().toLowerCase();
@@ -142,7 +146,6 @@ export default function Survivor() {
           `⚠️ Tu selección anterior (${data.equipo}) fue pospuesta. Por favor elige un nuevo equipo.`
         );
       } else {
-        // ✅ Restaurar el valor completo "Equipo (vs Rival)" en el selector
         setEquipoSeleccionado(data.equipo);
         setMensajeAdvertencia("");
       }
@@ -152,51 +155,41 @@ export default function Survivor() {
     }
   };
 
+  // 🚨 CORREGIDO: Ahora agrupa los usos POR EQUIPO BASE, ignorando el rival
   const cargarUsoEquipos = async (partidos = todosLosPartidos) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data } = await supabase
       .from("survivor")
-      .select("equipo, jornada_id")
+      .select("equipo")
       .eq("usuario_id", user.id);
 
     const usoDetallado = {};
 
     data?.forEach((sel) => {
+      // Extraer solo el nombre del equipo base (antes de " (vs ")
       let nombreEquipo = sel.equipo;
-      let nombreRival = null;
-      
       if (sel.equipo.includes(' (vs ')) {
-        const partes = sel.equipo.split(' (vs ');
-        nombreEquipo = partes[0].trim().toLowerCase();
-        nombreRival = partes[1].replace(')', '').trim().toLowerCase();
+        nombreEquipo = sel.equipo.split(' (vs ')[0].trim();
       } else {
-        nombreEquipo = sel.equipo.trim().toLowerCase();
+        nombreEquipo = sel.equipo.trim();
       }
 
-      const partido = partidos.find((p) => {
-        const matchEquipo = p.local.trim().toLowerCase() === nombreEquipo || 
-                           p.visitante.trim().toLowerCase() === nombreEquipo;
-        if (nombreRival) {
-          const matchRival = p.local.trim().toLowerCase() === nombreRival || 
-                            p.visitante.trim().toLowerCase() === nombreRival;
-          return matchEquipo && matchRival;
-        }
-        return matchEquipo;
-      });
-
-      let clave = sel.equipo;
-      if (partido) {
-        const rival = partido.local.trim().toLowerCase() === nombreEquipo ? partido.visitante : partido.local;
-        const equipoOriginal = sel.equipo.includes(' (vs ') ? sel.equipo.split(' (vs ')[0].trim() : sel.equipo;
-        clave = `${equipoOriginal} (vs ${rival})`;
+      // Usar minúsculas como clave para agrupar correctamente (evita "Leon" y "leon" separados)
+      const clave = nombreEquipo.toLowerCase();
+      if (!usoDetallado[clave]) {
+        usoDetallado[clave] = { nombre: nombreEquipo, usos: 0 };
       }
-      
-      usoDetallado[clave] = (usoDetallado[clave] || 0) + 1;
+      usoDetallado[clave].usos += 1;
     });
 
-    const resultado = Object.entries(usoDetallado).map(([detalle, usos]) => ({ detalle, usos }));
+    // Convertir a array y ordenar por cantidad de usos (descendente)
+    const resultado = Object.values(usoDetallado).map(item => ({
+      detalle: item.nombre,
+      usos: item.usos
+    }));
+    
     resultado.sort((a, b) => b.usos - a.usos);
     setUsoEquipos(resultado);
   };
@@ -246,7 +239,6 @@ export default function Survivor() {
         };
       }
 
-      // ✅ Parsear formato "Equipo (vs Rival)"
       let nombreEquipoLimpio = seleccion.equipo;
       let nombreRival = null;
       
@@ -258,7 +250,6 @@ export default function Survivor() {
         nombreEquipoLimpio = seleccion.equipo.trim().toLowerCase();
       }
 
-      // ✅ Buscar el partido exacto (Equipo + Rival)
       const partido = partidos?.find((p) => {
         const matchJornada = String(p.jornada_id) === String(jornada.id);
         const matchEquipo = p.local.trim().toLowerCase() === nombreEquipoLimpio || 
@@ -316,7 +307,6 @@ export default function Survivor() {
     setVidasPerdidas(vidas);
   };
 
-  // ✅ CORREGIDO: Ahora guarda el equipo en formato "Equipo (vs Rival)"
   const guardarSeleccion = async () => {
     if (!jornadaActiva) return;
     
@@ -335,7 +325,6 @@ export default function Survivor() {
 
     const { data: { user } } = await supabase.auth.getUser();
 
-    // ✅ Parsear el valor seleccionado para extraer equipo y rival
     let nombreEquipo, nombreRival;
     if (equipoSeleccionado.includes(' (vs ')) {
       const partes = equipoSeleccionado.split(' (vs ');
@@ -343,7 +332,6 @@ export default function Survivor() {
       nombreRival = partes[1].replace(')', '').trim();
     } else {
       nombreEquipo = equipoSeleccionado;
-      // Buscar el rival automáticamente
       const partido = todosLosPartidos.find(p => 
         String(p.jornada_id) === String(jornadaActiva.id) &&
         (p.local.trim().toLowerCase() === nombreEquipo.trim().toLowerCase() || 
@@ -355,10 +343,8 @@ export default function Survivor() {
       }
     }
 
-    // ✅ El valor que se guarda en BD incluye el rival
     const valorAGuardar = `${nombreEquipo} (vs ${nombreRival})`;
 
-    // ✅ Validar usos: ahora contamos solo selecciones del MISMO equipo (sin importar rival)
     const { data: seleccionesUsuario } = await supabase
       .from("survivor")
       .select("equipo")
@@ -384,7 +370,7 @@ export default function Survivor() {
       usuario_id: user.id,
       usuario: user.email,
       jornada_id: jornadaActiva.id,
-      equipo: valorAGuardar, // ✅ Guardamos con el rival
+      equipo: valorAGuardar,
     });
 
     if (error) {
@@ -398,8 +384,6 @@ export default function Survivor() {
     await cargarHistorial(todosLosPartidos);
     await cargarUsoEquipos(todosLosPartidos);
   };
-
-  const estaEliminado = vidasPerdidas >= 3;
 
   return (
     <div className="max-w-5xl mx-auto p-6">
@@ -431,7 +415,8 @@ export default function Survivor() {
       <table className="w-full border mb-8 rounded overflow-hidden">
         <thead className="bg-gray-200">
           <tr>
-            <th className="border p-2 text-left">Equipo (vs Rival)</th>
+            {/* 🚨 ENCABEZADO SIMPLIFICADO */}
+            <th className="border p-2 text-left">Equipo</th>
             <th className="border p-2 text-center w-32">Usos</th>
           </tr>
         </thead>
@@ -486,7 +471,6 @@ export default function Survivor() {
               >
                 <option value="">Selecciona un equipo</option>
                 {equiposDisponibles.map((op, idx) => {
-                  // ✅ El value ahora incluye el rival para identificar el partido exacto
                   const valorCompleto = `${op.nombre} (vs ${op.rival})`;
                   return (
                     <option key={`${op.nombre}_${op.rival}_${idx}`} value={valorCompleto}>
@@ -538,6 +522,7 @@ export default function Survivor() {
         </tbody>
       </table>
 
+      {/* 🚨 MODAL DE ELIMINACIÓN (Ahora se abre automáticamente si estaEliminado es true) */}
       {mostrarModalEliminado && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50"
