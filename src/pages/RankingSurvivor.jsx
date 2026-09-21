@@ -68,8 +68,11 @@ export default function RankingSurvivor() {
     return data || [];
   };
 
+  // 🚨 Agregamos 'email' y 'rol' para poder filtrar administradores
   const obtenerPerfiles = async () => {
-    const { data, error } = await supabase.from("profiles").select("*");
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, nombre, nombre_usuario, nombre_completo, email, rol");
     if (error) console.error("Error al obtener perfiles:", error);
     return data || [];
   };
@@ -97,7 +100,6 @@ export default function RankingSurvivor() {
       return Number(j.id) === Number(jornadaSeleccionada);
     });
 
-    // 🚨 Aseguramos que las jornadas se procesen en orden cronológico
     const jornadasOrdenadas = [...jornadasAProcesar].sort((a, b) => Number(a.id) - Number(b.id));
 
     const acumulado = {};
@@ -115,11 +117,13 @@ export default function RankingSurvivor() {
         puntos: 0,
         vidas: 0,
         equipoElegido: "-",
-        tuvoInfraccion: false, // 🚨 NUEVA BANDERA PARA LA MARCA VISUAL
+        tuvoInfraccion: false,
+        email: usuario?.email || "", // 🚨 Para filtrar admins
+        rol: usuario?.rol || "",      // 🚨 Para filtrar admins
       };
     });
 
-    // 🚨 PASO 1: Identificar cuáles selecciones específicas son "infracciones" (4ta vez o más)
+    // PASO 1: Identificar selecciones que son "infracciones" (4ta vez o más)
     const seleccionesPorUsuarioYEquipo = {};
     rawSurvivor.forEach(s => {
       if (!seleccionesPorUsuarioYEquipo[s.usuario_id]) {
@@ -132,19 +136,17 @@ export default function RankingSurvivor() {
       seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam].push(s);
     });
 
-    // Marcamos las selecciones que son infracción (índice >= 3, es decir, la 4ta en adelante)
     const seleccionesInfraccion = new Set();
     Object.keys(seleccionesPorUsuarioYEquipo).forEach(userId => {
       Object.keys(seleccionesPorUsuarioYEquipo[userId]).forEach(team => {
         const selecciones = seleccionesPorUsuarioYEquipo[userId][team].sort((a, b) => Number(a.jornada_id) - Number(b.jornada_id));
         for (let i = 3; i < selecciones.length; i++) {
-          // Guardamos un identificador único: "userId_jornadaId"
           seleccionesInfraccion.add(`${userId}_${selecciones[i].jornada_id}`);
         }
       });
     });
 
-    // 🚨 PASO 2: Procesar jornadas y aplicar lógica
+    // PASO 2: Procesar jornadas y aplicar lógica
     for (const jornada of jornadasOrdenadas) {
       const esPasadaYCerrada = jornada.fecha_limite
         ? referenciaTiempo > new Date(jornada.fecha_limite)
@@ -166,7 +168,6 @@ export default function RankingSurvivor() {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
-        // CASO A: No seleccionó y la jornada ya cerró -> Pierde 1 vida (TOPE DE 3)
         if (!seleccion && esPasadaYCerrada) {
           if (registroAcumulado.vidas < 3) {
             registroAcumulado.vidas += 1;
@@ -174,19 +175,16 @@ export default function RankingSurvivor() {
           return;
         }
 
-        // CASO B: No seleccionó y la jornada sigue abierta -> No afecta
         if (!seleccion) {
           return;
         }
 
-        // 🚨 VERIFICAR SI ESTA SELECCIÓN ES UNA INFRACCIÓN
         const esInfraccion = seleccionesInfraccion.has(`${usuario.id}_${jornada.id}`);
 
         const partes = seleccion.equipo.split(' (vs ');
         const nombreEquipoBase = partes[0].trim().toLowerCase();
         const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
 
-        // Buscar el partido que coincida con AMBOS equipos
         const partido = rawPartidos.find((p) => {
           const esMismaJornada = Number(p.jornada_id) === Number(jornada.id);
           if (!esMismaJornada) return false;
@@ -213,14 +211,11 @@ export default function RankingSurvivor() {
         let puntos = 0;
         let perdio = false;
 
-        // 🚨 LÓGICA DE PUNTUACIÓN CONDICIONAL
         if (esInfraccion) {
-          // Si es la 4ta vez o más: 0 puntos, se marca como pérdida de vida y se activa la bandera visual
           puntos = 0;
           perdio = true; 
-          registroAcumulado.tuvoInfraccion = true; // 🚨 ACTIVAR MARCA VISUAL
+          registroAcumulado.tuvoInfraccion = true;
         } else {
-          // Cálculo normal si está dentro del límite de 3
           const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
 
           if (esLocal) {
@@ -236,7 +231,6 @@ export default function RankingSurvivor() {
 
         registroAcumulado.puntos += puntos;
         
-        // Si perdió el partido (o fue infracción), suma una vida perdida (TOPE DE 3)
         if (perdio) {
           if (registroAcumulado.vidas < 3) {
             registroAcumulado.vidas += 1;
@@ -245,17 +239,40 @@ export default function RankingSurvivor() {
       });
     }
 
-    // 3. ORDEN DE CLASIFICACIÓN:
-    const rankingFinal = Object.values(acumulado).sort((a, b) => {
-      // Primero: Menor cantidad de vidas perdidas (0 es el mejor lugar)
+    // ==========================================
+    // 🚨 FILTRO PARA VISTA POR JORNADA
+    // ==========================================
+    let rankingFinal = Object.values(acumulado);
+
+    if (jornadaSeleccionada !== "general") {
+      rankingFinal = rankingFinal.filter((fila) => {
+        // 1. Debe haber hecho una selección en esta jornada específica
+        if (fila.equipoElegido === "Sin selección") return false;
+        
+        // 2. No debe estar eliminado (menos de 3 vidas)
+        if (fila.vidas >= 3) return false;
+
+        // 3. No debe ser administrador
+        const esAdm = 
+          (fila.rol || "").toLowerCase() === "admin" ||
+          (fila.email || "").toLowerCase().includes("admin") ||
+          (fila.nombre || "").toLowerCase().includes("admin") ||
+          (fila.email || "").toLowerCase().includes("root");
+        
+        if (esAdm) return false;
+
+        return true;
+      });
+    }
+
+    // 4. ORDEN DE CLASIFICACIÓN:
+    rankingFinal.sort((a, b) => {
       if (a.vidas !== b.vidas) {
         return a.vidas - b.vidas;
       }
-      // Segundo: Mayor cantidad de puntos totales
       if (b.puntos !== a.puntos) {
         return b.puntos - a.puntos;
       }
-      // Tercero: Orden alfabético por nombre como desempate final
       return a.nombre.localeCompare(b.nombre);
     });
 
@@ -271,17 +288,12 @@ export default function RankingSurvivor() {
 
   const estaCerrada = () => {
     if (!jornadaActualObj) return false;
-
-    if (jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada") {
-      return true;
-    }
-
+    if (jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada") return true;
     if (jornadaActualObj.fecha_limite) {
       const fechaLimite = new Date(jornadaActualObj.fecha_limite);
       const referenciaTiempo = horaMexico || new Date();
       return referenciaTiempo >= fechaLimite;
     }
-
     return false;
   };
 
@@ -293,7 +305,6 @@ export default function RankingSurvivor() {
         🏆 Tabla Survivor
       </h1>
 
-      {/* CONTROLES */}
       <div className="flex flex-wrap items-center gap-4 mb-6">
         <label className="font-semibold" style={{ color: "#374151" }}>
           Filtrar vista:
@@ -347,7 +358,7 @@ export default function RankingSurvivor() {
               className="text-sm px-3 py-1 rounded-full font-medium"
               style={{ backgroundColor: "#f3f4f6", color: "#4b5563" }}
             >
-              {ranking.length} Participantes
+              {ranking.length} Participantes {jornadaSeleccionada !== "general" && "(Activos)"}
             </span>
           </div>
 
@@ -360,29 +371,13 @@ export default function RankingSurvivor() {
           >
             <thead>
               <tr style={{ backgroundColor: "#f3f4f6", color: "#374151" }}>
-                <th className="p-2 w-16" style={{ border: "1px solid #e5e7eb" }}>
-                  Pos
-                </th>
-                <th
-                  className="p-2 text-left"
-                  style={{ border: "1px solid #e5e7eb" }}
-                >
-                  Participante
-                </th>
+                <th className="p-2 w-16" style={{ border: "1px solid #e5e7eb" }}>Pos</th>
+                <th className="p-2 text-left" style={{ border: "1px solid #e5e7eb" }}>Participante</th>
                 {jornadaSeleccionada !== "general" && (
-                  <th
-                    className="p-2"
-                    style={{ border: "1px solid #e5e7eb" }}
-                  >
-                    Equipo Elegido
-                  </th>
+                  <th className="p-2" style={{ border: "1px solid #e5e7eb" }}>Equipo Elegido</th>
                 )}
-                <th className="p-2 w-28" style={{ border: "1px solid #e5e7eb" }}>
-                  Puntos
-                </th>
-                <th className="p-2 w-32" style={{ border: "1px solid #e5e7eb" }}>
-                  Vidas Perdidas
-                </th>
+                <th className="p-2 w-28" style={{ border: "1px solid #e5e7eb" }}>Puntos</th>
+                <th className="p-2 w-32" style={{ border: "1px solid #e5e7eb" }}>Vidas Perdidas</th>
               </tr>
             </thead>
             <tbody>
@@ -391,30 +386,23 @@ export default function RankingSurvivor() {
                   <td
                     colSpan={jornadaSeleccionada !== "general" ? 5 : 4}
                     className="text-center p-4"
-                    style={{
-                      color: "#6b7280",
-                      border: "1px solid #e5e7eb",
-                    }}
+                    style={{ color: "#6b7280", border: "1px solid #e5e7eb" }}
                   >
-                    No se encontraron registros para esta selección.
+                    {jornadaSeleccionada !== "general" 
+                      ? "No hay participantes activos en esta jornada." 
+                      : "No se encontraron registros para esta selección."}
                   </td>
                 </tr>
               ) : (
                 ranking.map((fila, index) => (
                   <tr key={fila.usuario_id}>
-                    <td
-                      className="p-2 text-center font-bold"
-                      style={{ border: "1px solid #e5e7eb" }}
-                    >
+                    <td className="p-2 text-center font-bold" style={{ border: "1px solid #e5e7eb" }}>
                       {index === 0 && "🥇 "}
                       {index === 1 && "🥈 "}
                       {index === 2 && "🥉 "}
                       {index + 1}
                     </td>
-                    <td
-                      className="p-2 font-medium"
-                      style={{ border: "1px solid #e5e7eb" }}
-                    >
+                    <td className="p-2 font-medium" style={{ border: "1px solid #e5e7eb" }}>
                       {fila.nombre}
                     </td>
                     {jornadaSeleccionada !== "general" && (
@@ -425,23 +413,12 @@ export default function RankingSurvivor() {
                           color: fila.equipoElegido === "Sin selección" ? "#dc2626" : "#1d4ed8",
                         }}
                       >
-                        {tiempoExpirado
-                          ? fila.equipoElegido || "-"
-                          : "🔒 Oculto"}
+                        {tiempoExpirado ? fila.equipoElegido || "-" : "🔒 Oculto"}
                       </td>
                     )}
                     
-                    {/* 🚨 COLUMNA DE PUNTOS CON MARCA VISUAL DE PENALIZACIÓN */}
-                    <td
-                      className="p-2 text-center"
-                      style={{
-                        border: "1px solid #e5e7eb",
-                      }}
-                    >
-                      <div 
-                        className="font-bold" 
-                        style={{ color: fila.tuvoInfraccion ? "#dc2626" : "#111827" }}
-                      >
+                    <td className="p-2 text-center" style={{ border: "1px solid #e5e7eb" }}>
+                      <div className="font-bold" style={{ color: fila.tuvoInfraccion ? "#dc2626" : "#111827" }}>
                         {fila.puntos}
                       </div>
                       {fila.tuvoInfraccion && (
