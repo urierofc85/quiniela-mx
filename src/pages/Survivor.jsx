@@ -22,7 +22,6 @@ export default function Survivor() {
     cargarDatos();
   }, []);
 
-  // 🚨 NUEVO: Mostrar el modal automáticamente si el usuario ya está eliminado
   const estaEliminado = vidasPerdidas >= 3;
 
   useEffect(() => {
@@ -155,7 +154,6 @@ export default function Survivor() {
     }
   };
 
-  // 🚨 CORREGIDO: Ahora agrupa los usos POR EQUIPO BASE, ignorando el rival
   const cargarUsoEquipos = async (partidos = todosLosPartidos) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -168,9 +166,8 @@ export default function Survivor() {
     const usoDetallado = {};
 
     data?.forEach((sel) => {
-      if (!sel.equipo) return; // Proteger contra valores nulos
+      if (!sel.equipo) return;
       
-      // Extraer solo el nombre base del equipo (antes de " (vs ")
       let nombreEquipo = sel.equipo;
       if (nombreEquipo.includes(' (vs ')) {
         nombreEquipo = nombreEquipo.split(' (vs ')[0].trim();
@@ -178,7 +175,6 @@ export default function Survivor() {
         nombreEquipo = nombreEquipo.trim();
       }
 
-      // Usar minúsculas como clave para agrupar correctamente (evita "Leon" y "leon" separados)
       const clave = nombreEquipo.toLowerCase();
       if (!usoDetallado[clave]) {
         usoDetallado[clave] = { nombre: nombreEquipo, usos: 0 };
@@ -186,7 +182,6 @@ export default function Survivor() {
       usoDetallado[clave].usos += 1;
     });
 
-    // Convertir a array y ordenar por cantidad de usos (descendente)
     const resultado = Object.values(usoDetallado).map(item => ({
       detalle: item.nombre,
       usos: item.usos
@@ -388,200 +383,290 @@ export default function Survivor() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Survivor Liga MX</h1>
-
-      <div className="flex flex-wrap gap-3 mb-6">
-        <Link to="/quiniela" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition">
-          Regresar a Quiniela
-        </Link>
-        <Link to="/ranking-survivor" className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded font-medium flex items-center gap-1 transition">
-          🏆 Ranking Survivor
-        </Link>
-        <button
-          onClick={() => setMostrarReglas(true)}
-          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded font-medium flex items-center gap-1 transition"
-        >
-          📜 Reglas y Premios
-        </button>
-      </div>
-
-      <div className="bg-gray-100 rounded p-4 my-6 border border-gray-200 flex flex-wrap gap-6">
-        <p className="font-bold text-lg">🏆 Puntos Totales: <span className="text-green-700">{puntosTotales}</span></p>
-        <p className={`font-bold text-lg ${estaEliminado ? 'text-red-600 animate-pulse' : (vidasPerdidas >= 2 ? 'text-orange-600' : 'text-gray-800')}`}>
-          💀 Vidas Perdidas: {vidasPerdidas} {estaEliminado && "💀"}
-        </p>
-      </div>
-
-      <h2 className="text-xl font-bold mb-3">📊 Uso de Equipos</h2>
-      <table className="w-full border mb-8 rounded overflow-hidden">
-        <thead className="bg-gray-200">
-          <tr>
-            {/* 🚨 ENCABEZADO SIMPLIFICADO */}
-            <th className="border p-2 text-left">Equipo</th>
-            <th className="border p-2 text-center w-32">Usos</th>
-          </tr>
-        </thead>
-        <tbody>
-          {usoEquipos.map((item, index) => (
-            <tr key={index} className="hover:bg-gray-50">
-              <td className="border p-2 font-medium">{item.detalle}</td>
-              <td className="border p-2 text-center font-semibold">
-                <span className={item.usos >= 3 ? "text-red-600 bg-red-50 px-2 py-1 rounded" : "text-gray-700"}>
-                  {item.usos}/3
-                </span>
-              </td>
-            </tr>
-          ))}
-          {usoEquipos.length === 0 && (
-            <tr><td colSpan="2" className="border p-4 text-center text-gray-500">Aún no has seleccionado ningún equipo.</td></tr>
-          )}
-        </tbody>
-      </table>
-
-      {jornadaActiva && (
-        <div className={`border rounded p-4 mb-8 shadow-sm transition-all ${estaEliminado ? 'bg-gray-100 border-gray-300 opacity-90' : 'bg-white'}`}>
-          <h2 className="font-bold text-xl mb-4 flex items-center gap-2">
-            {jornadaActiva.nombre}
-            {jornadaCerrada && <span className="text-sm bg-red-100 text-red-700 px-2 py-1 rounded font-normal">Cerrada</span>}
-            {estaEliminado && <span className="text-sm bg-gray-200 text-gray-700 px-2 py-1 rounded font-bold">🏳️ Eliminado</span>}
-          </h2>
-
-          {mensajeAdvertencia && !estaEliminado && (
-            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 mb-4 rounded text-sm text-yellow-800">
-              {mensajeAdvertencia}
-            </div>
-          )}
-
-          {estaEliminado ? (
-            <div className="text-center py-6">
-              <p className="text-gray-600 mb-4 text-lg">Has agotado tus 3 vidas. Ya no puedes hacer más selecciones en este torneo.</p>
-              <button
-                onClick={() => setMostrarModalEliminado(true)}
-                className="bg-gray-500 hover:bg-gray-600 text-white text-lg font-bold px-8 py-3 rounded-full shadow-lg transition transform hover:scale-105 flex items-center gap-2 mx-auto"
-              >
-                🏳️ Ver Estado de Eliminación
-              </button>
-            </div>
-          ) : (
-            <>
-              <select
-                value={equipoSeleccionado}
-                onChange={(e) => setEquipoSeleccionado(e.target.value)}
-                disabled={jornadaCerrada}
-                className="border p-2 rounded w-full max-w-xs mb-4 focus:ring-2 focus:ring-purple-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-              >
-                <option value="">Selecciona un equipo</option>
-                {equiposDisponibles.map((op, idx) => {
-                  const valorCompleto = `${op.nombre} (vs ${op.rival})`;
-                  return (
-                    <option key={`${op.nombre}_${op.rival}_${idx}`} value={valorCompleto}>
-                      {op.nombre} (vs {op.rival})
-                    </option>
-                  );
-                })}
-              </select>
-
-              {equiposDisponibles.length === 0 && !jornadaCerrada && (
-                <p className="text-orange-600 text-sm mb-4 bg-orange-50 p-3 rounded border border-orange-200">
-                  ⚠️ No se encontraron equipos disponibles.
-                </p>
-              )}
-
-              <div>
-                <button
-                  onClick={guardarSeleccion}
-                  disabled={jornadaCerrada || equiposDisponibles.length === 0}
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-semibold shadow-md transition disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  Guardar Selección
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      <h2 className="text-2xl font-bold mb-4">Historial Survivor</h2>
-      <table className="w-full border rounded overflow-hidden">
-        <thead className="bg-gray-200">
-          <tr>
-            <th className="border p-2 text-left">Jornada</th>
-            <th className="border p-2 text-left">Selección</th>
-            <th className="border p-2 text-center">Resultado</th>
-            <th className="border p-2 text-center w-24">Puntos</th>
-          </tr>
-        </thead>
-        <tbody>
-          {historial.map((item) => (
-            <tr key={item.id} className="hover:bg-gray-50">
-              <td className="border p-2">{item.nombreJornada}</td>
-              <td className="border p-2 font-medium">{item.equipo}</td>
-              <td className="border p-2 text-center">{item.resultado}</td>
-              <td className="border p-2 text-center font-bold">{item.puntos}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* 🚨 MODAL DE ELIMINACIÓN (Ahora se abre automáticamente si estaEliminado es true) */}
-      {mostrarModalEliminado && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50"
-          onClick={() => setMostrarModalEliminado(false)}
-        >
-          <div 
-            className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative border-4 border-yellow-400"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="text-7xl mb-4 animate-bounce">🦖💀</div>
-            <h2 className="text-3xl font-extrabold text-gray-800 mb-3">¡Gracias por Participar!</h2>
-            <p className="text-xl text-gray-600 mb-2">
-              Has perdido tus <span className="font-bold text-red-500">Tres Vidas</span> de Este Torneo.
-            </p>
-            <p className="text-lg text-green-600 font-semibold mb-8 bg-green-50 p-3 rounded-lg border border-green-200">
-              ¡Pero no te preocupes, nos vemos en el próximo torneo! 🎉🍻
-            </p>
-            <button
-              onClick={() => setMostrarModalEliminado(false)}
-              className="w-full bg-yellow-400 hover:bg-yellow-500 text-gray-900 font-extrabold text-lg py-3 px-6 rounded-full shadow-lg transition transform hover:scale-105 active:scale-95"
-            >
-              ¡Entendido! 👍
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12">
+      <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">
+              🦖 Survivor <span className="text-indigo-600">Liga MX</span>
+            </h1>
+            <p className="text-slate-500 mt-1">Elige sabiamente, sobrevive al torneo.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/quiniela" className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition shadow-sm flex items-center gap-2">
+              ← Quiniela
+            </Link>
+            <Link to="/ranking-survivor" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition shadow-sm flex items-center gap-2">
+              🏆 Ranking
+            </Link>
+            <button onClick={() => setMostrarReglas(true)} className="px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-medium hover:bg-amber-200 transition shadow-sm flex items-center gap-2">
+              📜 Reglas
             </button>
           </div>
         </div>
-      )}
 
-      {mostrarReglas && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={() => setMostrarReglas(false)}>
-          <div className="bg-white rounded-xl p-6 max-w-lg w-full shadow-2xl relative" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setMostrarReglas(false)} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold transition">&times;</button>
-            <h2 className="text-2xl font-bold mb-4 text-center text-purple-700 border-b pb-3">🦖 Survivor Liga MX</h2>
-            <div className="space-y-4 text-gray-700 text-sm md:text-base leading-relaxed mb-6">
-              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">📋 Reglas del Juego</h3>
-                <ul className="list-disc list-inside space-y-2">
-                  <li>Cada participante puede elegir <strong>3 veces a un mismo equipo</strong> durante todo el torneo.</li>
-                  <li>Si Gana obtienes 3 Puntos, si Empata 1 Punto y si Pierde 0 puntos. <strong>Cuando pierde tu equipo, tú pierdes 1 Vida</strong>.</li>
-                  <li>Solamente tenemos <strong>3 VIDAS</strong> en la temporada. Gana el que seleccione mejor.</li>
-                  <li>Si un partido es <strong>pospuesto</strong>, no estará disponible hasta que el administrador lo reactive.</li>
-                </ul>
-              </div>
-              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                <h3 className="font-bold text-gray-800 mb-2 flex items-center gap-2">🏆 Premios Survivor</h3>
-                <ul className="list-decimal list-inside space-y-1 ml-1">
-                  <li>Primer Lugar gana <strong>$3,030.00</strong></li>
-                  <li>Segundo Lugar gana <strong>$1,550.00</strong></li>
-                  <li>Tercer Lugar gana <strong>$750.00</strong></li>
-                  <li>Cuarto Lugar gana <strong>$360.00</strong></li>
-                  <li>Quinto Lugar gana <strong>$200.00</strong></li>
-                </ul>
-              </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
+            <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Puntos Totales</span>
+            <span className="text-4xl md:text-5xl font-extrabold text-emerald-600 mt-1">{puntosTotales}</span>
+          </div>
+          <div className={`p-5 rounded-2xl shadow-sm border flex flex-col items-center justify-center text-center transition-all ${estaEliminado ? 'bg-red-50 border-red-200' : 'bg-white border-slate-100'}`}>
+            <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Vidas Restantes</span>
+            <div className="flex items-center gap-1 mt-1">
+              {[...Array(3)].map((_, i) => (
+                <span key={i} className={`text-2xl md:text-3xl transition-all ${i < (3 - vidasPerdidas) ? 'text-red-500 scale-100' : 'text-slate-200 scale-90'}`}>❤️</span>
+              ))}
             </div>
-            <button onClick={() => setMostrarReglas(false)} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg transition-colors shadow-md">¡Entendido, a sobrevivir!</button>
+            {estaEliminado && <span className="text-red-600 font-bold text-sm mt-2 animate-pulse bg-red-100 px-3 py-1 rounded-full">¡ELIMINADO!</span>}
           </div>
         </div>
-      )}
+
+        {/* Team Usage Chips */}
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+          <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+            📊 Uso de Equipos <span className="text-xs font-normal text-slate-500 bg-slate-100 px-2 py-1 rounded-full">(Máx. 3 veces)</span>
+          </h2>
+          {usoEquipos.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {usoEquipos.map((item, index) => {
+                const isFull = item.usos >= 3;
+                return (
+                  <div key={index} className={`flex items-center gap-2 px-3 py-2 rounded-full border text-sm font-medium transition ${isFull ? 'bg-red-50 border-red-200 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+                    <span>{item.detalle}</span>
+                    <span className="flex gap-1 ml-1">
+                      {[...Array(3)].map((_, i) => (
+                        <span key={i} className={`w-2.5 h-2.5 rounded-full ${i < item.usos ? (isFull ? 'bg-red-500' : 'bg-indigo-500') : 'bg-slate-300'}`}></span>
+                      ))}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-slate-500 text-sm italic">Aún no has seleccionado ningún equipo.</p>
+          )}
+        </div>
+
+        {/* Active Jornada Selection */}
+        {jornadaActiva && (
+          <div className={`bg-white p-5 md:p-6 rounded-2xl shadow-md border-2 transition-all ${estaEliminado ? 'border-slate-200 opacity-75' : 'border-indigo-100'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                ⚽ {jornadaActiva.nombre}
+                {jornadaCerrada && <span className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-bold uppercase tracking-wide">Cerrada</span>}
+              </h2>
+            </div>
+
+            {mensajeAdvertencia && !estaEliminado && (
+              <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-4 rounded-r-lg text-sm text-amber-800 flex items-start gap-3">
+                <span className="text-xl mt-0.5">⚠️</span>
+                <span className="font-medium">{mensajeAdvertencia}</span>
+              </div>
+            )}
+
+            {estaEliminado ? (
+              <div className="text-center py-8">
+                <p className="text-slate-600 mb-6 text-lg">Has agotado tus 3 vidas. Ya no puedes hacer más selecciones en este torneo.</p>
+                <button
+                  onClick={() => setMostrarModalEliminado(true)}
+                  className="bg-slate-800 hover:bg-slate-900 text-white text-lg font-bold px-8 py-3 rounded-xl shadow-lg transition transform hover:scale-105 flex items-center gap-2 mx-auto"
+                >
+                  🏳️ Ver Estado de Eliminación
+                </button>
+              </div>
+            ) : jornadaCerrada ? (
+              <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                <p className="text-slate-600 font-medium">⏰ El tiempo para seleccionar en esta jornada ha terminado.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-slate-600 mb-3 font-medium">Selecciona un equipo para esta jornada:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+                  {equiposDisponibles.map((op, idx) => {
+                    const valorCompleto = `${op.nombre} (vs ${op.rival})`;
+                    const uso = usoEquipos.find(u => u.detalle.toLowerCase() === op.nombre.toLowerCase())?.usos || 0;
+                    const isDisabled = uso >= 3;
+                    const isSelected = equipoSeleccionado === valorCompleto;
+
+                    return (
+                      <button
+                        key={`${op.nombre}_${op.rival}_${idx}`}
+                        disabled={isDisabled}
+                        onClick={() => setEquipoSeleccionado(valorCompleto)}
+                        className={`relative p-4 rounded-xl border-2 text-left transition-all flex flex-col gap-1 ${
+                          isSelected 
+                            ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200' 
+                            : isDisabled 
+                              ? 'border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed' 
+                              : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <span className={`font-bold text-lg ${isDisabled ? 'text-slate-500 line-through' : 'text-slate-800'}`}>
+                            {op.nombre}
+                          </span>
+                          {isSelected && <span className="text-indigo-600 text-xl font-bold">✓</span>}
+                        </div>
+                        <span className="text-sm text-slate-500">vs {op.rival}</span>
+                        
+                        <div className="mt-3 flex items-center gap-1.5 pt-2 border-t border-slate-100">
+                          <div className="flex gap-1">
+                            {[...Array(3)].map((_, i) => (
+                              <span key={i} className={`w-3 h-3 rounded-full ${i < uso ? (isDisabled ? 'bg-red-400' : 'bg-indigo-500') : 'bg-slate-200'}`}></span>
+                            ))}
+                          </div>
+                          <span className={`text-xs font-bold ${isDisabled ? 'text-red-600' : 'text-slate-400'}`}>
+                            {uso}/3 usos
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {equiposDisponibles.length === 0 && (
+                  <div className="text-center py-6 bg-orange-50 rounded-xl border border-orange-200 text-orange-800 font-medium">
+                    ⚠️ No se encontraron equipos disponibles para esta jornada.
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-4 items-center pt-2">
+                  <button
+                    onClick={guardarSeleccion}
+                    disabled={!equipoSeleccionado || jornadaCerrada || equiposDisponibles.length === 0}
+                    className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-3.5 rounded-xl font-bold text-lg shadow-md transition transform active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    💾 Confirmar Selección
+                  </button>
+                  {equipoSeleccionado && (
+                    <span className="text-sm text-slate-500 bg-slate-100 px-4 py-2 rounded-lg">
+                      Elegido: <span className="font-bold text-slate-800">{equipoSeleccionado}</span>
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* History Timeline */}
+        <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+            📜 Historial de Selecciones
+          </h2>
+          {historial.length > 0 ? (
+            <div className="space-y-3">
+              {historial.map((item, index) => {
+                let statusColor = "bg-slate-100 text-slate-600 border-slate-200";
+                let statusIcon = "⏳";
+                
+                if (item.resultado.includes("Ganó")) {
+                  statusColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                  statusIcon = "✅";
+                } else if (item.resultado.includes("Empató")) {
+                  statusColor = "bg-amber-50 text-amber-700 border-amber-200";
+                  statusIcon = "🤝";
+                } else if (item.resultado.includes("Perdió") || item.resultado.includes("No elegible")) {
+                  statusColor = "bg-red-50 text-red-700 border-red-200";
+                  statusIcon = "❌";
+                } else if (item.resultado.includes("Pospuesto")) {
+                  statusColor = "bg-blue-50 text-blue-700 border-blue-200";
+                  statusIcon = "⏸️";
+                }
+
+                return (
+                  <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition gap-3">
+                    <div className="flex items-center gap-4">
+                      <div className="flex flex-col items-center justify-center w-12 h-12 rounded-full bg-white border border-slate-200 text-slate-500 font-bold text-[10px] text-center leading-tight shadow-sm uppercase">
+                        Jor<br/>{index + 1}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800">{item.nombreJornada}</p>
+                        <p className="text-sm text-slate-600">{item.equipo}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-4 sm:gap-6 pl-16 sm:pl-0">
+                      <span className={`px-3 py-1.5 rounded-lg text-sm font-bold border flex items-center gap-1.5 whitespace-nowrap ${statusColor}`}>
+                        {statusIcon} {item.resultado.replace(/✅ |❌ |🤝 |⏸️ /g, '')}
+                      </span>
+                      <div className="text-center min-w-[3rem]">
+                        <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider">Pts</span>
+                        <span className={`text-xl font-extrabold ${item.puntos > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          +{item.puntos}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              No hay historial disponible aún. ¡Haz tu primera selección!
+            </div>
+          )}
+        </div>
+
+        {/* Modal de Eliminación */}
+        {mostrarModalEliminado && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity" onClick={() => setMostrarModalEliminado(false)}>
+            <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative border-4 border-red-100" onClick={(e) => e.stopPropagation()}>
+              <div className="text-6xl mb-4 animate-bounce">🦖💀</div>
+              <h2 className="text-3xl font-extrabold text-slate-800 mb-3">¡Fin del Camino!</h2>
+              <p className="text-lg text-slate-600 mb-2">
+                Has perdido tus <span className="font-bold text-red-600">Tres Vidas</span> en este torneo.
+              </p>
+              <p className="text-base text-emerald-700 font-semibold mb-8 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                ¡Pero no te preocupes, nos vemos en el próximo torneo! 🎉🍻
+              </p>
+              <button
+                onClick={() => setMostrarModalEliminado(false)}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold text-lg py-3.5 px-6 rounded-xl shadow-lg transition transform hover:scale-[1.02] active:scale-95"
+              >
+                ¡Entendido! 👍
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Reglas */}
+        {mostrarReglas && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setMostrarReglas(false)}>
+            <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl relative max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setMostrarReglas(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-800 text-2xl font-bold transition bg-slate-100 rounded-full w-9 h-9 flex items-center justify-center">&times;</button>
+              <h2 className="text-2xl font-bold mb-4 text-center text-indigo-700 border-b pb-3">🦖 Survivor Liga MX</h2>
+              <div className="space-y-4 text-slate-700 text-sm md:text-base leading-relaxed mb-6">
+                <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                  <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">📋 Reglas del Juego</h3>
+                  <ul className="list-disc list-inside space-y-2 text-slate-600">
+                    <li>Cada participante puede elegir <strong className="text-slate-800">máximo 3 veces</strong> al mismo equipo durante todo el torneo.</li>
+                    <li><strong className="text-emerald-700">Gana:</strong> +3 Puntos | <strong className="text-amber-700">Empata:</strong> +1 Punto | <strong className="text-red-700">Pierde:</strong> 0 Puntos y <strong>-1 Vida</strong>.</li>
+                    <li>Solamente tenemos <strong className="text-red-600">3 VIDAS</strong> en la temporada. Gana quien sobreviva con más puntos.</li>
+                    <li>Si un partido es <strong className="text-blue-700">pospuesto</strong>, no contará y podrás cambiar tu selección cuando se reactive.</li>
+                  </ul>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                  <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">🏆 Premios Survivor</h3>
+                  <ul className="space-y-2 text-slate-600">
+                    <li className="flex justify-between items-center"><span>🥇 Primer Lugar</span> <strong className="text-emerald-700 text-lg">$3,030.00</strong></li>
+                    <li className="flex justify-between items-center"><span>🥈 Segundo Lugar</span> <strong className="text-emerald-700 text-lg">$1,550.00</strong></li>
+                    <li className="flex justify-between items-center"><span>🥉 Tercer Lugar</span> <strong className="text-emerald-700 text-lg">$750.00</strong></li>
+                    <li className="flex justify-between items-center"><span>4️⃣ Cuarto Lugar</span> <strong className="text-emerald-700 text-lg">$360.00</strong></li>
+                    <li className="flex justify-between items-center"><span>5️⃣ Quinto Lugar</span> <strong className="text-emerald-700 text-lg">$200.00</strong></li>
+                  </ul>
+                </div>
+              </div>
+              <button onClick={() => setMostrarReglas(false)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl transition-colors shadow-md text-lg">
+                ¡Entendido, a sobrevivir! 🚀
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
