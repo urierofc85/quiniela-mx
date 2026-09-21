@@ -22,6 +22,7 @@ export default function Survivor() {
     cargarDatos();
   }, []);
 
+  // 🚨 NUEVO: Mostrar el modal automáticamente si el usuario ya está eliminado
   const estaEliminado = vidasPerdidas >= 3;
 
   useEffect(() => {
@@ -31,15 +32,11 @@ export default function Survivor() {
   }, [estaEliminado]);
 
   const cargarDatos = async () => {
-    console.log("🚀 Iniciando carga de datos...");
-    
-    const { data: jornadaData, error: errorJornada } = await supabase
+    const { data: jornadaData } = await supabase
       .from("jornadas")
       .select("*")
       .eq("activa", true)
       .single();
-
-    if (errorJornada) console.warn("⚠️ No se encontró jornada activa o hubo error:", errorJornada);
 
     if (jornadaData) {
       setJornadaActiva(jornadaData);
@@ -56,7 +53,6 @@ export default function Survivor() {
       .select("id, jornada_id, local, visitante, pospuesto, resultado");
     
     if (error) {
-      console.warn("⚠️ Error con columna 'pospuesto', usando fallback:", error.message);
       const { data: fallbackData } = await supabase
         .from("partidos")
         .select("id, jornada_id, local, visitante, resultado");
@@ -65,7 +61,6 @@ export default function Survivor() {
       partidosData = data || [];
     }
     
-    console.log("✅ Partidos cargados:", partidosData.length);
     setTodosLosPartidos(partidosData);
 
     if (jornadaData) {
@@ -75,7 +70,6 @@ export default function Survivor() {
 
     await cargarHistorial(partidosData);
     await cargarUsoEquipos(partidosData);
-    console.log("✅ Carga de datos finalizada.");
   };
 
   const cargarEquiposDisponibles = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
@@ -113,22 +107,17 @@ export default function Survivor() {
   const cargarSeleccionActual = async (jornada = jornadaActiva, partidos = todosLosPartidos) => {
     if (!jornada) return;
     
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      console.error("❌ No se pudo obtener el usuario:", userError);
-      return;
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("survivor")
       .select("*")
       .eq("usuario_id", user.id)
       .eq("jornada_id", jornada.id)
       .maybeSingle();
 
-    if (error) console.error("❌ Error al cargar selección actual:", error);
-
-    if (data && data.equipo) {
+    if (data) {
       let nombreEquipo = data.equipo;
       let nombreRival = null;
       
@@ -166,32 +155,22 @@ export default function Survivor() {
     }
   };
 
+  // 🚨 CORREGIDO: Ahora agrupa los usos POR EQUIPO BASE, ignorando el rival
   const cargarUsoEquipos = async (partidos = todosLosPartidos) => {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      console.error("❌ No se pudo obtener el usuario:", userError);
-      return;
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-    console.log("🔍 Cargando usos de equipos para usuario ID:", user.id);
-
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("survivor")
-      .select("equipo, jornada_id")
+      .select("equipo")
       .eq("usuario_id", user.id);
-
-    if (error) {
-      console.error("❌ Error al cargar usos de equipos:", error);
-      return;
-    }
-
-    console.log("📊 Selecciones de survivor encontradas en BD:", data);
 
     const usoDetallado = {};
 
     data?.forEach((sel) => {
       if (!sel.equipo) return; // Proteger contra valores nulos
       
+      // Extraer solo el nombre base del equipo (antes de " (vs ")
       let nombreEquipo = sel.equipo;
       if (nombreEquipo.includes(' (vs ')) {
         nombreEquipo = nombreEquipo.split(' (vs ')[0].trim();
@@ -199,6 +178,7 @@ export default function Survivor() {
         nombreEquipo = nombreEquipo.trim();
       }
 
+      // Usar minúsculas como clave para agrupar correctamente (evita "Leon" y "leon" separados)
       const clave = nombreEquipo.toLowerCase();
       if (!usoDetallado[clave]) {
         usoDetallado[clave] = { nombre: nombreEquipo, usos: 0 };
@@ -206,40 +186,30 @@ export default function Survivor() {
       usoDetallado[clave].usos += 1;
     });
 
+    // Convertir a array y ordenar por cantidad de usos (descendente)
     const resultado = Object.values(usoDetallado).map(item => ({
       detalle: item.nombre,
       usos: item.usos
     }));
     
     resultado.sort((a, b) => b.usos - a.usos);
-    console.log("✅ Uso de equipos procesado final:", resultado);
     setUsoEquipos(resultado);
   };
 
   const cargarHistorial = async (partidos = todosLosPartidos) => {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      console.error("❌ No se pudo obtener el usuario:", userError);
-      return;
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-    console.log("🔍 Cargando historial para usuario ID:", user.id);
-
-    const { data: selecciones, error: errorSel } = await supabase
+    const { data: selecciones } = await supabase
       .from("survivor")
       .select("*")
       .eq("usuario_id", user.id)
       .order("jornada_id", { ascending: true });
 
-    if (errorSel) console.error("❌ Error al cargar selecciones:", errorSel);
-    console.log("📊 Selecciones de historial encontradas:", selecciones);
-
-    const { data: jornadas, error: errorJor } = await supabase
+    const { data: jornadas } = await supabase
       .from("jornadas")
       .select("*")
       .order("id", { ascending: true });
-
-    if (errorJor) console.error("❌ Error al cargar jornadas:", errorJor);
 
     const horaMexico = await obtenerHoraMexico();
 
@@ -334,7 +304,6 @@ export default function Survivor() {
       };
     });
 
-    console.log("✅ Historial procesado. Vidas totales:", vidas, "Puntos totales:", total);
     setHistorial(procesado);
     setPuntosTotales(total);
     setVidasPerdidas(vidas);
@@ -448,6 +417,7 @@ export default function Survivor() {
       <table className="w-full border mb-8 rounded overflow-hidden">
         <thead className="bg-gray-200">
           <tr>
+            {/* 🚨 ENCABEZADO SIMPLIFICADO */}
             <th className="border p-2 text-left">Equipo</th>
             <th className="border p-2 text-center w-32">Usos</th>
           </tr>
@@ -554,6 +524,7 @@ export default function Survivor() {
         </tbody>
       </table>
 
+      {/* 🚨 MODAL DE ELIMINACIÓN (Ahora se abre automáticamente si estaEliminado es true) */}
       {mostrarModalEliminado && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50"
