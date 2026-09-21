@@ -354,7 +354,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // RENDER (REDISEÑO VISUAL TOTAL)
+  // RENDER (CORREGIDO)
   //=========================================
   const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
 
@@ -449,7 +449,7 @@ export default function AdminSurvivor() {
                   <th className="px-6 py-4">Participante</th>
                   {jornadaSeleccionada !== "general" && <th className="px-6 py-4">Equipo Elegido</th>}
                   <th className="px-6 py-4 w-32 text-center">Puntos</th>
-                  <th className="px-6 py-4 w-40 text-center">Vidas</th>
+                  <th className="px-6 py-4 w-40 text-center">Vidas Restantes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -460,52 +460,71 @@ export default function AdminSurvivor() {
                     </td>
                   </tr>
                 ) : (
-                  ranking.map((fila, index) => (
-                    <tr key={fila.usuario_id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 text-center">
-                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm ${
-                          index === 0 ? "bg-yellow-100 text-yellow-700" :
-                          index === 1 ? "bg-slate-200 text-slate-700" :
-                          index === 2 ? "bg-orange-100 text-orange-800" : "text-slate-500"
-                        }`}>
-                          {index + 1}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 font-bold text-slate-800">{fila.nombre}</td>
-                      
-                      {jornadaSeleccionada !== "general" && (
-                        <td className="px-6 py-4 text-sm font-medium text-slate-600">
-                          {fila.equipoElegido === "Sin selección" ? (
-                            <span className="text-red-500 italic">Sin selección</span>
-                          ) : fila.equipoElegido}
-                        </td>
-                      )}
-                      
-                      <td className="px-6 py-4 text-center">
-                        <div className={`text-lg font-black ${fila.tuvoInfraccion ? "text-red-600" : "text-slate-800"}`}>
-                          {fila.puntos}
-                        </div>
-                        {fila.tuvoInfraccion && (
-                          <span className="inline-block mt-1 text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
-                            ⚠️ Penalizado
+                  ranking.map((fila, index) => {
+                    // Calcular vidas restantes (3 - vidas perdidas)
+                    const vidasRestantes = Math.max(0, 3 - fila.vidas);
+                    
+                    return (
+                      <tr key={fila.usuario_id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm ${
+                            index === 0 ? "bg-yellow-100 text-yellow-700" :
+                            index === 1 ? "bg-slate-200 text-slate-700" :
+                            index === 2 ? "bg-orange-100 text-orange-800" : "text-slate-500"
+                          }`}>
+                            {index + 1}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 font-bold text-slate-800">{fila.nombre}</td>
+                        
+                        {jornadaSeleccionada !== "general" && (
+                          <td className="px-6 py-4 text-sm font-medium text-slate-600">
+                            {fila.equipoElegido === "Sin selección" ? (
+                              <span className="text-red-500 italic">Sin selección</span>
+                            ) : fila.equipoElegido}
+                          </td>
                         )}
-                      </td>
-                      
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {[...Array(3)].map((_, i) => (
-                            <span key={i} className={`text-lg transition-all ${i < (3 - fila.vidas) ? "text-red-500 scale-100" : "text-slate-200 scale-90"}`}>
-                              ❤️
+                        
+                        <td className="px-6 py-4 text-center">
+                          <div className={`text-lg font-black ${fila.tuvoInfraccion ? "text-red-600" : "text-slate-800"}`}>
+                            {fila.puntos}
+                          </div>
+                          {fila.tuvoInfraccion && (
+                            <span className="inline-block mt-1 text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                              ️ Penalizado
                             </span>
-                          ))}
-                        </div>
-                        {fila.vidas >= 3 && (
-                          <span className="text-xs font-bold text-red-600 mt-1 block">Eliminado</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                          )}
+                        </td>
+                        
+                        {/* CORRECCIÓN: Corazones muestran vidas restantes correctamente */}
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {[...Array(3)].map((_, i) => {
+                              // i=0,1,2 son los 3 corazones
+                              // Si i < vidasRestantes, el corazón está lleno (rojo)
+                              // Si i >= vidasRestantes, el corazón está vacío (gris)
+                              const estaLleno = i < vidasRestantes;
+                              return (
+                                <span 
+                                  key={i} 
+                                  className={`text-2xl transition-all ${
+                                    estaLleno 
+                                      ? "text-red-500 scale-100" 
+                                      : "text-slate-200 scale-90 grayscale"
+                                  }`}
+                                >
+                                  ❤️
+                                </span>
+                              );
+                            })}
+                          </div>
+                          {fila.vidas >= 3 && (
+                            <span className="text-xs font-bold text-red-600 mt-1 block">Eliminado</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -559,7 +578,7 @@ export default function AdminSurvivor() {
           </div>
         )}
 
-        {/* Tabla Usos por Equipo */}
+        {/* Tabla Usos por Equipo - CORREGIDA PARA MEJOR LEGIBILIDAD */}
         <div ref={tablaUsosRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-100">
             <h2 className="text-xl font-black text-slate-900">
@@ -572,9 +591,9 @@ export default function AdminSurvivor() {
             <table className="w-full text-left border-collapse min-w-max">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider">
-                  <th className="px-6 py-4 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Equipo</th>
+                  <th className="px-6 py-4 sticky left-0 bg-slate-50 z-10 border-r border-slate-200 font-bold">Equipo</th>
                   {datosUsosEquipo.usuarios.map((usuario) => (
-                    <th key={usuario.id} className="px-4 py-4 text-center min-w-[100px]">
+                    <th key={usuario.id} className="px-4 py-4 text-center min-w-[100px] font-semibold">
                       <div className="truncate max-w-[120px]" title={usuario.nombre}>{usuario.nombre}</div>
                     </th>
                   ))}
@@ -587,16 +606,31 @@ export default function AdminSurvivor() {
                       {fila.equipo}
                     </td>
                     {fila.usosPorUsuario.map((uso) => {
-                      let badgeClass = "text-slate-300 bg-transparent";
-                      if (uso.cantidad === 1) badgeClass = "text-emerald-700 bg-emerald-100 font-bold";
-                      else if (uso.cantidad === 2) badgeClass = "text-amber-700 bg-amber-100 font-bold";
-                      else if (uso.cantidad >= 3) badgeClass = "text-red-700 bg-red-100 font-bold";
-
+                      // CORRECCIÓN: Celdas completas coloreadas para mejor legibilidad
+                      let bgColor = "bg-white";
+                      let textColor = "text-slate-300";
+                      let displayValue = "-";
+                      
+                      if (uso.cantidad === 1) {
+                        bgColor = "bg-emerald-500";
+                        textColor = "text-white";
+                        displayValue = "1";
+                      } else if (uso.cantidad === 2) {
+                        bgColor = "bg-amber-400";
+                        textColor = "text-slate-900";
+                        displayValue = "2";
+                      } else if (uso.cantidad >= 3) {
+                        bgColor = "bg-red-500";
+                        textColor = "text-white";
+                        displayValue = uso.cantidad.toString();
+                      }
+                      
                       return (
-                        <td key={uso.usuario_id} className="px-4 py-3 text-center">
-                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm ${badgeClass}`}>
-                            {uso.cantidad > 0 ? uso.cantidad : "-"}
-                          </span>
+                        <td 
+                          key={uso.usuario_id} 
+                          className={`px-4 py-3 text-center font-bold ${bgColor} ${textColor} transition-colors`}
+                        >
+                          {displayValue}
                         </td>
                       );
                     })}
