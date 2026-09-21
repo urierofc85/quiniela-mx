@@ -209,23 +209,25 @@ export default function Survivor() {
     const horaMexico = await obtenerHoraMexico();
 
     let total = 0;
-    let vidas = 0;
+    let vidas = 0; // Contador local de vidas perdidas
 
     const procesado = (jornadas || []).map((jornada) => {
       const esPasadaYCerrada = jornada.fecha_limite ? horaMexico > new Date(jornada.fecha_limite) : false;
       const seleccion = selecciones?.find((s) => String(s.jornada_id) === String(jornada.id));
 
+      // CASO 1: No hubo selección y la jornada ya cerró
       if (!seleccion && esPasadaYCerrada) {
         vidas++;
         return {
           id: `jornada-${jornada.id}`,
           nombreJornada: jornada.nombre || `Jornada ${jornada.id}`,
           equipo: "Sin selección",
-          resultado: "❌ No elegible (Perdió vida)",
+          resultado: "❌ Perdió (Sin selección)",
           puntos: 0,
         };
       }
 
+      // CASO 2: No hubo selección pero la jornada aún no cierra
       if (!seleccion) {
         return {
           id: `jornada-${jornada.id}`,
@@ -288,7 +290,11 @@ export default function Survivor() {
       }
 
       total += puntos;
-      if (resultado === "❌ Perdió") vidas++;
+      
+      // CORRECCIÓN: Usar .includes para ser más robusto contra variaciones de texto
+      if (resultado.includes("Perdió")) {
+        vidas++;
+      }
 
       return {
         ...seleccion,
@@ -301,7 +307,7 @@ export default function Survivor() {
 
     setHistorial(procesado);
     setPuntosTotales(total);
-    setVidasPerdidas(vidas);
+    setVidasPerdidas(vidas); // Actualizar estado global
   };
 
   const guardarSeleccion = async () => {
@@ -382,6 +388,9 @@ export default function Survivor() {
     await cargarUsoEquipos(todosLosPartidos);
   };
 
+  // CÁLCULO SEGURO DE VIDAS RESTANTES
+  const vidasRestantes = Math.max(0, 3 - vidasPerdidas);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12">
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
@@ -416,11 +425,28 @@ export default function Survivor() {
           <div className={`p-5 rounded-2xl shadow-sm border flex flex-col items-center justify-center text-center transition-all ${estaEliminado ? 'bg-red-50 border-red-200' : 'bg-white border-slate-100'}`}>
             <span className="text-slate-500 text-xs font-bold uppercase tracking-wider">Vidas Restantes</span>
             <div className="flex items-center gap-1 mt-1">
-              {[...Array(3)].map((_, i) => (
-                <span key={i} className={`text-2xl md:text-3xl transition-all ${i < (3 - vidasPerdidas) ? 'text-red-500 scale-100' : 'text-slate-200 scale-90'}`}>❤️</span>
-              ))}
+              {[...Array(3)].map((_, i) => {
+                // Lógica corregida y blindada:
+                const estaViva = i < vidasRestantes;
+                return (
+                  <span 
+                    key={i} 
+                    className={`text-2xl md:text-3xl transition-all duration-300 ${
+                      estaViva 
+                        ? 'text-red-500 scale-100 drop-shadow-sm' 
+                        : 'text-slate-200 scale-90 grayscale opacity-50'
+                    }`}
+                  >
+                    ❤️
+                  </span>
+                );
+              })}
             </div>
-            {estaEliminado && <span className="text-red-600 font-bold text-sm mt-2 animate-pulse bg-red-100 px-3 py-1 rounded-full">¡ELIMINADO!</span>}
+            {estaEliminado && (
+              <span className="text-red-600 font-bold text-sm mt-2 animate-pulse bg-red-100 px-3 py-1 rounded-full">
+                ¡ELIMINADO!
+              </span>
+            )}
           </div>
         </div>
 
