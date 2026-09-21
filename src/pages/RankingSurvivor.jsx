@@ -68,7 +68,6 @@ export default function RankingSurvivor() {
     return data || [];
   };
 
-  // 🚨 Agregamos 'email' y 'rol' para poder filtrar administradores
   const obtenerPerfiles = async () => {
     const { data, error } = await supabase
       .from("profiles")
@@ -118,8 +117,8 @@ export default function RankingSurvivor() {
         vidas: 0,
         equipoElegido: "-",
         tuvoInfraccion: false,
-        email: usuario?.email || "", // 🚨 Para filtrar admins
-        rol: usuario?.rol || "",      // 🚨 Para filtrar admins
+        email: usuario?.email || "",
+        rol: usuario?.rol || "",
       };
     });
 
@@ -240,14 +239,17 @@ export default function RankingSurvivor() {
     }
 
     // ==========================================
-    // 🚨 FILTRO PARA VISTA POR JORNADA
+    // 🚨 FILTRO INFALIBLE PARA VISTA POR JORNADA
     // ==========================================
     let rankingFinal = Object.values(acumulado);
 
     if (jornadaSeleccionada !== "general") {
       rankingFinal = rankingFinal.filter((fila) => {
-        // 1. Debe haber hecho una selección en esta jornada específica
-        if (fila.equipoElegido === "Sin selección") return false;
+        // 1. Verificar DIRECTAMENTE en los datos crudos si el usuario tiene selección en esta jornada
+        const tieneSeleccion = rawSurvivor.some(
+          (s) => s.usuario_id === fila.usuario_id && Number(s.jornada_id) === Number(jornadaSeleccionada)
+        );
+        if (!tieneSeleccion) return false; // 🚨 Si no jugó, se elimina de la tabla
         
         // 2. No debe estar eliminado (menos de 3 vidas)
         if (fila.vidas >= 3) return false;
@@ -358,7 +360,7 @@ export default function RankingSurvivor() {
               className="text-sm px-3 py-1 rounded-full font-medium"
               style={{ backgroundColor: "#f3f4f6", color: "#4b5563" }}
             >
-              {ranking.length} Participantes {jornadaSeleccionada !== "general" && "(Activos)"}
+              {ranking.length} Participantes {jornadaSeleccionada !== "general" && "(Activos en esta jornada)"}
             </span>
           </div>
 
@@ -410,10 +412,10 @@ export default function RankingSurvivor() {
                         className="p-2 text-center font-semibold"
                         style={{
                           border: "1px solid #e5e7eb",
-                          color: fila.equipoElegido === "Sin selección" ? "#dc2626" : "#1d4ed8",
+                          color: "#1d4ed8",
                         }}
                       >
-                        {tiempoExpirado ? fila.equipoElegido || "-" : "🔒 Oculto"}
+                        {tiempoExpirado ? fila.equipoElegido : "🔒 Oculto"}
                       </td>
                     )}
                     
