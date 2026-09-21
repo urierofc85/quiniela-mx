@@ -4,11 +4,18 @@ import { supabase } from "../services/supabase";
 export default function Posiciones() {
   const [ranking, setRanking] = useState([]);
   const [jornadas, setJornadas] = useState([]);
-  const [jornadaSeleccionada, setJornadaSeleccionada] = useState("");
+  const [jornadaSeleccionada, setJornadaSeleccionada] = useState("general");
+  const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
     cargarJornadas();
   }, []);
+
+  useEffect(() => {
+    if (jornadaSeleccionada) {
+      cargarRanking();
+    }
+  }, [jornadaSeleccionada]);
 
   const cargarJornadas = async () => {
     const { data, error } = await supabase
@@ -22,62 +29,119 @@ export default function Posiciones() {
     }
 
     setJornadas(data || []);
-
-    if (data && data.length > 0) {
-      setJornadaSeleccionada(data[0].id);
-    }
   };
 
-  useEffect(() => {
-    if (jornadaSeleccionada) {
-      cargarRanking();
+  // 🚨 FUNCIÓN PARA TRAER TODOS LOS REGISTROS (SIN LÍMITE DE 1000)
+  const fetchAllRows = async (tableName, columns) => {
+    let allData = [];
+    let from = 0;
+    let to = 999;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select(columns)
+        .order("id", { ascending: false })
+        .range(from, to);
+
+      if (error) {
+        console.error(`Error fetching ${tableName}:`, error);
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        hasMore = false;
+      } else {
+        allData = [...allData, ...data];
+        if (data.length < 1000) {
+          hasMore = false;
+        } else {
+          from += 1000;
+          to += 1000;
+        }
+      }
     }
-  }, [jornadaSeleccionada]);
+    return allData;
+  };
 
   const cargarRanking = async () => {
-    let data, error;
+    setCargando(true);
+    try {
+      // 1. Traer todos los datos necesarios en paralelo
+      const [perfilesRes, todasQuinielas, todosPartidos] = await Promise.all([
+        supabase.from("profiles").select("id, nombre, nombre_usuario, email"),
+        fetchAllRows("quinielas", "usuario_id, partido_id, pronostico"),
+        fetchAllRows("partidos", "id, jornada_id, resultado, pospuesto")
+      ]);
 
-    if (jornadaSeleccionada === "general") {
-      // Ranking acumulado de todas las jornadas
-      const res = await supabase
-        .from("ranking_general") // 👈 vista que suma aciertos por usuario
-        .select("*")
-        .order("aciertos", { ascending: false });
+      const perfiles = perfilesRes.data || [];
 
-      data = res.data;
-      error = res.error;
-    } else {
-      // Ranking de una jornada específica
-      const res = await supabase
-        .from("ranking_jornada")
-        .select("*")
-        .eq("jornada_id", Number(jornadaSeleccionada))
-        .order("aciertos", { ascending: false });
+      // 2. Filtrar partidos válidos: NO pospuestos y CON resultado
+      const partidosValidos = todosPartidos.filter(
+        (p) => p.pospuesto !== true && p.resultado
+      );
 
-      data = res.data;
-      error = res.error;
-    }
+      // 3. Si es una jornada específica, filtrar aún más
+      const partidosAContar =
+        jornadaSeleccionada === "general"
+          ? partidosValidos
+          : partidosValidos.filter(
+              (p) => String(p.jornada_id) === String(jornadaSeleccionada)
+            );
 
-    if (error) {
+      // 4. Inicializar marcador para todos los usuarios
+      const scores = {};
+      perfiles.forEach((p) => {
+        scores[p.id] = {
+          usuario_id: p.id,
+          nombre_usuario: p.nombre_usuario || p.nombre || p.email || "Usuario",
+          aciertos: 0,
+        };
+      });
+
+      // 5. Contar aciertos solo en partidos válidos
+      todasQuinielas.forEach((q) => {
+        const partido = partidosAContar.find(
+          (p) => String(p.id) === String(q.partido_id)
+        );
+        
+        // Si el partido es válido y el pronóstico coincide con el resultado
+        if (partido && q.pronostico === partido.resultado) {
+          if (scores[q.usuario_id]) {
+            scores[q.usuario_id].aciertos += 1;
+          }
+        }
+      });
+
+      // 6. Convertir a array y ordenar (Primero por aciertos desc, luego por nombre)
+      const rankingCalculado = Object.values(scores).sort((a, b) => {
+        if (b.aciertos !== a.aciertos) {
+          return b.aciertos - a.aciertos;
+        }
+        return a.nombre_usuario.localeCompare(b.nombre_usuario);
+      });
+
+      setRanking(rankingCalculado);
+    } catch (error) {
       console.error("Error cargando ranking:", error);
-      return;
+    } finally {
+      setCargando(false);
     }
-
-    setRanking(data || []);
   };
+
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">🏆 Ranking</h1>
 
-      <div className="mb-4">
-        <label className="font-semibold mr-3">Jornada:</label>
-
+      <div className="mb-4 flex flex-wrap items-center gap-4">
+        <label className="font-semibold">Jornada:</label>
         <select
           value={jornadaSeleccionada}
           onChange={(e) => setJornadaSeleccionada(e.target.value)}
-          className="border p-2 rounded"
+          className="border p-2 rounded bg-white focus:ring-2 focus:ring-green-500 focus:outline-none"
         >
-          <option value="general">🏆 Ranking General</option>
+          <option value="general">🏆 Ranking General (Acumulado)</option>
           {jornadas.map((jornada) => (
             <option key={jornada.id} value={jornada.id}>
               {jornada.nombre}
@@ -86,53 +150,79 @@ export default function Posiciones() {
         </select>
       </div>
 
-      <div className="mb-4">
-        <p className="text-lg">
-          Participantes:{" "}
-          <span className="font-bold">{ranking.length}</span>
-        </p>
-      </div>
-
-      <div className="border rounded-lg overflow-hidden shadow">
-        <table className="w-full">
-          <thead className="bg-gray-200">
-            <tr>
-              <th className="p-3 text-left">Posición</th>
-              <th className="p-3 text-left">Usuario</th>
-              <th className="p-3 text-center">Aciertos</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {ranking.map((fila, index) => {
-              let medalla = "";
-              if (index === 0) medalla = "🥇";
-              if (index === 1) medalla = "🥈";
-              if (index === 2) medalla = "🥉";
-
-              return (
-                <tr
-                  key={`${fila.nombre_usuario}-${index}`}
-                  className={index === 0 ? "bg-yellow-100 border-t" : "border-t"}
-                >
-                  <td className="p-3 font-bold">
-                    {medalla} {index + 1}
-                  </td>
-                  <td className="p-3">{fila.nombre_usuario}</td>
-                  <td className="p-3 text-center font-bold">{fila.aciertos}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {ranking.length > 0 && (
-        <div className="mt-6 bg-green-100 p-4 rounded">
-          <h2 className="font-bold text-lg">Líder Actual</h2>
-          <p>🥇 {ranking[0].nombre_usuario}</p>
-          <p>Aciertos: {ranking[0].aciertos}</p>
+      {cargando ? (
+        <div className="text-center py-8 text-gray-600">
+          Calculando posiciones...
         </div>
+      ) : (
+        <>
+          <div className="mb-4">
+            <p className="text-lg">
+              Participantes:{" "}
+              <span className="font-bold text-green-700">
+                {ranking.length}
+              </span>
+            </p>
+          </div>
+
+          <div className="border rounded-lg overflow-hidden shadow bg-white">
+            <table className="w-full">
+              <thead className="bg-gray-100 text-gray-700">
+                <tr>
+                  <th className="p-3 text-left w-24">Posición</th>
+                  <th className="p-3 text-left">Usuario</th>
+                  <th className="p-3 text-center w-32">Aciertos</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {ranking.map((fila, index) => {
+                  let medalla = "";
+                  let rowClass = "border-t hover:bg-gray-50 transition";
+                  
+                  if (index === 0) {
+                    medalla = "🥇";
+                    rowClass = "border-t bg-yellow-50";
+                  } else if (index === 1) {
+                    medalla = "🥈";
+                    rowClass = "border-t bg-gray-50";
+                  } else if (index === 2) {
+                    medalla = "🥉";
+                    rowClass = "border-t bg-orange-50";
+                  }
+
+                  return (
+                    <tr key={`${fila.usuario_id}-${index}`} className={rowClass}>
+                      <td className="p-3 font-bold text-gray-800">
+                        {medalla} {index + 1}
+                      </td>
+                      <td className="p-3 text-gray-800 font-medium">
+                        {fila.nombre_usuario}
+                      </td>
+                      <td className="p-3 text-center font-bold text-green-700 text-lg">
+                        {fila.aciertos}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {ranking.length > 0 && ranking[0].aciertos > 0 && (
+            <div className="mt-6 bg-green-50 border border-green-200 p-4 rounded-lg shadow-sm">
+              <h2 className="font-bold text-lg text-green-800 flex items-center gap-2">
+                👑 Líder Actual
+              </h2>
+              <p className="text-green-900 font-semibold text-xl mt-1">
+                {ranking[0].nombre_usuario}
+              </p>
+              <p className="text-green-700">
+                Aciertos acumulados: <span className="font-bold">{ranking[0].aciertos}</span>
+              </p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
