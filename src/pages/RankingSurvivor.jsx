@@ -354,7 +354,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // RENDER (CORREGIDO)
+  // RENDER
   //=========================================
   const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
 
@@ -377,7 +377,7 @@ export default function AdminSurvivor() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
-              <span className="text-indigo-600">🏆</span> Panel Admin Survivor
+              <span className="text-indigo-600"></span> Panel Admin Survivor
             </h1>
             <p className="text-slate-500 mt-1">Gestión de rankings, reportes y auditoría de usos.</p>
           </div>
@@ -491,18 +491,15 @@ export default function AdminSurvivor() {
                           </div>
                           {fila.tuvoInfraccion && (
                             <span className="inline-block mt-1 text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
-                              ️ Penalizado
+                              ⚠️ Penalizado
                             </span>
                           )}
                         </td>
                         
-                        {/* CORRECCIÓN: Corazones muestran vidas restantes correctamente */}
+                        {/* Corazones corregidos: muestran vidas restantes */}
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-1">
                             {[...Array(3)].map((_, i) => {
-                              // i=0,1,2 son los 3 corazones
-                              // Si i < vidasRestantes, el corazón está lleno (rojo)
-                              // Si i >= vidasRestantes, el corazón está vacío (gris)
                               const estaLleno = i < vidasRestantes;
                               return (
                                 <span 
@@ -578,7 +575,7 @@ export default function AdminSurvivor() {
           </div>
         )}
 
-        {/* Tabla Usos por Equipo - CORREGIDA PARA MEJOR LEGIBILIDAD */}
+        {/* Tabla Usos por Equipo - OPTIMIZADA CON LETRA MÁS PEQUEÑA */}
         <div ref={tablaUsosRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-100">
             <h2 className="text-xl font-black text-slate-900">
@@ -590,11 +587,11 @@ export default function AdminSurvivor() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-max">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider">
-                  <th className="px-6 py-4 sticky left-0 bg-slate-50 z-10 border-r border-slate-200 font-bold">Equipo</th>
+                <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+                  <th className="px-3 py-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200 font-bold">Equipo</th>
                   {datosUsosEquipo.usuarios.map((usuario) => (
-                    <th key={usuario.id} className="px-4 py-4 text-center min-w-[100px] font-semibold">
-                      <div className="truncate max-w-[120px]" title={usuario.nombre}>{usuario.nombre}</div>
+                    <th key={usuario.id} className="px-2 py-3 text-center min-w-[80px] font-semibold">
+                      <div className="truncate max-w-[100px]" title={usuario.nombre}>{usuario.nombre}</div>
                     </th>
                   ))}
                 </tr>
@@ -602,11 +599,10 @@ export default function AdminSurvivor() {
               <tbody className="divide-y divide-slate-100">
                 {datosUsosEquipo.resultado.map((fila) => (
                   <tr key={fila.equipo} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-3 font-bold text-slate-800 sticky left-0 bg-white z-10 border-r border-slate-100">
+                    <td className="px-3 py-2 font-bold text-slate-800 text-xs sticky left-0 bg-white z-10 border-r border-slate-100">
                       {fila.equipo}
                     </td>
                     {fila.usosPorUsuario.map((uso) => {
-                      // CORRECCIÓN: Celdas completas coloreadas para mejor legibilidad
                       let bgColor = "bg-white";
                       let textColor = "text-slate-300";
                       let displayValue = "-";
@@ -628,7 +624,7 @@ export default function AdminSurvivor() {
                       return (
                         <td 
                           key={uso.usuario_id} 
-                          className={`px-4 py-3 text-center font-bold ${bgColor} ${textColor} transition-colors`}
+                          className={`px-2 py-2 text-center font-bold text-xs ${bgColor} ${textColor} transition-colors`}
                         >
                           {displayValue}
                         </td>
