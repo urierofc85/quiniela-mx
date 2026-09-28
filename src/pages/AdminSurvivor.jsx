@@ -7,33 +7,32 @@ import { obtenerHoraMexico } from "../services/horario";
 
 export default function AdminSurvivor() {
   //=========================================
-  // ESTADOS (LÓGICA INTACTA + SEGURIDAD)
+  // ESTADOS
   //=========================================
   const [jornadas, setJornadas] = useState([]);
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState("general");
 
   const [ranking, setRanking] = useState([]);
-  const [reporteJornada, setReporteJornada] = useState([]);
   const [cargando, setCargando] = useState(false);
 
   const [rawSurvivor, setRawSurvivor] = useState([]);
   const [rawPerfiles, setRawPerfiles] = useState([]);
   const [rawPartidos, setRawPartidos] = useState([]);
 
-  // 🚨 NUEVO: Estado para controlar la hora del servidor y el desbloqueo automático
+  // Se mantiene solo para la lógica interna de cálculo de vidas por no seleccionar, 
+  // pero YA NO bloquea la visualización ni exportación.
   const [horaMexico, setHoraMexico] = useState(null);
 
   const tablaRef = useRef(null);
-  const reporteRef = useRef(null);
   const tablaUsosRef = useRef(null);
+  const sobrevivientesRef = useRef(null); // 🚨 NUEVO: Referencia para la lista de sobrevivientes
 
   //=========================================
-  // INICIALIZACIÓN Y RELOJ DE SEGURIDAD
+  // INICIALIZACIÓN
   //=========================================
   useEffect(() => {
     cargarDatosIniciales();
     
-    // 🚨 Actualiza la hora cada 60 segundos para desbloquear automáticamente al llegar el límite
     const intervaloHora = setInterval(async () => {
       const hora = await obtenerHoraMexico();
       setHoraMexico(hora);
@@ -45,33 +44,28 @@ export default function AdminSurvivor() {
   useEffect(() => {
     if (rawSurvivor.length > 0 && jornadas.length > 0 && horaMexico) {
       calcularRanking();
-      cargarReporteJornada();
     }
   }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, jornadas, horaMexico]);
 
   //=========================================
-  // CARGA DE DATOS (LÓGICA INTACTA)
+  // CARGA DE DATOS
   //=========================================
   const cargarDatosIniciales = async () => {
     setCargando(true);
-
-    // 🚨 Obtener la hora inicial junto con los datos
     const horaInicial = await obtenerHoraMexico();
     setHoraMexico(horaInicial);
 
-    const [jornadasData, perfilesData, partidosData, survivorData] =
-      await Promise.all([
-        obtenerJornadas(),
-        obtenerPerfiles(),
-        obtenerPartidos(),
-        obtenerSurvivor(),
-      ]);
+    const [jornadasData, perfilesData, partidosData, survivorData] = await Promise.all([
+      obtenerJornadas(),
+      obtenerPerfiles(),
+      obtenerPartidos(),
+      obtenerSurvivor(),
+    ]);
 
     setJornadas(jornadasData);
     setRawPerfiles(perfilesData);
     setRawPartidos(partidosData);
     setRawSurvivor(survivorData);
-
     setCargando(false);
   };
 
@@ -100,32 +94,15 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // 🚨 VALIDACIÓN DE SEGURIDAD DE JORNADA
-  //=========================================
-  const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
-  
-  const jornadaEstaCerrada = useMemo(() => {
-    if (jornadaSeleccionada === "general") return true;
-    if (!jornadaActualObj || !horaMexico) return false;
-    
-    // Prioridad 1: Fecha límite configurada
-    if (jornadaActualObj.fecha_limite) {
-      return horaMexico > new Date(jornadaActualObj.fecha_limite);
-    }
-    // Prioridad 2: Estado manual de cerrada
-    return jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada";
-  }, [jornadaSeleccionada, jornadaActualObj, horaMexico]);
-
-  //=========================================
-  // 🚨 LÓGICA DEL RANKING (INTACTA)
+  // LÓGICA DEL RANKING (ACUMULATIVA Y CORREGIDA)
   //=========================================
   const calcularRanking = async () => {
-    // Usamos la hora del estado para mantener consistencia
     const horaActual = horaMexico || await obtenerHoraMexico();
 
+    // <= permite acumular vidas y puntos de todas las jornadas hasta la seleccionada
     const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
-      return Number(j.id) <= Number(jornadaSeleccionada); // <= para acumular correctamente
+      return Number(j.id) <= Number(jornadaSeleccionada);
     });
 
     const jornadasOrdenadas = [...jornadasAProcesar].sort((a, b) => Number(a.id) - Number(b.id));
@@ -187,6 +164,7 @@ export default function AdminSurvivor() {
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
+        // Se sobrescribe en cada iteración, quedando al final con el valor de la jornada seleccionada
         if (jornadaSeleccionada !== "general") {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
@@ -265,42 +243,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // 🚨 REPORTE DE ELECCIONES (CON BLOQUEO)
-  //=========================================
-  const cargarReporteJornada = () => {
-    if (jornadaSeleccionada === "general") {
-      setReporteJornada([]);
-      return;
-    }
-
-    // 🚨 BLOQUEO DE SEGURIDAD: Si la jornada no ha cerrado, no procesar ni mostrar datos
-    if (!jornadaEstaCerrada) {
-      setReporteJornada([]);
-      return;
-    }
-
-    const eleccionesJornada = rawSurvivor.filter(
-      (item) => Number(item.jornada_id) === Number(jornadaSeleccionada)
-    );
-
-    const filas = rawPerfiles.map((perfil) => {
-      const seleccion = eleccionesJornada.find(
-        (item) => item.usuario_id === perfil.id && item.equipo && String(item.equipo).trim() !== ""
-      );
-      const participante = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || "Sin nombre";
-
-      return {
-        participante,
-        seleccion: seleccion ? seleccion.equipo : "Sin selección",
-      };
-    });
-
-    filas.sort((a, b) => a.participante.localeCompare(b.participante));
-    setReporteJornada(filas);
-  };
-
-  //=========================================
-  // CALCULAR USOS POR EQUIPO (LÓGICA INTACTA)
+  // CALCULAR USOS POR EQUIPO
   //=========================================
   const datosUsosEquipo = useMemo(() => {
     const usuarios = rawPerfiles.map((u) => ({
@@ -339,18 +282,12 @@ export default function AdminSurvivor() {
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // 🚨 FUNCIONES PARA EXPORTAR (CON BLOQUEO)
+  // FUNCIONES PARA EXPORTAR (SIN RESTRICCIONES)
   //=========================================
   const esperarRender = () =>
     new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-  const exportarJPG = async (ref, nombreArchivo, esReporteElecciones = false) => {
-    // 🚨 BLOQUEO DE EXPORTACIÓN: Impide descargar el reporte si la jornada está abierta
-    if (esReporteElecciones && !jornadaEstaCerrada) {
-      alert("🔒 Acceso denegado: Las elecciones están bloqueadas hasta el cierre oficial de la jornada.");
-      return;
-    }
-
+  const exportarJPG = async (ref, nombreArchivo) => {
     if (!ref.current) {
       alert("No hay información visible para exportar.");
       return;
@@ -401,6 +338,11 @@ export default function AdminSurvivor() {
   //=========================================
   // RENDER
   //=========================================
+  const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
+  
+  // 🚨 FILTRO DE SOBREVIVIENTES: Solo los que tienen menos de 3 vidas perdidas
+  const sobrevivientes = ranking.filter((fila) => fila.vidas < 3);
+
   if (cargando || !horaMexico) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -422,7 +364,7 @@ export default function AdminSurvivor() {
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
               <span className="text-indigo-600">⚽</span> Panel Admin Survivor
             </h1>
-            <p className="text-slate-500 mt-1">Gestión de rankings, reportes y auditoría de usos.</p>
+            <p className="text-slate-500 mt-1">Gestión de rankings, auditoría de usos y lista de sobrevivientes.</p>
           </div>
         </div>
 
@@ -453,15 +395,14 @@ export default function AdminSurvivor() {
               Exportar Ranking (JPG)
             </button>
 
-            {jornadaSeleccionada !== "general" && (
-              <button
-                onClick={() => exportarJPG(reporteRef, `Elecciones-${jornadaActualObj?.nombre || "Jornada"}`, true)}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                Exportar Elecciones (JPG)
-              </button>
-            )}
+            {/* 🚨 NUEVO BOTÓN: Exportar Sobrevivientes */}
+            <button
+              onClick={() => exportarJPG(sobrevivientesRef, `Sobrevivientes-${jornadaActualObj?.nombre || "General"}`)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Exportar Sobrevivientes (JPG)
+            </button>
 
             <button
               onClick={exportarTablaUsosPDF}
@@ -473,14 +414,14 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* Tabla Ranking */}
+        {/* Tabla Ranking General */}
         <div ref={tablaRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
               {jornadaSeleccionada === "general" ? "Ranking General" : `Resultados: ${jornadaActualObj?.nombre || "Jornada"}`}
             </h2>
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
-              {ranking.length} Participantes {jornadaSeleccionada !== "general" && "(Activos)"}
+              {ranking.length} Participantes
             </span>
           </div>
 
@@ -499,13 +440,12 @@ export default function AdminSurvivor() {
                 {ranking.length === 0 ? (
                   <tr>
                     <td colSpan={jornadaSeleccionada !== "general" ? 5 : 4} className="px-6 py-12 text-center text-slate-500 font-medium">
-                      {jornadaSeleccionada !== "general" ? "No hay participantes activos en esta jornada." : "No se encontraron registros."}
+                      No se encontraron registros.
                     </td>
                   </tr>
                 ) : (
                   ranking.map((fila, index) => {
                     const vidasRestantes = Math.max(0, 3 - fila.vidas);
-                    
                     return (
                       <tr key={fila.usuario_id} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-4 text-center">
@@ -546,9 +486,7 @@ export default function AdminSurvivor() {
                                 <span 
                                   key={i} 
                                   className={`text-2xl transition-all ${
-                                    estaLleno 
-                                      ? "text-red-500 scale-100" 
-                                      : "text-slate-200 scale-90 grayscale"
+                                    estaLleno ? "text-red-500 scale-100" : "text-slate-200 scale-90 grayscale"
                                   }`}
                                 >
                                   ❤️
@@ -569,71 +507,68 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* 🚨 Reporte Elecciones (CON BLOQUEO DE SEGURIDAD) */}
-        {jornadaSeleccionada !== "general" && (
-          <div ref={reporteRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h2 className="text-xl font-black text-slate-900">Resumen de Elecciones: {jornadaActualObj?.nombre || ""}</h2>
-              
-              {/* Indicador visual de estado */}
-              {!jornadaEstaCerrada && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                  Oculto hasta el cierre
-                </span>
-              )}
+        {/* 🚨 NUEVA SECCIÓN: Lista Compacta de Sobrevivientes */}
+        <div ref={sobrevivientesRef} className="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-emerald-100 bg-emerald-50/50 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-emerald-900 flex items-center gap-2">
+                🌟 Lista de Sobrevivientes
+              </h2>
+              <p className="text-xs text-emerald-700 font-medium mt-0.5">
+                Participantes activos (vidas &gt; 0) ordenados por ranking.
+              </p>
             </div>
-            
-            {!jornadaEstaCerrada ? (
-              <div className="p-8 text-center bg-slate-50 border-b border-slate-100">
-                <p className="text-slate-600 font-medium flex flex-col items-center justify-center gap-2">
-                  <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                  <span>Las elecciones de los participantes están ocultas por seguridad.</span>
-                  <span className="text-sm text-slate-500">
-                    Se revelarán automáticamente al cerrar la jornada 
-                    {jornadaActualObj?.fecha_limite && ` (${new Date(jornadaActualObj.fecha_limite).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })})`}.
-                  </span>
-                </p>
-              </div>
-            ) : reporteJornada.length === 0 ? (
-              <div className="p-8 text-center bg-amber-50 border-b border-amber-100">
-                <p className="text-amber-800 font-medium flex items-center justify-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                  No se registraron selecciones válidas en esta jornada.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider">
-                      <th className="px-6 py-4">Participante</th>
-                      <th className="px-6 py-4 text-center">Equipo Seleccionado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {reporteJornada.map((fila, index) => (
-                      <tr key={index} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 font-medium text-slate-800">{fila.participante}</td>
-                        <td className="px-6 py-4 text-center">
-                          {fila.seleccion === "Sin selección" ? (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
-                              Sin selección
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              {sobrevivientes.length} Activos
+            </span>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-emerald-100/50 text-emerald-800 text-xs font-black uppercase tracking-wider">
+                  <th className="px-6 py-3 w-16 text-center">Pos</th>
+                  <th className="px-6 py-3">Participante</th>
+                  <th className="px-6 py-3 text-center">Puntos</th>
+                  <th className="px-6 py-3">Equipo</th>
+                  <th className="px-6 py-3 w-24 text-center">Vidas</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-emerald-100">
+                {sobrevivientes.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-emerald-600 font-medium">
+                      No hay sobrevivientes en esta jornada.
+                    </td>
+                  </tr>
+                ) : (
+                  sobrevivientes.map((fila, index) => {
+                    const vidasRestantes = 3 - fila.vidas;
+                    return (
+                      <tr key={fila.usuario_id} className="hover:bg-emerald-50/50 transition-colors">
+                        <td className="px-6 py-3 text-center font-bold text-emerald-700">{index + 1}</td>
+                        <td className="px-6 py-3 font-semibold text-slate-800">{fila.nombre}</td>
+                        <td className="px-6 py-3 text-center font-bold text-slate-700">{fila.puntos}</td>
+                        <td className="px-6 py-3 text-sm text-slate-600 font-medium">
+                          {fila.equipoElegido !== "-" ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                              {fila.equipoElegido}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              {fila.seleccion}
-                            </span>
+                            <span className="text-slate-400 italic text-xs">Sin equipo registrado</span>
                           )}
                         </td>
+                        <td className="px-6 py-3 text-center font-black text-xl text-emerald-600">
+                          {vidasRestantes}
+                        </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
 
         {/* Tabla Usos por Equipo */}
         <div ref={tablaUsosRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
