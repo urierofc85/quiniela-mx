@@ -291,7 +291,7 @@ export default function AdminSurvivor() {
       await new Promise(resolve => setTimeout(resolve, 150));
       
       const canvas = await html2canvas(ref.current, {
-        scale: 2, // Reducido de 3 a 2 para evitar errores de "Canvas area exceeds maximum limit"
+        scale: 2, // Escala 2 es el punto dulce: buena calidad sin exceder el límite de memoria del canvas
         useCORS: true, 
         allowTaint: true, 
         logging: false, 
@@ -419,13 +419,13 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* Tabla Ranking General */}
-        <div ref={tablaRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+        {/* Tabla Ranking General (Con colores hex inline para evitar error oklch en html2canvas) */}
+        <div ref={tablaRef} className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden" style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
+          <div className="px-6 py-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: '#f1f5f9' }}>
+            <h2 className="text-xl font-black flex items-center gap-2" style={{ color: '#0f172a' }}>
               {jornadaSeleccionada === "general" ? "Ranking General" : `Resultados: ${jornadaActualObj?.nombre || "Jornada"}`}
             </h2>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
               {ranking.length} Participantes
             </span>
           </div>
@@ -433,7 +433,7 @@ export default function AdminSurvivor() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider">
+                <tr className="text-xs font-black uppercase tracking-wider" style={{ backgroundColor: '#f8fafc', color: '#64748b' }}>
                   <th className="px-6 py-4 w-20 text-center">Pos</th>
                   <th className="px-6 py-4">Participante</th>
                   {jornadaSeleccionada !== "general" && <th className="px-6 py-4">Equipo Elegido</th>}
@@ -441,10 +441,10 @@ export default function AdminSurvivor() {
                   <th className="px-6 py-4 w-40 text-center">Vidas Restantes</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {ranking.length === 0 ? (
                   <tr>
-                    <td colSpan={jornadaSeleccionada !== "general" ? 5 : 4} className="px-6 py-12 text-center text-slate-500 font-medium">
+                    <td colSpan={jornadaSeleccionada !== "general" ? 5 : 4} className="px-6 py-12 text-center font-medium" style={{ color: '#64748b', borderBottom: '1px solid #f1f5f9' }}>
                       No se encontraron registros.
                     </td>
                   </tr>
@@ -452,32 +452,31 @@ export default function AdminSurvivor() {
                   ranking.map((fila, index) => {
                     const vidasRestantes = Math.max(0, 3 - fila.vidas);
                     return (
-                      <tr key={fila.usuario_id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={fila.usuario_id} className="transition-colors" style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td className="px-6 py-4 text-center">
-                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm ${
-                            index === 0 ? "bg-yellow-100 text-yellow-700" :
-                            index === 1 ? "bg-slate-200 text-slate-700" :
-                            index === 2 ? "bg-orange-100 text-orange-800" : "text-slate-500"
-                          }`}>
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm" style={{ 
+                            backgroundColor: index === 0 ? '#fef9c3' : index === 1 ? '#e2e8f0' : index === 2 ? '#ffedd5' : 'transparent',
+                            color: index === 0 ? '#a16207' : index === 1 ? '#334155' : index === 2 ? '#9a3412' : '#64748b'
+                          }}>
                             {index + 1}
                           </span>
                         </td>
-                        <td className="px-6 py-4 font-bold text-slate-800">{fila.nombre}</td>
+                        <td className="px-6 py-4 font-bold" style={{ color: '#1e293b' }}>{fila.nombre}</td>
                         
                         {jornadaSeleccionada !== "general" && (
-                          <td className="px-6 py-4 text-sm font-medium text-slate-600">
+                          <td className="px-6 py-4 text-sm font-medium" style={{ color: '#475569' }}>
                             {fila.equipoElegido === "Sin selección" ? (
-                              <span className="text-red-500 italic">Sin selección</span>
+                              <span className="italic" style={{ color: '#ef4444' }}>Sin selección</span>
                             ) : fila.equipoElegido}
                           </td>
                         )}
                         
                         <td className="px-6 py-4 text-center">
-                          <div className={`text-lg font-black ${fila.tuvoInfraccion ? "text-red-600" : "text-slate-800"}`}>
+                          <div className="text-lg font-black" style={{ color: fila.tuvoInfraccion ? '#dc2626' : '#1e293b' }}>
                             {fila.puntos}
                           </div>
                           {fila.tuvoInfraccion && (
-                            <span className="inline-block mt-1 text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                            <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full border" style={{ color: '#b91c1c', backgroundColor: '#fee2e2', borderColor: '#fecaca' }}>
                               ⚠️ Penalizado
                             </span>
                           )}
@@ -490,9 +489,12 @@ export default function AdminSurvivor() {
                               return (
                                 <span 
                                   key={i} 
-                                  className={`text-2xl transition-all ${
-                                    estaLleno ? "text-red-500 scale-100" : "text-slate-200 scale-90 grayscale"
-                                  }`}
+                                  className="text-2xl transition-all"
+                                  style={{ 
+                                    color: estaLleno ? '#ef4444' : '#e2e8f0',
+                                    transform: estaLleno ? 'scale(1)' : 'scale(0.9)',
+                                    filter: estaLleno ? 'none' : 'grayscale(100%)'
+                                  }}
                                 >
                                   ❤️
                                 </span>
@@ -500,7 +502,7 @@ export default function AdminSurvivor() {
                             })}
                           </div>
                           {fila.vidas >= 3 && (
-                            <span className="text-xs font-bold text-red-600 mt-1 block">Eliminado</span>
+                            <span className="text-xs font-bold block mt-1" style={{ color: '#dc2626' }}>Eliminado</span>
                           )}
                         </td>
                       </tr>
@@ -512,18 +514,22 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* Lista Compacta de Sobrevivientes */}
-        <div ref={sobrevivientesRef} className="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-emerald-100 bg-emerald-50/50 flex items-center justify-between">
+        {/* Lista Compacta de Sobrevivientes (Con colores hex inline para evitar error oklch en html2canvas) */}
+        <div 
+          ref={sobrevivientesRef} 
+          className="rounded-2xl border-2 shadow-sm overflow-hidden"
+          style={{ backgroundColor: '#ffffff', borderColor: '#d1d5db' }}
+        >
+          <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: '#e5e7eb', backgroundColor: '#f9fafb' }}>
             <div>
-              <h2 className="text-lg font-black text-emerald-900 flex items-center gap-2">
+              <h2 className="text-lg font-black flex items-center gap-2" style={{ color: '#065f46' }}>
                 🌟 Lista de Sobrevivientes
               </h2>
-              <p className="text-xs text-emerald-700 font-medium mt-0.5">
+              <p className="text-xs font-medium mt-0.5" style={{ color: '#047857' }}>
                 Participantes activos (vidas &gt; 0) ordenados por ranking.
               </p>
             </div>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border" style={{ backgroundColor: '#d1fae5', color: '#065f46', borderColor: '#a7f3d0' }}>
               {sobrevivientes.length} Activos
             </span>
           </div>
@@ -531,7 +537,7 @@ export default function AdminSurvivor() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-emerald-100/50 text-emerald-800 text-xs font-black uppercase tracking-wider">
+                <tr className="text-xs font-black uppercase tracking-wider" style={{ backgroundColor: '#ecfdf5', color: '#065f46' }}>
                   <th className="px-6 py-3 w-16 text-center">Pos</th>
                   <th className="px-6 py-3">Participante</th>
                   <th className="px-6 py-3 text-center">Puntos</th>
@@ -539,10 +545,10 @@ export default function AdminSurvivor() {
                   <th className="px-6 py-3 w-24 text-center">Vidas</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-emerald-100">
+              <tbody>
                 {sobrevivientes.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-emerald-600 font-medium">
+                    <td colSpan={5} className="px-6 py-8 text-center font-medium" style={{ color: '#047857', borderBottom: '1px solid #e5e7eb' }}>
                       No hay sobrevivientes en esta jornada.
                     </td>
                   </tr>
@@ -550,20 +556,20 @@ export default function AdminSurvivor() {
                   sobrevivientes.map((fila, index) => {
                     const vidasRestantes = 3 - fila.vidas;
                     return (
-                      <tr key={fila.usuario_id} className="hover:bg-emerald-50/50 transition-colors">
-                        <td className="px-6 py-3 text-center font-bold text-emerald-700">{index + 1}</td>
-                        <td className="px-6 py-3 font-semibold text-slate-800">{fila.nombre}</td>
-                        <td className="px-6 py-3 text-center font-bold text-slate-700">{fila.puntos}</td>
-                        <td className="px-6 py-3 text-sm text-slate-600 font-medium">
+                      <tr key={fila.usuario_id} className="transition-colors" style={{ borderBottom: '1px solid #e5e7eb' }}>
+                        <td className="px-6 py-3 text-center font-bold" style={{ color: '#059669' }}>{index + 1}</td>
+                        <td className="px-6 py-3 font-semibold" style={{ color: '#111827' }}>{fila.nombre}</td>
+                        <td className="px-6 py-3 text-center font-bold" style={{ color: '#1f2937' }}>{fila.puntos}</td>
+                        <td className="px-6 py-3 text-sm font-medium" style={{ color: '#374151' }}>
                           {fila.equipoElegido !== "-" ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded border" style={{ backgroundColor: '#f3f4f6', color: '#1f2937', borderColor: '#d1d5db' }}>
                               {fila.equipoElegido}
                             </span>
                           ) : (
-                            <span className="text-slate-400 italic text-xs">Sin equipo registrado</span>
+                            <span className="italic text-xs" style={{ color: '#9ca3af' }}>Sin equipo registrado</span>
                           )}
                         </td>
-                        <td className="px-6 py-3 text-center font-black text-xl text-emerald-600">
+                        <td className="px-6 py-3 text-center font-black text-xl" style={{ color: '#dc2626' }}>
                           {vidasRestantes}
                         </td>
                       </tr>
