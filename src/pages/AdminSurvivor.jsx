@@ -19,13 +19,11 @@ export default function AdminSurvivor() {
   const [rawPerfiles, setRawPerfiles] = useState([]);
   const [rawPartidos, setRawPartidos] = useState([]);
 
-  // Se mantiene solo para la lógica interna de cálculo de vidas por no seleccionar, 
-  // pero YA NO bloquea la visualización ni exportación.
   const [horaMexico, setHoraMexico] = useState(null);
 
   const tablaRef = useRef(null);
   const tablaUsosRef = useRef(null);
-  const sobrevivientesRef = useRef(null); // 🚨 NUEVO: Referencia para la lista de sobrevivientes
+  const sobrevivientesRef = useRef(null);
 
   //=========================================
   // INICIALIZACIÓN
@@ -94,12 +92,11 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING (ACUMULATIVA Y CORREGIDA)
+  // LÓGICA DEL RANKING
   //=========================================
   const calcularRanking = async () => {
     const horaActual = horaMexico || await obtenerHoraMexico();
 
-    // <= permite acumular vidas y puntos de todas las jornadas hasta la seleccionada
     const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
       return Number(j.id) <= Number(jornadaSeleccionada);
@@ -164,7 +161,6 @@ export default function AdminSurvivor() {
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
-        // Se sobrescribe en cada iteración, quedando al final con el valor de la jornada seleccionada
         if (jornadaSeleccionada !== "general") {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
@@ -282,24 +278,36 @@ export default function AdminSurvivor() {
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // FUNCIONES PARA EXPORTAR (SIN RESTRICCIONES)
+  // 🚨 FUNCIONES PARA EXPORTAR (REFORZADAS)
   //=========================================
-  const esperarRender = () =>
-    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
   const exportarJPG = async (ref, nombreArchivo) => {
-    if (!ref.current) {
-      alert("No hay información visible para exportar.");
+    if (!ref || !ref.current) {
+      alert("⚠️ No se encontró el elemento a exportar. Intenta de nuevo.");
       return;
     }
-    await esperarRender();
-    const canvas = await html2canvas(ref.current, {
-      scale: 3, useCORS: true, allowTaint: true, logging: false, backgroundColor: "#ffffff",
-    });
-    const link = document.createElement("a");
-    link.download = `${nombreArchivo}.jpg`;
-    link.href = canvas.toDataURL("image/jpeg", 1);
-    link.click();
+    
+    try {
+      // Pequeña pausa para asegurar que el DOM está completamente renderizado
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      const canvas = await html2canvas(ref.current, {
+        scale: 2, // Reducido de 3 a 2 para evitar errores de "Canvas area exceeds maximum limit"
+        useCORS: true, 
+        allowTaint: true, 
+        logging: false, 
+        backgroundColor: "#ffffff",
+        windowWidth: ref.current.scrollWidth,
+        windowHeight: ref.current.scrollHeight
+      });
+      
+      const link = document.createElement("a");
+      link.download = `${nombreArchivo}.jpg`;
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
+      link.click();
+    } catch (error) {
+      console.error("Error al exportar JPG:", error);
+      alert("❌ Ocurrió un error al generar la imagen. Revisa la consola del navegador (F12) para más detalles.");
+    }
   };
 
   const exportarTablaUsosPDF = () => {
@@ -339,8 +347,6 @@ export default function AdminSurvivor() {
   // RENDER
   //=========================================
   const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
-  
-  // 🚨 FILTRO DE SOBREVIVIENTES: Solo los que tienen menos de 3 vidas perdidas
   const sobrevivientes = ranking.filter((fila) => fila.vidas < 3);
 
   if (cargando || !horaMexico) {
@@ -395,7 +401,6 @@ export default function AdminSurvivor() {
               Exportar Ranking (JPG)
             </button>
 
-            {/* 🚨 NUEVO BOTÓN: Exportar Sobrevivientes */}
             <button
               onClick={() => exportarJPG(sobrevivientesRef, `Sobrevivientes-${jornadaActualObj?.nombre || "General"}`)}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
@@ -507,7 +512,7 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* 🚨 NUEVA SECCIÓN: Lista Compacta de Sobrevivientes */}
+        {/* Lista Compacta de Sobrevivientes */}
         <div ref={sobrevivientesRef} className="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-emerald-100 bg-emerald-50/50 flex items-center justify-between">
             <div>
