@@ -7,7 +7,7 @@ import { obtenerHoraMexico } from "../services/horario";
 
 export default function AdminSurvivor() {
   //=========================================
-  // ESTADOS
+  // ESTADOS (LÓGICA INTACTA + SEGURIDAD)
   //=========================================
   const [jornadas, setJornadas] = useState([]);
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState("general");
@@ -20,29 +20,44 @@ export default function AdminSurvivor() {
   const [rawPerfiles, setRawPerfiles] = useState([]);
   const [rawPartidos, setRawPartidos] = useState([]);
 
+  // 🚨 NUEVO: Estado para controlar la hora del servidor y el desbloqueo automático
+  const [horaMexico, setHoraMexico] = useState(null);
+
   const tablaRef = useRef(null);
   const reporteRef = useRef(null);
   const tablaUsosRef = useRef(null);
 
   //=========================================
-  // INICIALIZACIÓN
+  // INICIALIZACIÓN Y RELOJ DE SEGURIDAD
   //=========================================
   useEffect(() => {
     cargarDatosIniciales();
+    
+    // 🚨 Actualiza la hora cada 60 segundos para desbloquear automáticamente al llegar el límite
+    const intervaloHora = setInterval(async () => {
+      const hora = await obtenerHoraMexico();
+      setHoraMexico(hora);
+    }, 60000);
+
+    return () => clearInterval(intervaloHora);
   }, []);
 
   useEffect(() => {
-    if (rawSurvivor.length > 0 && jornadas.length > 0) {
+    if (rawSurvivor.length > 0 && jornadas.length > 0 && horaMexico) {
       calcularRanking();
       cargarReporteJornada();
     }
-  }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, jornadas]);
+  }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, jornadas, horaMexico]);
 
   //=========================================
-  // CARGA DE DATOS (SUPABASE)
+  // CARGA DE DATOS (LÓGICA INTACTA)
   //=========================================
   const cargarDatosIniciales = async () => {
     setCargando(true);
+
+    // 🚨 Obtener la hora inicial junto con los datos
+    const horaInicial = await obtenerHoraMexico();
+    setHoraMexico(horaInicial);
 
     const [jornadasData, perfilesData, partidosData, survivorData] =
       await Promise.all([
@@ -61,10 +76,7 @@ export default function AdminSurvivor() {
   };
 
   const obtenerJornadas = async () => {
-    const { data, error } = await supabase
-      .from("jornadas")
-      .select("*")
-      .order("id");
+    const { data, error } = await supabase.from("jornadas").select("*").order("id");
     if (error) console.error(error);
     return data || [];
   };
@@ -88,17 +100,34 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING
+  // 🚨 VALIDACIÓN DE SEGURIDAD DE JORNADA
+  //=========================================
+  const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
+  
+  const jornadaEstaCerrada = useMemo(() => {
+    if (jornadaSeleccionada === "general") return true;
+    if (!jornadaActualObj || !horaMexico) return false;
+    
+    // Prioridad 1: Fecha límite configurada
+    if (jornadaActualObj.fecha_limite) {
+      return horaMexico > new Date(jornadaActualObj.fecha_limite);
+    }
+    // Prioridad 2: Estado manual de cerrada
+    return jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada";
+  }, [jornadaSeleccionada, jornadaActualObj, horaMexico]);
+
+  //=========================================
+  // 🚨 LÓGICA DEL RANKING (INTACTA)
   //=========================================
   const calcularRanking = async () => {
-    const horaMexico = await obtenerHoraMexico();
+    // Usamos la hora del estado para mantener consistencia
+    const horaActual = horaMexico || await obtenerHoraMexico();
 
     const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
-      return Number(j.id) === Number(jornadaSeleccionada);
+      return Number(j.id) <= Number(jornadaSeleccionada); // <= para acumular correctamente
     });
 
-    // Aseguramos que las jornadas a procesar estén en orden cronológico
     const jornadasOrdenadas = [...jornadasAProcesar].sort((a, b) => Number(a.id) - Number(b.id));
 
     const acumulado = {};
@@ -109,40 +138,41 @@ export default function AdminSurvivor() {
         puntos: 0,
         vidas: 0,
         equipoElegido: "-",
+        tuvoInfraccion: false,
       };
     });
 
-    // 🚨 PASO 1: Identificar cuáles selecciones específicas son "infracciones" (4ta vez o más)
-    // Agrupamos todas las selecciones de survivor por usuario y por equipo base
     const seleccionesPorUsuarioYEquipo = {};
     rawSurvivor.forEach(s => {
-      if (!seleccionesPorUsuarioYEquipo[s.usuario_id]) {
-        seleccionesPorUsuarioYEquipo[s.usuario_id] = {};
-      }
+      if (!s.equipo || !String(s.equipo).trim()) return;
+      if (!seleccionesPorUsuarioYEquipo[s.usuario_id]) seleccionesPorUsuarioYEquipo[s.usuario_id] = {};
       const baseTeam = s.equipo.split(' (vs ')[0].trim().toLowerCase();
-      if (!seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam]) {
-        seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam] = [];
-      }
+      if (!seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam]) seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam] = [];
       seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam].push(s);
     });
 
-    // Marcamos las selecciones que son infracción (índice >= 3, es decir, la 4ta en adelante)
-    // Ordenamos por jornada_id para asegurar que las primeras 3 cronológicas son las válidas
     const seleccionesInfraccion = new Set();
     Object.keys(seleccionesPorUsuarioYEquipo).forEach(userId => {
       Object.keys(seleccionesPorUsuarioYEquipo[userId]).forEach(team => {
         const selecciones = seleccionesPorUsuarioYEquipo[userId][team].sort((a, b) => Number(a.jornada_id) - Number(b.jornada_id));
         for (let i = 3; i < selecciones.length; i++) {
-          // Guardamos un identificador único de la selección infractora: "userId_jornadaId"
           seleccionesInfraccion.add(`${userId}_${selecciones[i].jornada_id}`);
         }
       });
     });
 
-    // 🚨 PASO 2: Procesar jornadas y aplicar lógica
+    const usuariosConSeleccionPorJornada = {};
+    rawSurvivor.forEach(s => {
+      if (s.equipo && String(s.equipo).trim() !== "") {
+        const key = String(s.jornada_id);
+        if (!usuariosConSeleccionPorJornada[key]) usuariosConSeleccionPorJornada[key] = new Set();
+        usuariosConSeleccionPorJornada[key].add(String(s.usuario_id));
+      }
+    });
+
     for (const jornada of jornadasOrdenadas) {
       const esPasadaYCerrada = jornada.fecha_limite
-        ? horaMexico > new Date(jornada.fecha_limite)
+        ? horaActual > new Date(jornada.fecha_limite)
         : jornada.cerrada === true || jornada.estado === "cerrada";
 
       const eleccionesJornada = rawSurvivor.filter(
@@ -150,7 +180,10 @@ export default function AdminSurvivor() {
       );
 
       rawPerfiles.forEach((usuario) => {
-        const seleccion = eleccionesJornada.find((s) => s.usuario_id === usuario.id);
+        const seleccion = eleccionesJornada.find(
+          (s) => s.usuario_id === usuario.id && s.equipo && String(s.equipo).trim() !== ""
+        );
+
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
@@ -158,45 +191,29 @@ export default function AdminSurvivor() {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
-        // 1. Si no hay selección y la jornada ya cerró, pierde una vida (con tope de 3)
         if (!seleccion && esPasadaYCerrada) {
-          if (registroAcumulado.vidas < 3) {
-            registroAcumulado.vidas += 1;
-          }
+          if (registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
           return;
         }
 
-        // Si no hay selección pero la jornada no ha cerrado, no hacemos nada
-        if (!seleccion) {
-          return;
-        }
+        if (!seleccion) return;
 
-        // 🚨 VERIFICAR SI ESTA SELECCIÓN ES UNA INFRACCIÓN
         const esInfraccion = seleccionesInfraccion.has(`${usuario.id}_${jornada.id}`);
 
         const partes = seleccion.equipo.split(' (vs ');
         const nombreEquipoBase = partes[0].trim().toLowerCase();
         const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
 
-        // Buscar el partido que coincida con AMBOS equipos
         const partido = rawPartidos.find((p) => {
-          const esMismaJornada = Number(p.jornada_id) === Number(jornada.id);
-          if (!esMismaJornada) return false;
-
+          if (Number(p.jornada_id) !== Number(jornada.id)) return false;
           const localLimpio = p.local.trim().toLowerCase();
           const visitaLimpio = p.visitante.trim().toLowerCase();
-
           const esEquipoLocal = localLimpio === nombreEquipoBase;
           const esEquipoVisita = visitaLimpio === nombreEquipoBase;
-
           if (!esEquipoLocal && !esEquipoVisita) return false;
-
           if (nombreRivalBase) {
-            const esRivalCorrecto = (esEquipoLocal && visitaLimpio === nombreRivalBase) || 
-                                    (esEquipoVisita && localLimpio === nombreRivalBase);
-            return esRivalCorrecto;
+            return (esEquipoLocal && visitaLimpio === nombreRivalBase) || (esEquipoVisita && localLimpio === nombreRivalBase);
           }
-
           return true;
         });
 
@@ -205,15 +222,12 @@ export default function AdminSurvivor() {
         let puntos = 0;
         let perdio = false;
 
-        // 🚨 LÓGICA DE PUNTUACIÓN CONDICIONAL
         if (esInfraccion) {
-          // Si es la 4ta vez o más: 0 puntos y se marca como pérdida de vida, SIN IMPORTAR EL RESULTADO
           puntos = 0;
-          perdio = true; 
+          perdio = true;
+          registroAcumulado.tuvoInfraccion = true;
         } else {
-          // Cálculo normal si está dentro del límite de 3
           const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
-
           if (esLocal) {
             if (partido.resultado === "L") puntos = 3;
             else if (partido.resultado === "E") puntos = 1;
@@ -226,27 +240,24 @@ export default function AdminSurvivor() {
         }
 
         registroAcumulado.puntos += puntos;
-        
-        // 2. Si perdió el partido (o fue infracción), suma una vida perdida (con tope de 3)
-        if (perdio) {
-          if (registroAcumulado.vidas < 3) {
-            registroAcumulado.vidas += 1;
-          }
-        }
+        if (perdio && registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
       });
     }
 
-    // 3. ORDEN DE CLASIFICACIÓN:
-    const rankingFinal = Object.values(acumulado).sort((a, b) => {
-      // Primero: Menor cantidad de vidas perdidas (0 es el mejor lugar)
-      if (a.vidas !== b.vidas) {
-        return a.vidas - b.vidas;
-      }
-      // Segundo: Mayor cantidad de puntos totales
-      if (b.puntos !== a.puntos) {
-        return b.puntos - a.puntos;
-      }
-      // Tercero: Orden alfabético por nombre como desempate final
+    let rankingFinal = Object.values(acumulado);
+
+    if (jornadaSeleccionada !== "general") {
+      const usuariosConSeleccionEnEstaJornada = usuariosConSeleccionPorJornada[String(jornadaSeleccionada)] || new Set();
+      rankingFinal = rankingFinal.filter((fila) => {
+        if (!usuariosConSeleccionEnEstaJornada.has(String(fila.usuario_id))) return false;
+        if (fila.vidas >= 3) return false;
+        return true;
+      });
+    }
+
+    rankingFinal.sort((a, b) => {
+      if (a.vidas !== b.vidas) return a.vidas - b.vidas;
+      if (b.puntos !== a.puntos) return b.puntos - a.puntos;
       return a.nombre.localeCompare(b.nombre);
     });
 
@@ -254,10 +265,16 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // REPORTE DE ELECCIONES POR JORNADA
+  // 🚨 REPORTE DE ELECCIONES (CON BLOQUEO)
   //=========================================
   const cargarReporteJornada = () => {
     if (jornadaSeleccionada === "general") {
+      setReporteJornada([]);
+      return;
+    }
+
+    // 🚨 BLOQUEO DE SEGURIDAD: Si la jornada no ha cerrado, no procesar ni mostrar datos
+    if (!jornadaEstaCerrada) {
       setReporteJornada([]);
       return;
     }
@@ -267,12 +284,10 @@ export default function AdminSurvivor() {
     );
 
     const filas = rawPerfiles.map((perfil) => {
-      const seleccion = eleccionesJornada.find((item) => item.usuario_id === perfil.id);
-      const participante =
-        perfil?.nombre_usuario ||
-        perfil?.nombre ||
-        perfil?.nombre_completo ||
-        "Sin nombre";
+      const seleccion = eleccionesJornada.find(
+        (item) => item.usuario_id === perfil.id && item.equipo && String(item.equipo).trim() !== ""
+      );
+      const participante = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || "Sin nombre";
 
       return {
         participante,
@@ -285,7 +300,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // CALCULAR USOS POR EQUIPO (OPTIMIZADO CON USEMEMO)
+  // CALCULAR USOS POR EQUIPO (LÓGICA INTACTA)
   //=========================================
   const datosUsosEquipo = useMemo(() => {
     const usuarios = rawPerfiles.map((u) => ({
@@ -303,455 +318,375 @@ export default function AdminSurvivor() {
 
     const conteo = {};
     rawSurvivor.forEach((registro) => {
+      if (!registro.equipo || !String(registro.equipo).trim()) return;
       const usuarioId = registro.usuario_id;
       const equipoBase = registro.equipo.split(' (vs ')[0].trim();
       
-      if (!conteo[usuarioId]) {
-        conteo[usuarioId] = {};
-      }
-      if (!conteo[usuarioId][equipoBase]) {
-        conteo[usuarioId][equipoBase] = 0;
-      }
+      if (!conteo[usuarioId]) conteo[usuarioId] = {};
+      if (!conteo[usuarioId][equipoBase]) conteo[usuarioId][equipoBase] = 0;
       conteo[usuarioId][equipoBase]++;
     });
 
     const resultado = equiposLigaMx.map((equipo) => {
       const usosPorUsuario = usuarios.map((usuario) => {
         const cantidad = conteo[usuario.id]?.[equipo] || 0;
-        return {
-          usuario_id: usuario.id,
-          cantidad,
-        };
+        return { usuario_id: usuario.id, cantidad };
       });
-      return {
-        equipo,
-        usosPorUsuario,
-      };
+      return { equipo, usosPorUsuario };
     });
 
     return { usuarios, resultado };
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // FUNCIONES PARA EXPORTAR IMAGEN JPG
+  // 🚨 FUNCIONES PARA EXPORTAR (CON BLOQUEO)
   //=========================================
   const esperarRender = () =>
-    new Promise((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(resolve))
-    );
+    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-  const exportarJPG = async (ref, nombreArchivo) => {
+  const exportarJPG = async (ref, nombreArchivo, esReporteElecciones = false) => {
+    // 🚨 BLOQUEO DE EXPORTACIÓN: Impide descargar el reporte si la jornada está abierta
+    if (esReporteElecciones && !jornadaEstaCerrada) {
+      alert("🔒 Acceso denegado: Las elecciones están bloqueadas hasta el cierre oficial de la jornada.");
+      return;
+    }
+
     if (!ref.current) {
       alert("No hay información visible para exportar.");
       return;
     }
-
     await esperarRender();
-
     const canvas = await html2canvas(ref.current, {
-      scale: 3,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      backgroundColor: "#ffffff",
+      scale: 3, useCORS: true, allowTaint: true, logging: false, backgroundColor: "#ffffff",
     });
-
     const link = document.createElement("a");
     link.download = `${nombreArchivo}.jpg`;
     link.href = canvas.toDataURL("image/jpeg", 1);
     link.click();
   };
 
-  //=========================================
-  // EXPORTAR USOS POR EQUIPO EN PDF
-  //=========================================
   const exportarTablaUsosPDF = () => {
     const { usuarios, resultado } = datosUsosEquipo;
-
     if (usuarios.length === 0 || resultado.length === 0) {
       alert("No hay datos para exportar.");
       return;
     }
 
-    const doc = new jsPDF({
-      orientation: "landscape",
-      unit: "pt",
-      format: "a4",
-    });
-
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
     const head = [["Equipo", ...usuarios.map((u) => u.nombre)]];
-
-    const body = resultado.map((row) => [
-      row.equipo,
-      ...row.usosPorUsuario.map((u) => u.cantidad),
-    ]);
-
-    const jornadaNombre =
-      jornadaSeleccionada === "general"
-        ? "General"
-        : jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada))
-            ?.nombre || "";
+    const body = resultado.map((row) => [row.equipo, ...row.usosPorUsuario.map((u) => u.cantidad)]);
+    const jornadaNombre = jornadaSeleccionada === "general" ? "General" : jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada))?.nombre || "";
 
     doc.setFontSize(16);
     doc.text(`Usos por Equipo - ${jornadaNombre}`, 40, 40);
 
     autoTable(doc, {
-      startY: 50,
-      head: head,
-      body: body,
-      styles: {
-        fontSize: 8,
-        cellPadding: 4,
-        halign: "center",
-        valign: "middle",
-      },
-      headStyles: {
-        fillColor: [243, 244, 246],
-        textColor: [55, 65, 81],
-        fontStyle: "bold",
-        halign: "center",
-      },
-      columnStyles: {
-        0: { halign: "left", fontStyle: "bold" },
-      },
+      startY: 50, head, body,
+      styles: { fontSize: 8, cellPadding: 4, halign: "center", valign: "middle" },
+      headStyles: { fillColor: [243, 244, 246], textColor: [55, 65, 81], fontStyle: "bold", halign: "center" },
+      columnStyles: { 0: { halign: "left", fontStyle: "bold" } },
       didParseCell: (data) => {
         if (data.section === "body" && data.column.index > 0) {
           const valor = Number(data.cell.raw);
-          if (valor === 1) {
-            data.cell.styles.fillColor = [34, 197, 94];
-            data.cell.styles.textColor = [255, 255, 255];
-          } else if (valor === 2) {
-            data.cell.styles.fillColor = [250, 204, 21];
-            data.cell.styles.textColor = [0, 0, 0];
-          } else if (valor >= 3) {
-            data.cell.styles.fillColor = [239, 68, 68];
-            data.cell.styles.textColor = [255, 255, 255];
-          } else {
-            data.cell.styles.fillColor = [255, 255, 255];
-            data.cell.styles.textColor = [156, 163, 175];
-          }
+          if (valor === 1) { data.cell.styles.fillColor = [34, 197, 94]; data.cell.styles.textColor = [255, 255, 255]; }
+          else if (valor === 2) { data.cell.styles.fillColor = [250, 204, 21]; data.cell.styles.textColor = [0, 0, 0]; }
+          else if (valor >= 3) { data.cell.styles.fillColor = [239, 68, 68]; data.cell.styles.textColor = [255, 255, 255]; }
+          else { data.cell.styles.fillColor = [255, 255, 255]; data.cell.styles.textColor = [156, 163, 175]; }
         }
       },
     });
-
     doc.save(`UsosPorEquipo_${jornadaNombre}.pdf`);
   };
 
   //=========================================
   // RENDER
   //=========================================
-  const jornadaActualObj = jornadas.find(
-    (j) => Number(j.id) === Number(jornadaSeleccionada)
-  );
+  if (cargando || !horaMexico) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center max-w-sm w-full">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-lg font-bold text-slate-800">Cargando panel de administración...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ backgroundColor: "#f3f4f6", minHeight: "100vh", padding: "24px" }}>
-      <h1 className="text-3xl font-bold mb-6" style={{ color: "#111827" }}>
-        🏆 Panel Admin Survivor
-      </h1>
-
-      {/* CONTROLES */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <label className="font-semibold" style={{ color: "#374151" }}>
-          Filtrar vista:
-        </label>
-        <select
-          value={jornadaSeleccionada}
-          onChange={(e) => {
-            const val = e.target.value;
-            setJornadaSeleccionada(val === "general" ? "general" : Number(val));
-          }}
-          className="rounded-lg px-4 py-2 font-medium focus:outline-none"
-          style={{
-            backgroundColor: "#ffffff",
-            border: "1px solid #d1d5db",
-            color: "#111827",
-          }}
-        >
-          <option value="general">🏆 Ranking General (Acumulado)</option>
-          <optgroup label="Jornadas Individuales">
-            {jornadas.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.nombre}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-
-        <button
-          onClick={() =>
-            exportarJPG(
-              tablaRef,
-              jornadaSeleccionada === "general"
-                ? "Ranking-General-Survivor"
-                : `Ranking-${jornadaActualObj?.nombre || "Jornada"}`
-            )
-          }
-          className="px-4 py-2 rounded text-white font-medium cursor-pointer"
-          style={{ backgroundColor: "#16a34a" }}
-        >
-          🖼️ Exportar Tabla (JPG)
-        </button>
-
-        {jornadaSeleccionada !== "general" && (
-          <button
-            onClick={() =>
-              exportarJPG(
-                reporteRef,
-                `Elecciones-${jornadaActualObj?.nombre || "Jornada"}`
-              )
-            }
-            className="px-4 py-2 rounded text-white font-medium cursor-pointer"
-            style={{ backgroundColor: "#2563eb" }}
-          >
-            📸 Exportar Elecciones (JPG)
-          </button>
-        )}
-
-        <button
-          onClick={exportarTablaUsosPDF}
-          className="px-4 py-2 rounded text-white font-medium cursor-pointer"
-          style={{ backgroundColor: "#8b5cf6" }}
-        >
-          📄 Exportar Usos por Equipo (PDF)
-        </button>
-      </div>
-
-      {cargando ? (
-        <div
-          className="rounded p-8 text-center font-medium"
-          style={{ backgroundColor: "#ffffff", color: "#4b5563" }}
-        >
-          Cargando datos de Survivor...
+    <div className="min-h-screen bg-slate-50 pb-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+              <span className="text-indigo-600">⚽</span> Panel Admin Survivor
+            </h1>
+            <p className="text-slate-500 mt-1">Gestión de rankings, reportes y auditoría de usos.</p>
+          </div>
         </div>
-      ) : (
-        <>
-          {/* Tabla Ranking */}
-          <div
-            ref={tablaRef}
-            className="rounded p-6 mb-8"
-            style={{ backgroundColor: "#ffffff", border: "1px solid #e5e7eb" }}
-          >
-            <div
-              className="flex justify-between items-center mb-4 pb-3"
-              style={{ borderBottom: "1px solid #e5e7eb" }}
-            >
-              <h2 className="text-2xl font-bold" style={{ color: "#1f2937" }}>
-                {jornadaSeleccionada === "general"
-                  ? "Ranking General (Acumulado)"
-                  : `Resultados - ${jornadaActualObj?.nombre || "Jornada"}`}
-              </h2>
-              <span
-                className="text-sm px-3 py-1 rounded-full font-medium"
-                style={{ backgroundColor: "#f3f4f6", color: "#4b5563" }}
-              >
-                {ranking.length} Participantes
-              </span>
-            </div>
 
-            <table
-              className="w-full"
-              style={{
-                borderCollapse: "collapse",
-                border: "1px solid #e5e7eb",
-              }}
+        {/* Controles y Filtros */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+            <label className="text-sm font-bold text-slate-700 whitespace-nowrap">Filtrar vista:</label>
+            <select
+              value={jornadaSeleccionada}
+              onChange={(e) => setJornadaSeleccionada(e.target.value === "general" ? "general" : Number(e.target.value))}
+              className="w-full sm:w-auto bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all font-medium"
             >
+              <option value="general">🏆 Ranking General (Acumulado)</option>
+              <optgroup label="Jornadas Individuales">
+                {jornadas.map((j) => (
+                  <option key={j.id} value={j.id}>{j.nombre}</option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+
+          <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+            <button
+              onClick={() => exportarJPG(tablaRef, jornadaSeleccionada === "general" ? "Ranking-General-Survivor" : `Ranking-${jornadaActualObj?.nombre || "Jornada"}`)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+              Exportar Ranking (JPG)
+            </button>
+
+            {jornadaSeleccionada !== "general" && (
+              <button
+                onClick={() => exportarJPG(reporteRef, `Elecciones-${jornadaActualObj?.nombre || "Jornada"}`, true)}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                Exportar Elecciones (JPG)
+              </button>
+            )}
+
+            <button
+              onClick={exportarTablaUsosPDF}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+              Exportar Usos (PDF)
+            </button>
+          </div>
+        </div>
+
+        {/* Tabla Ranking */}
+        <div ref={tablaRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+              {jornadaSeleccionada === "general" ? "Ranking General" : `Resultados: ${jornadaActualObj?.nombre || "Jornada"}`}
+            </h2>
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+              {ranking.length} Participantes {jornadaSeleccionada !== "general" && "(Activos)"}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr style={{ backgroundColor: "#f3f4f6", color: "#374151" }}>
-                  <th className="p-2 w-16" style={{ border: "1px solid #e5e7eb" }}>Pos</th>
-                  <th className="p-2 text-left" style={{ border: "1px solid #e5e7eb" }}>Participante</th>
-                  {jornadaSeleccionada !== "general" && (
-                    <th className="p-2" style={{ border: "1px solid #e5e7eb" }}>Equipo Elegido</th>
-                  )}
-                  <th className="p-2 w-28" style={{ border: "1px solid #e5e7eb" }}>Puntos</th>
-                  <th className="p-2 w-32" style={{ border: "1px solid #e5e7eb" }}>Vidas Perdidas</th>
+                <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider">
+                  <th className="px-6 py-4 w-20 text-center">Pos</th>
+                  <th className="px-6 py-4">Participante</th>
+                  {jornadaSeleccionada !== "general" && <th className="px-6 py-4">Equipo Elegido</th>}
+                  <th className="px-6 py-4 w-32 text-center">Puntos</th>
+                  <th className="px-6 py-4 w-40 text-center">Vidas Restantes</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {ranking.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={jornadaSeleccionada !== "general" ? 5 : 4}
-                      className="text-center p-4"
-                      style={{
-                        color: "#6b7280",
-                        border: "1px solid #e5e7eb",
-                      }}
-                    >
-                      No se encontraron registros para esta selección.
+                    <td colSpan={jornadaSeleccionada !== "general" ? 5 : 4} className="px-6 py-12 text-center text-slate-500 font-medium">
+                      {jornadaSeleccionada !== "general" ? "No hay participantes activos en esta jornada." : "No se encontraron registros."}
                     </td>
                   </tr>
                 ) : (
-                  ranking.map((fila, index) => (
-                    <tr key={fila.usuario_id}>
-                      <td
-                        className="p-2 text-center font-bold"
-                        style={{ border: "1px solid #e5e7eb" }}
-                      >
-                        {index === 0 && "🥇 "}
-                        {index === 1 && "🥈 "}
-                        {index === 2 && "🥉 "}
-                        {index + 1}
-                      </td>
-                      <td
-                        className="p-2 font-medium"
-                        style={{ border: "1px solid #e5e7eb" }}
-                      >
-                        {fila.nombre}
-                      </td>
-                      {jornadaSeleccionada !== "general" && (
-                        <td
-                          className="p-2 text-center font-semibold"
-                          style={{
-                            border: "1px solid #e5e7eb",
-                            color: fila.equipoElegido === "Sin selección" ? "#dc2626" : "#1d4ed8",
-                          }}
-                        >
-                          {fila.equipoElegido}
+                  ranking.map((fila, index) => {
+                    const vidasRestantes = Math.max(0, 3 - fila.vidas);
+                    
+                    return (
+                      <tr key={fila.usuario_id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 text-center">
+                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm ${
+                            index === 0 ? "bg-yellow-100 text-yellow-700" :
+                            index === 1 ? "bg-slate-200 text-slate-700" :
+                            index === 2 ? "bg-orange-100 text-orange-800" : "text-slate-500"
+                          }`}>
+                            {index + 1}
+                          </span>
                         </td>
-                      )}
-                      <td
-                        className="p-2 text-center font-bold"
-                        style={{
-                          border: "1px solid #e5e7eb",
-                          color: "#111827",
-                        }}
-                      >
-                        {fila.puntos}
-                      </td>
-                      <td
-                        className="p-2 text-center font-semibold"
-                        style={{
-                          border: "1px solid #e5e7eb",
-                          color: fila.vidas >= 3 ? "#dc2626" : "#4b5563",
-                        }}
-                      >
-                        {fila.vidas} {fila.vidas >= 3 && "💀"}
-                      </td>
-                    </tr>
-                  ))
+                        <td className="px-6 py-4 font-bold text-slate-800">{fila.nombre}</td>
+                        
+                        {jornadaSeleccionada !== "general" && (
+                          <td className="px-6 py-4 text-sm font-medium text-slate-600">
+                            {fila.equipoElegido === "Sin selección" ? (
+                              <span className="text-red-500 italic">Sin selección</span>
+                            ) : fila.equipoElegido}
+                          </td>
+                        )}
+                        
+                        <td className="px-6 py-4 text-center">
+                          <div className={`text-lg font-black ${fila.tuvoInfraccion ? "text-red-600" : "text-slate-800"}`}>
+                            {fila.puntos}
+                          </div>
+                          {fila.tuvoInfraccion && (
+                            <span className="inline-block mt-1 text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                              ⚠️ Penalizado
+                            </span>
+                          )}
+                        </td>
+                        
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {[...Array(3)].map((_, i) => {
+                              const estaLleno = i < vidasRestantes;
+                              return (
+                                <span 
+                                  key={i} 
+                                  className={`text-2xl transition-all ${
+                                    estaLleno 
+                                      ? "text-red-500 scale-100" 
+                                      : "text-slate-200 scale-90 grayscale"
+                                  }`}
+                                >
+                                  ❤️
+                                </span>
+                              );
+                            })}
+                          </div>
+                          {fila.vidas >= 3 && (
+                            <span className="text-xs font-bold text-red-600 mt-1 block">Eliminado</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
+        </div>
 
-          {/* Reporte Elecciones */}
-          {jornadaSeleccionada !== "general" && (
-            <div
-              ref={reporteRef}
-              className="rounded p-6 mb-8"
-              style={{ backgroundColor: "#ffffff", border: "1px solid #e5e7eb" }}
-            >
-              <h2 className="text-2xl font-bold mb-4" style={{ color: "#1f2937" }}>
-                Resumen de Elecciones - {jornadaActualObj?.nombre || ""}
-              </h2>
-              {reporteJornada.length === 0 ? (
-                <div
-                  className="rounded p-4"
-                  style={{
-                    backgroundColor: "#fefce8",
-                    border: "1px solid #fef08a",
-                    color: "#854d0e",
-                  }}
-                >
-                  No se registraron perfiles de usuario.
-                </div>
-              ) : (
-                <table
-                  className="w-full"
-                  style={{
-                    borderCollapse: "collapse",
-                    border: "1px solid #e5e7eb",
-                  }}
-                >
+        {/* 🚨 Reporte Elecciones (CON BLOQUEO DE SEGURIDAD) */}
+        {jornadaSeleccionada !== "general" && (
+          <div ref={reporteRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h2 className="text-xl font-black text-slate-900">Resumen de Elecciones: {jornadaActualObj?.nombre || ""}</h2>
+              
+              {/* Indicador visual de estado */}
+              {!jornadaEstaCerrada && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  Oculto hasta el cierre
+                </span>
+              )}
+            </div>
+            
+            {!jornadaEstaCerrada ? (
+              <div className="p-8 text-center bg-slate-50 border-b border-slate-100">
+                <p className="text-slate-600 font-medium flex flex-col items-center justify-center gap-2">
+                  <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  <span>Las elecciones de los participantes están ocultas por seguridad.</span>
+                  <span className="text-sm text-slate-500">
+                    Se revelarán automáticamente al cerrar la jornada 
+                    {jornadaActualObj?.fecha_limite && ` (${new Date(jornadaActualObj.fecha_limite).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })})`}.
+                  </span>
+                </p>
+              </div>
+            ) : reporteJornada.length === 0 ? (
+              <div className="p-8 text-center bg-amber-50 border-b border-amber-100">
+                <p className="text-amber-800 font-medium flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                  No se registraron selecciones válidas en esta jornada.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr style={{ backgroundColor: "#f3f4f6", color: "#374151" }}>
-                      <th className="p-2 text-left" style={{ border: "1px solid #e5e7eb" }}>Participante</th>
-                      <th className="p-2 text-center" style={{ border: "1px solid #e5e7eb" }}>Equipo Seleccionado</th>
+                    <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider">
+                      <th className="px-6 py-4">Participante</th>
+                      <th className="px-6 py-4 text-center">Equipo Seleccionado</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100">
                     {reporteJornada.map((fila, index) => (
-                      <tr key={index}>
-                        <td
-                          className="p-2"
-                          style={{ border: "1px solid #e5e7eb" }}
-                        >
-                          {fila.participante}
-                        </td>
-                        <td
-                          className="p-2 text-center font-bold"
-                          style={{
-                            border: "1px solid #e5e7eb",
-                            color: fila.seleccion === "Sin selección" ? "#dc2626" : "#1f2937",
-                          }}
-                        >
-                          {fila.seleccion}
+                      <tr key={index} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 font-medium text-slate-800">{fila.participante}</td>
+                        <td className="px-6 py-4 text-center">
+                          {fila.seleccion === "Sin selección" ? (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                              Sin selección
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              {fila.seleccion}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Tabla Usos por Equipo */}
-          <div
-            ref={tablaUsosRef}
-            className="rounded p-6 mb-8"
-            style={{ backgroundColor: "#ffffff", border: "1px solid #e5e7eb", overflowX: "auto" }}
-          >
-            <h2 className="text-2xl font-bold mb-4" style={{ color: "#1f2937" }}>
-              Usos por Equipo - {jornadaSeleccionada === "general" ? "General" : jornadaActualObj?.nombre}
+        {/* Tabla Usos por Equipo */}
+        <div ref={tablaUsosRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-100">
+            <h2 className="text-xl font-black text-slate-900">
+              Matriz de Usos por Equipo: {jornadaSeleccionada === "general" ? "General" : jornadaActualObj?.nombre}
             </h2>
-            <table
-              className="w-full"
-              style={{
-                borderCollapse: "collapse",
-                border: "1px solid #e5e7eb",
-              }}
-            >
+            <p className="text-sm text-slate-500 mt-1">Auditoría visual de la regla de máximo 3 usos por equipo.</p>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-max">
               <thead>
-                <tr style={{ backgroundColor: "#f3f4f6", color: "#374151" }}>
-                  <th className="p-2 text-left" style={{ border: "1px solid #e5e7eb" }}>Equipo</th>
+                <tr className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+                  <th className="px-3 py-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200 font-bold">Equipo</th>
                   {datosUsosEquipo.usuarios.map((usuario) => (
-                    <th
-                      key={usuario.id}
-                      className="p-2 text-center"
-                      style={{ border: "1px solid #e5e7eb" }}
-                    >
-                      {usuario.nombre}
+                    <th key={usuario.id} className="px-2 py-3 text-center min-w-[80px] font-semibold">
+                      <div className="truncate max-w-[100px]" title={usuario.nombre}>{usuario.nombre}</div>
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {datosUsosEquipo.resultado.map((fila) => (
-                  <tr key={fila.equipo}>
-                    <td
-                      className="p-2 font-medium"
-                      style={{ border: "1px solid #e5e7eb" }}
-                    >
+                  <tr key={fila.equipo} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-3 py-2 font-bold text-slate-800 text-xs sticky left-0 bg-white z-10 border-r border-slate-100">
                       {fila.equipo}
                     </td>
                     {fila.usosPorUsuario.map((uso) => {
-                      let bgColor = "#ffffff";
-                      if (uso.cantidad === 1) bgColor = "#22c55e";
-                      else if (uso.cantidad === 2) bgColor = "#facc15";
-                      else if (uso.cantidad >= 3) bgColor = "#ef4444";
-
+                      let bgColor = "bg-white";
+                      let textColor = "text-slate-300";
+                      let displayValue = "-";
+                      
+                      if (uso.cantidad === 1) {
+                        bgColor = "bg-emerald-500";
+                        textColor = "text-white";
+                        displayValue = "1";
+                      } else if (uso.cantidad === 2) {
+                        bgColor = "bg-amber-400";
+                        textColor = "text-slate-900";
+                        displayValue = "2";
+                      } else if (uso.cantidad >= 3) {
+                        bgColor = "bg-red-500";
+                        textColor = "text-white";
+                        displayValue = uso.cantidad.toString();
+                      }
+                      
                       return (
-                        <td
-                          key={uso.usuario_id}
-                          className="p-2 text-center font-semibold"
-                          style={{
-                            border: "1px solid #e5e7eb",
-                            backgroundColor: bgColor,
-                            color: uso.cantidad >= 3 ? "#ffffff" : (uso.cantidad > 0 ? "#000000" : "#9ca3af"),
-                          }}
+                        <td 
+                          key={uso.usuario_id} 
+                          className={`px-2 py-2 text-center font-bold text-xs ${bgColor} ${textColor} transition-colors`}
                         >
-                          {uso.cantidad}
+                          {displayValue}
                         </td>
                       );
                     })}
@@ -760,8 +695,9 @@ export default function AdminSurvivor() {
               </tbody>
             </table>
           </div>
-        </>
-      )}
+        </div>
+
+      </div>
     </div>
   );
 }

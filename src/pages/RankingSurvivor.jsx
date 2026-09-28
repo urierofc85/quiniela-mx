@@ -7,7 +7,7 @@ import { obtenerHoraMexico } from "../services/horario";
 
 export default function AdminSurvivor() {
   //=========================================
-  // ESTADOS (LÓGICA INTACTA)
+  // ESTADOS (LÓGICA INTACTA + SEGURIDAD)
   //=========================================
   const [jornadas, setJornadas] = useState([]);
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState("general");
@@ -20,29 +20,44 @@ export default function AdminSurvivor() {
   const [rawPerfiles, setRawPerfiles] = useState([]);
   const [rawPartidos, setRawPartidos] = useState([]);
 
+  // 🚨 NUEVO: Estado para controlar la hora del servidor y el desbloqueo automático
+  const [horaMexico, setHoraMexico] = useState(null);
+
   const tablaRef = useRef(null);
   const reporteRef = useRef(null);
   const tablaUsosRef = useRef(null);
 
   //=========================================
-  // INICIALIZACIÓN (LÓGICA INTACTA)
+  // INICIALIZACIÓN Y RELOJ DE SEGURIDAD
   //=========================================
   useEffect(() => {
     cargarDatosIniciales();
+    
+    // 🚨 Actualiza la hora cada 60 segundos para desbloquear automáticamente al llegar el límite
+    const intervaloHora = setInterval(async () => {
+      const hora = await obtenerHoraMexico();
+      setHoraMexico(hora);
+    }, 60000);
+
+    return () => clearInterval(intervaloHora);
   }, []);
 
   useEffect(() => {
-    if (rawSurvivor.length > 0 && jornadas.length > 0) {
+    if (rawSurvivor.length > 0 && jornadas.length > 0 && horaMexico) {
       calcularRanking();
       cargarReporteJornada();
     }
-  }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, jornadas]);
+  }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, jornadas, horaMexico]);
 
   //=========================================
   // CARGA DE DATOS (LÓGICA INTACTA)
   //=========================================
   const cargarDatosIniciales = async () => {
     setCargando(true);
+
+    // 🚨 Obtener la hora inicial junto con los datos
+    const horaInicial = await obtenerHoraMexico();
+    setHoraMexico(horaInicial);
 
     const [jornadasData, perfilesData, partidosData, survivorData] =
       await Promise.all([
@@ -85,14 +100,32 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
+  // 🚨 VALIDACIÓN DE SEGURIDAD DE JORNADA
+  //=========================================
+  const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
+  
+  const jornadaEstaCerrada = useMemo(() => {
+    if (jornadaSeleccionada === "general") return true;
+    if (!jornadaActualObj || !horaMexico) return false;
+    
+    // Prioridad 1: Fecha límite configurada
+    if (jornadaActualObj.fecha_limite) {
+      return horaMexico > new Date(jornadaActualObj.fecha_limite);
+    }
+    // Prioridad 2: Estado manual de cerrada
+    return jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada";
+  }, [jornadaSeleccionada, jornadaActualObj, horaMexico]);
+
+  //=========================================
   // 🚨 LÓGICA DEL RANKING (INTACTA)
   //=========================================
   const calcularRanking = async () => {
-    const horaMexico = await obtenerHoraMexico();
+    // Usamos la hora del estado para mantener consistencia
+    const horaActual = horaMexico || await obtenerHoraMexico();
 
     const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
-      return Number(j.id) === Number(jornadaSeleccionada);
+      return Number(j.id) <= Number(jornadaSeleccionada); // <= para acumular correctamente
     });
 
     const jornadasOrdenadas = [...jornadasAProcesar].sort((a, b) => Number(a.id) - Number(b.id));
@@ -139,7 +172,7 @@ export default function AdminSurvivor() {
 
     for (const jornada of jornadasOrdenadas) {
       const esPasadaYCerrada = jornada.fecha_limite
-        ? horaMexico > new Date(jornada.fecha_limite)
+        ? horaActual > new Date(jornada.fecha_limite)
         : jornada.cerrada === true || jornada.estado === "cerrada";
 
       const eleccionesJornada = rawSurvivor.filter(
@@ -232,10 +265,16 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // REPORTE DE ELECCIONES (LÓGICA INTACTA)
+  // 🚨 REPORTE DE ELECCIONES (CON BLOQUEO)
   //=========================================
   const cargarReporteJornada = () => {
     if (jornadaSeleccionada === "general") {
+      setReporteJornada([]);
+      return;
+    }
+
+    // 🚨 BLOQUEO DE SEGURIDAD: Si la jornada no ha cerrado, no procesar ni mostrar datos
+    if (!jornadaEstaCerrada) {
       setReporteJornada([]);
       return;
     }
@@ -300,12 +339,18 @@ export default function AdminSurvivor() {
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // FUNCIONES PARA EXPORTAR (LÓGICA INTACTA)
+  // 🚨 FUNCIONES PARA EXPORTAR (CON BLOQUEO)
   //=========================================
   const esperarRender = () =>
     new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-  const exportarJPG = async (ref, nombreArchivo) => {
+  const exportarJPG = async (ref, nombreArchivo, esReporteElecciones = false) => {
+    // 🚨 BLOQUEO DE EXPORTACIÓN: Impide descargar el reporte si la jornada está abierta
+    if (esReporteElecciones && !jornadaEstaCerrada) {
+      alert("🔒 Acceso denegado: Las elecciones están bloqueadas hasta el cierre oficial de la jornada.");
+      return;
+    }
+
     if (!ref.current) {
       alert("No hay información visible para exportar.");
       return;
@@ -356,9 +401,7 @@ export default function AdminSurvivor() {
   //=========================================
   // RENDER
   //=========================================
-  const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
-
-  if (cargando) {
+  if (cargando || !horaMexico) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center max-w-sm w-full">
@@ -377,7 +420,7 @@ export default function AdminSurvivor() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
-              <span className="text-indigo-600"></span> Panel Admin Survivor
+              <span className="text-indigo-600">⚽</span> Panel Admin Survivor
             </h1>
             <p className="text-slate-500 mt-1">Gestión de rankings, reportes y auditoría de usos.</p>
           </div>
@@ -412,7 +455,7 @@ export default function AdminSurvivor() {
 
             {jornadaSeleccionada !== "general" && (
               <button
-                onClick={() => exportarJPG(reporteRef, `Elecciones-${jornadaActualObj?.nombre || "Jornada"}`)}
+                onClick={() => exportarJPG(reporteRef, `Elecciones-${jornadaActualObj?.nombre || "Jornada"}`, true)}
                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -461,7 +504,6 @@ export default function AdminSurvivor() {
                   </tr>
                 ) : (
                   ranking.map((fila, index) => {
-                    // Calcular vidas restantes (3 - vidas perdidas)
                     const vidasRestantes = Math.max(0, 3 - fila.vidas);
                     
                     return (
@@ -496,7 +538,6 @@ export default function AdminSurvivor() {
                           )}
                         </td>
                         
-                        {/* Corazones corregidos: muestran vidas restantes */}
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-1">
                             {[...Array(3)].map((_, i) => {
@@ -528,14 +569,33 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* Reporte Elecciones */}
+        {/* 🚨 Reporte Elecciones (CON BLOQUEO DE SEGURIDAD) */}
         {jornadaSeleccionada !== "general" && (
           <div ref={reporteRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100">
+            <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <h2 className="text-xl font-black text-slate-900">Resumen de Elecciones: {jornadaActualObj?.nombre || ""}</h2>
+              
+              {/* Indicador visual de estado */}
+              {!jornadaEstaCerrada && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  Oculto hasta el cierre
+                </span>
+              )}
             </div>
             
-            {reporteJornada.length === 0 ? (
+            {!jornadaEstaCerrada ? (
+              <div className="p-8 text-center bg-slate-50 border-b border-slate-100">
+                <p className="text-slate-600 font-medium flex flex-col items-center justify-center gap-2">
+                  <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  <span>Las elecciones de los participantes están ocultas por seguridad.</span>
+                  <span className="text-sm text-slate-500">
+                    Se revelarán automáticamente al cerrar la jornada 
+                    {jornadaActualObj?.fecha_limite && ` (${new Date(jornadaActualObj.fecha_limite).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })})`}.
+                  </span>
+                </p>
+              </div>
+            ) : reporteJornada.length === 0 ? (
               <div className="p-8 text-center bg-amber-50 border-b border-amber-100">
                 <p className="text-amber-800 font-medium flex items-center justify-center gap-2">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
@@ -575,7 +635,7 @@ export default function AdminSurvivor() {
           </div>
         )}
 
-        {/* Tabla Usos por Equipo - OPTIMIZADA CON LETRA MÁS PEQUEÑA */}
+        {/* Tabla Usos por Equipo */}
         <div ref={tablaUsosRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-100">
             <h2 className="text-xl font-black text-slate-900">
