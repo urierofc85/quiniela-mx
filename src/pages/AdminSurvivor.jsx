@@ -92,7 +92,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING
+  // LÓGICA DEL RANKING (CON CONTADOR DE EQUIPOS USADOS)
   //=========================================
   const calcularRanking = async () => {
     const horaActual = horaMexico || await obtenerHoraMexico();
@@ -113,7 +113,17 @@ export default function AdminSurvivor() {
         vidas: 0,
         equipoElegido: "-",
         tuvoInfraccion: false,
+        equiposUsados: new Set(), // 🚨 NUEVO: Set para contar equipos únicos usados
       };
+    });
+
+    // 🚨 NUEVO: Calcular equipos únicos usados por cada usuario en TODO el torneo
+    rawSurvivor.forEach(s => {
+      if (!s.equipo || !String(s.equipo).trim()) return;
+      const equipoBase = s.equipo.split(' (vs ')[0].trim();
+      if (acumulado[s.usuario_id]) {
+        acumulado[s.usuario_id].equiposUsados.add(equipoBase);
+      }
     });
 
     const seleccionesPorUsuarioYEquipo = {};
@@ -218,7 +228,10 @@ export default function AdminSurvivor() {
       });
     }
 
-    let rankingFinal = Object.values(acumulado);
+    let rankingFinal = Object.values(acumulado).map(fila => ({
+      ...fila,
+      equiposUsados: fila.equiposUsados.size, // 🚨 Convertir Set a número
+    }));
 
     if (jornadaSeleccionada !== "general") {
       const usuariosConSeleccionEnEstaJornada = usuariosConSeleccionPorJornada[String(jornadaSeleccionada)] || new Set();
@@ -278,7 +291,7 @@ export default function AdminSurvivor() {
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // 🚨 FUNCIONES PARA EXPORTAR (REFORZADAS)
+  // FUNCIONES PARA EXPORTAR
   //=========================================
   const exportarJPG = async (ref, nombreArchivo) => {
     if (!ref || !ref.current) {
@@ -287,11 +300,10 @@ export default function AdminSurvivor() {
     }
     
     try {
-      // Pequeña pausa para asegurar que el DOM está completamente renderizado
       await new Promise(resolve => setTimeout(resolve, 150));
       
       const canvas = await html2canvas(ref.current, {
-        scale: 2, // Escala 2 es el punto dulce: buena calidad sin exceder el límite de memoria del canvas
+        scale: 2,
         useCORS: true, 
         allowTaint: true, 
         logging: false, 
@@ -419,7 +431,7 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* Tabla Ranking General (Con colores hex inline para evitar error oklch en html2canvas) */}
+        {/* Tabla Ranking General */}
         <div ref={tablaRef} className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden" style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
           <div className="px-6 py-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: '#f1f5f9' }}>
             <h2 className="text-xl font-black flex items-center gap-2" style={{ color: '#0f172a' }}>
@@ -514,7 +526,7 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* Lista Compacta de Sobrevivientes (Con colores hex inline para evitar error oklch en html2canvas) */}
+        {/* 🚨 Lista Compacta de Sobrevivientes (CON COLUMNA EQUIPOS USADOS) */}
         <div 
           ref={sobrevivientesRef} 
           className="rounded-2xl border-2 shadow-sm overflow-hidden"
@@ -542,13 +554,14 @@ export default function AdminSurvivor() {
                   <th className="px-6 py-3">Participante</th>
                   <th className="px-6 py-3 text-center">Puntos</th>
                   <th className="px-6 py-3">Equipo</th>
+                  <th className="px-6 py-3 text-center">Equipos Usados</th>
                   <th className="px-6 py-3 w-24 text-center">Vidas</th>
                 </tr>
               </thead>
               <tbody>
                 {sobrevivientes.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center font-medium" style={{ color: '#047857', borderBottom: '1px solid #e5e7eb' }}>
+                    <td colSpan={6} className="px-6 py-8 text-center font-medium" style={{ color: '#047857', borderBottom: '1px solid #e5e7eb' }}>
                       No hay sobrevivientes en esta jornada.
                     </td>
                   </tr>
@@ -568,6 +581,12 @@ export default function AdminSurvivor() {
                           ) : (
                             <span className="italic text-xs" style={{ color: '#9ca3af' }}>Sin equipo registrado</span>
                           )}
+                        </td>
+                        {/* 🚨 NUEVA COLUMNA: Equipos Usados */}
+                        <td className="px-6 py-3 text-center">
+                          <span className="inline-flex items-center justify-center w-10 h-10 rounded-full font-black text-lg" style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}>
+                            {fila.equiposUsados}
+                          </span>
                         </td>
                         <td className="px-6 py-3 text-center font-black text-xl" style={{ color: '#dc2626' }}>
                           {vidasRestantes}
