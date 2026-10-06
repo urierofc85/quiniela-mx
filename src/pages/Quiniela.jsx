@@ -15,11 +15,10 @@ export default function Quiniela() {
   const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
   const [cargandoPDF, setCargandoPDF] = useState(false);
   
-  // 🚨 ESTADOS PARA EL MODAL DE RANKING (Cálculo 100% en memoria)
+  // 🚨 ESTADOS PARA EL MODAL DE RANKING SIMPLIFICADO
   const [mostrarModal, setMostrarModal] = useState(false);
   const [mostrarRanking, setMostrarRanking] = useState(false);
   const [rankingData, setRankingData] = useState([]);
-  const [jornadasSecuencialesModal, setJornadasSecuencialesModal] = useState([]);
   const [cargandoRanking, setCargandoRanking] = useState(false);
   
   const [esSoloSurvivor, setEsSoloSurvivor] = useState(false);
@@ -122,22 +121,21 @@ export default function Quiniela() {
     setPronosticos(nuevosPronosticos);
   };
 
-  // 🚨 FUNCIÓN DE RANKING 100% EN MEMORIA (Sin consultar tabla 'ranking')
+  // 🚨 FUNCIÓN DE RANKING SIMPLIFICADA: Solo Total de Aciertos (Rápida y en memoria)
   const cargarRankingParaModal = async () => {
     setCargandoRanking(true);
     setRankingData([]);
     
     try {
-      console.log("🔍 Calculando ranking en memoria...");
+      console.log("🔍 Calculando ranking simplificado en memoria...");
       
       // 1. Obtenemos solo las tablas base necesarias
       const { data: perfilesData, error: errPerfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor");
-      const { data: quinielasData, error: errQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico");
-      const { data: partidosData, error: errPartidos } = await supabase.from("partidos").select("id, jornada_id, resultado, pospuesto");
-      const { data: jornadasData, error: errJornadas } = await supabase.from("jornadas").select("id, nombre, fecha_limite").order("id", { ascending: true });
+      const { data: quinielasData, error: errQuinielas } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico");
+      const { data: partidosData, error: errPartidos } = await supabase.from("partidos").select("id, resultado, pospuesto");
 
-      if (errPerfiles || errQuinielas || errPartidos || errJornadas) {
-        console.error("❌ Error en consultas base:", { errPerfiles, errQuinielas, errPartidos, errJornadas });
+      if (errPerfiles || errQuinielas || errPartidos) {
+        console.error("❌ Error en consultas base:", { errPerfiles, errQuinielas, errPartidos });
         alert("Error al obtener datos base. Revisa la consola (F12).");
         setCargandoRanking(false);
         return;
@@ -150,56 +148,33 @@ export default function Quiniela() {
         return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
       };
 
-      const jornadasSecuenciales = (jornadasData || []).map((jornada, index) => ({
-        idSupabase: jornada.id,
-        numero: index + 1,
-        nombre: jornada.nombre || `J${index + 1}`
-      }));
-
+      // 2. Inicializamos el acumulador SOLO con el total de aciertos
       const acumulado = {};
       (perfilesData || []).forEach(usuario => {
-        // Excluimos admins y los que solo juegan survivor
         if (esAdmin(usuario) || usuario.solo_survivor === true) return; 
         
         acumulado[usuario.id] = {
           usuario_id: usuario.id,
           nombre: usuario.nombre_usuario || usuario.nombre || "Sin nombre",
-          totalAciertos: 0,
-          aciertosPorJornada: {},
+          totalAciertos: 0
         };
-        
-        jornadasSecuenciales.forEach(j => {
-          acumulado[usuario.id].aciertosPorJornada[j.numero] = 0;
-        });
       });
 
-      // 2. Calculamos los aciertos en el navegador
-      (jornadasData || []).forEach(jornada => {
-        const jornadaId = jornada.id;
-        const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornadaId)?.numero;
-
-        const partidosDeJornada = (partidosData || []).filter(p => String(p.jornada_id) === String(jornadaId) && !p.pospuesto);
-        const quinielasDeJornada = (quinielasData || []).filter(q => String(q.jornada_id) === String(jornadaId));
-
-        (perfilesData || []).forEach(usuario => {
-          if (esAdmin(usuario) || usuario.solo_survivor === true) return;
-          const reg = acumulado[usuario.id];
-          if (!reg) return;
-
-          const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
-          if (quinielasUsuario.length > 0) {
-            quinielasUsuario.forEach(q => {
-              const partido = partidosDeJornada.find(p => String(p.id) === String(q.partido_id));
-              if (partido && partido.resultado && q.pronostico === partido.resultado) {
-                if (secNum) reg.aciertosPorJornada[secNum] = (reg.aciertosPorJornada[secNum] || 0) + 1;
-                reg.totalAciertos++;
-              }
-            });
+      // 3. Contamos los aciertos de forma directa y eficiente
+      const partidosMap = new Map((partidosData || []).map(p => [String(p.id), p]));
+      
+      (quinielasData || []).forEach(q => {
+        const reg = acumulado[q.usuario_id];
+        if (reg) {
+          const partido = partidosMap.get(String(q.partido_id));
+          // Si el partido existe, no está pospuesto, tiene resultado y el pronóstico coincide
+          if (partido && !partido.pospuesto && partido.resultado && q.pronostico === partido.resultado) {
+            reg.totalAciertos++;
           }
-        });
+        }
       });
 
-      // 3. Ordenamos el ranking
+      // 4. Ordenamos el ranking
       const rankingQuinielas = Object.values(acumulado)
         .sort((a, b) => {
           if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
@@ -207,9 +182,7 @@ export default function Quiniela() {
         });
 
       console.log("✅ Ranking calculado con éxito. Usuarios:", rankingQuinielas.length);
-      
       setRankingData(rankingQuinielas);
-      setJornadasSecuencialesModal(jornadasSecuenciales);
 
     } catch (err) {
       console.error("💥 Error crítico en cálculo de ranking:", err);
@@ -729,14 +702,14 @@ export default function Quiniela() {
         )}
       </div>
 
-      {/* 🚨 MODAL DE RANKING GENERAL (Cálculo 100% en memoria) */}
+      {/* 🚨 MODAL DE RANKING GENERAL SIMPLIFICADO (Solo Total de Aciertos) */}
       {mostrarRanking && (
         <div 
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" 
           onClick={() => setMostrarRanking(false)}
         >
           <div 
-            className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative" 
+            className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto relative" 
             onClick={(e) => e.stopPropagation()}
           >
             <button 
@@ -752,14 +725,15 @@ export default function Quiniela() {
             <div className="p-6 sm:p-8">
               <div className="text-center mb-6">
                 <span className="text-4xl mb-2 block">🏆</span>
-                <h2 className="text-2xl font-black text-slate-900">Ranking General Acumulado</h2>
+                <h2 className="text-2xl font-black text-slate-900">Ranking General</h2>
+                <p className="text-sm text-slate-500 mt-1">Total de aciertos acumulados</p>
                 <div className="h-1.5 w-20 bg-indigo-500 mx-auto mt-3 rounded-full"></div>
               </div>
               
               {cargandoRanking ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent mb-4"></div>
-                  <p className="text-slate-600 font-medium">Calculando clasificación en tiempo real...</p>
+                  <p className="text-slate-600 font-medium">Calculando clasificación...</p>
                 </div>
               ) : rankingData.length > 0 ? (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -768,12 +742,7 @@ export default function Quiniela() {
                       <tr className="bg-indigo-50 text-indigo-900 text-xs font-black uppercase tracking-wider">
                         <th className="px-4 py-3 text-center w-16 border border-indigo-100">Pos</th>
                         <th className="px-4 py-3 border border-indigo-100">Jugador</th>
-                        {jornadasSecuencialesModal.map(j => (
-                          <th key={j.numero} className="px-2 py-3 text-center border border-indigo-100 min-w-[60px]">
-                            {j.nombre}
-                          </th>
-                        ))}
-                        <th className="px-4 py-3 text-center border border-indigo-100 bg-indigo-100 font-black">TOTAL</th>
+                        <th className="px-4 py-3 text-center w-24 border border-indigo-100 bg-indigo-100 font-black">TOTAL</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -782,26 +751,21 @@ export default function Quiniela() {
                         let rowClass = "hover:bg-slate-50 transition-colors";
                         let posClass = "bg-slate-100 text-slate-600";
                         
-                        if (pos === 1) { rowClass = "bg-green-50 hover:bg-green-100 transition-colors"; posClass = "bg-yellow-100 text-yellow-700 font-black"; }
-                        if (pos === 2) posClass = "bg-slate-200 text-slate-700 font-black";
-                        if (pos === 3) posClass = "bg-orange-100 text-orange-800 font-black";
+                        if (pos === 1) { rowClass = "bg-yellow-50 hover:bg-yellow-100 transition-colors"; posClass = "bg-yellow-400 text-yellow-900 font-black"; }
+                        else if (pos === 2) { posClass = "bg-slate-300 text-slate-800 font-black"; }
+                        else if (pos === 3) { posClass = "bg-orange-300 text-orange-900 font-black"; }
 
                         return (
                           <tr key={fila.usuario_id} className={rowClass}>
                             <td className="px-4 py-3 text-center border border-slate-100">
-                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${posClass}`}>
+                              <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm ${posClass}`}>
                                 {pos}
                               </span>
                             </td>
                             <td className="px-4 py-3 font-semibold text-slate-800 border border-slate-100">
                               {fila.nombre}
                             </td>
-                            {jornadasSecuencialesModal.map(j => (
-                              <td key={j.numero} className="px-2 py-3 text-center text-slate-600 border border-slate-100">
-                                {fila.aciertosPorJornada[j.numero] || 0}
-                              </td>
-                            ))}
-                            <td className="px-4 py-3 text-center font-black text-indigo-600 border border-slate-100 bg-indigo-50/50">
+                            <td className="px-4 py-3 text-center font-black text-xl text-indigo-600 border border-slate-100">
                               {fila.totalAciertos}
                             </td>
                           </tr>
@@ -813,9 +777,6 @@ export default function Quiniela() {
               ) : (
                 <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
                   <p className="text-slate-500 font-medium">No hay datos de ranking disponibles.</p>
-                  <p className="text-xs text-red-500 font-bold mt-2">
-                    (Usuarios válidos encontrados: {rankingData.length})
-                  </p>
                   <p className="text-xs text-slate-400 mt-1">
                     Verifica que existan usuarios que no sean 'admin' ni 'solo_survivor' y que hayan enviado quinielas.
                   </p>
