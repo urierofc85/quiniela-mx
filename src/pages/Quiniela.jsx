@@ -14,7 +14,12 @@ export default function Quiniela() {
   const [jornadas, setJornadas] = useState([]);
   const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
   const [cargandoPDF, setCargandoPDF] = useState(false);
+  
+  // 🚨 NUEVOS ESTADOS PARA EL MODAL DE RANKING
   const [mostrarModal, setMostrarModal] = useState(false);
+  const [mostrarRanking, setMostrarRanking] = useState(false);
+  const [rankingData, setRankingData] = useState([]);
+  const [cargandoRanking, setCargandoRanking] = useState(false);
   
   const [esSoloSurvivor, setEsSoloSurvivor] = useState(false);
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
@@ -114,6 +119,29 @@ export default function Quiniela() {
     const nuevosPronosticos = {};
     data?.forEach((item) => { nuevosPronosticos[item.partido_id] = item.pronostico; });
     setPronosticos(nuevosPronosticos);
+  };
+
+  // 🚨 FUNCIÓN PARA CARGAR EL RANKING EN EL MODAL
+  const cargarRankingParaModal = async () => {
+    setCargandoRanking(true);
+    try {
+      // NOTA: Ajusta esta consulta según el nombre real de tu tabla de ranking o vista.
+      // Este es un ejemplo genérico que ordena por puntos o aciertos.
+      const { data, error } = await supabase
+        .from("ranking") // <--- CAMBIA "ranking" por el nombre real de tu tabla/vista si es diferente
+        .select("*")
+        .order("puntos", { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setRankingData(data || []);
+    } catch (err) {
+      console.error("Error cargando ranking:", err);
+      // Fallback: si no existe la tabla 'ranking', mostramos un mensaje amigable
+      setRankingData([]);
+    } finally {
+      setCargandoRanking(false);
+    }
   };
 
   const cerrarSesion = async () => {
@@ -364,19 +392,37 @@ export default function Quiniela() {
           </div>
         )}
 
-        {/* 🚨 Top Actions (CON BOTÓN DE RANKING RESTAURADO) */}
+        {/* 🚨 Top Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           
-          {/* 🚨 NUEVO: Botón dedicado para Ver Ranking General */}
-          <Link
-            to="/ranking"
+          {/* 🚨 OPCIÓN 1: Botón que abre un Modal integrado (Recomendado, no depende de rutas) */}
+          <button
+            onClick={() => {
+              setMostrarRanking(true);
+              cargarRankingParaModal();
+            }}
             className="flex items-center justify-center gap-2 px-5 py-3.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
             Ver Ranking General
-          </Link>
+          </button>
+
+          {/* OPCIÓN 2: Si prefieres que abra una pestaña nueva, descomenta este bloque y borra el de arriba */}
+          {/*
+          <a
+            href="/ranking"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 px-5 py-3.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Ver Ranking (Nueva Pestaña)
+          </a>
+          */}
 
           <button
             onClick={() => setMostrarModal(true)}
@@ -460,12 +506,10 @@ export default function Quiniela() {
                         : "border-slate-200 shadow-sm hover:shadow-md hover:border-orange-300"
                     } ${estaReactivado && !tieneResultado ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
                   >
-                    {/* Match Number */}
                     <span className="absolute -top-3 -left-3 bg-slate-900 text-white text-xs font-black w-8 h-8 rounded-full flex items-center justify-center shadow-md border-2 border-white">
                       {String(index + 1).padStart(2, '0')}
                     </span>
 
-                    {/* Match Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pl-2 sm:pl-0">
                       <h3 className="text-lg sm:text-xl font-black text-slate-900 text-center sm:text-left tracking-tight">
                         {partido.local.toUpperCase()} <span className="text-slate-400 font-medium text-base mx-1">vs</span> {partido.visitante.toUpperCase()}
@@ -495,7 +539,6 @@ export default function Quiniela() {
                       </div>
                     </div>
 
-                    {/* Postponed Message */}
                     {estaPospuesto && !fueMovido && (
                       <div className="bg-orange-50 border-l-4 border-orange-400 p-3 mb-4 rounded-r-lg text-sm text-orange-800 flex items-start gap-2">
                         <span className="text-lg">ℹ️</span>
@@ -503,7 +546,6 @@ export default function Quiniela() {
                       </div>
                     )}
                     
-                    {/* L/E/V Selectors */}
                     <div className="grid grid-cols-3 gap-3 pl-2 sm:pl-0">
                       {["L", "E", "V"].map((valor) => {
                         const isSelected = pronosticos[partido.id] === valor;
@@ -547,7 +589,6 @@ export default function Quiniela() {
               })}
             </div>
 
-            {/* Jornada Cerrada Alert */}
             {jornadaCerrada && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 text-red-800 font-bold mt-6">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -557,7 +598,6 @@ export default function Quiniela() {
               </div>
             )}
 
-            {/* Save Button */}
             <div className="pt-6 pb-8 text-center sticky bottom-4 z-10">
               {puedeGuardar && (
                 <button
@@ -577,7 +617,6 @@ export default function Quiniela() {
               )}
             </div>
 
-            {/* Saved Summary */}
             {quinielaGuardada.length > 0 && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-8">
                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -629,6 +668,91 @@ export default function Quiniela() {
           </>
         )}
       </div>
+
+      {/* 🚨 MODAL DE RANKING GENERAL (Integrado, no requiere rutas nuevas) */}
+      {mostrarRanking && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" 
+          onClick={() => setMostrarRanking(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto relative" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => setMostrarRanking(false)} 
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full p-2 transition-colors z-10" 
+              aria-label="Cerrar"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            <div className="p-6 sm:p-8">
+              <div className="text-center mb-6">
+                <span className="text-4xl mb-2 block">🏆</span>
+                <h2 className="text-2xl font-black text-slate-900">Ranking General</h2>
+                <div className="h-1.5 w-20 bg-indigo-500 mx-auto mt-3 rounded-full"></div>
+              </div>
+              
+              {cargandoRanking ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent mb-4"></div>
+                  <p className="text-slate-600 font-medium">Cargando clasificación...</p>
+                </div>
+              ) : rankingData.length > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-indigo-50 text-indigo-900 text-xs font-black uppercase tracking-wider">
+                        <th className="px-4 py-3 text-center w-16">Pos</th>
+                        <th className="px-4 py-3">Jugador</th>
+                        <th className="px-4 py-3 text-center">Puntos</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {rankingData.map((fila, index) => (
+                        <tr key={index} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3 text-center font-bold text-slate-700">
+                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${
+                              index === 0 ? "bg-yellow-100 text-yellow-700" :
+                              index === 1 ? "bg-slate-200 text-slate-700" :
+                              index === 2 ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-600"
+                            }`}>
+                              {index + 1}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-800">
+                            {fila.nombre || fila.usuario || "Jugador"}
+                          </td>
+                          <td className="px-4 py-3 text-center font-black text-indigo-600">
+                            {fila.puntos || fila.aciertos || 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                  <p className="text-slate-500 font-medium">No se pudo cargar el ranking.</p>
+                  <p className="text-sm text-slate-400 mt-1">Verifica que la tabla 'ranking' exista en tu base de datos.</p>
+                </div>
+              )}
+
+              <div className="mt-6 text-center">
+                <button 
+                  onClick={() => setMostrarRanking(false)} 
+                  className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-black px-8 py-3 rounded-xl shadow-lg transition-all"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Rules Modal */}
       {mostrarModal && (
