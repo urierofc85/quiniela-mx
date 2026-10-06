@@ -1,32 +1,44 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../services/supabase";
 import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "../services/supabase";
 import { obtenerHoraMexico } from "../services/horario";
+import html2canvas from "html2canvas";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from "recharts";
 
-export default function Quiniela() {
+export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [partidos, setPartidos] = useState([]);
-  const [pronosticos, setPronosticos] = useState({});
+
   const [jornadaActiva, setJornadaActiva] = useState(null);
-  const [jornadaCerrada, setJornadaCerrada] = useState(false);
-  const [quinielaGuardada, setQuinielaGuardada] = useState([]);
+  const [participantes, setParticipantes] = useState(0);
+  const [quinielasActivas, setQuinielasActivas] = useState(0);
   
   const [jornadas, setJornadas] = useState([]);
-  const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
-  const [cargandoPDF, setCargandoPDF] = useState(false);
-  
-  // 🚨 ESTADOS PARA EL MODAL DE RANKING (Cálculo 100% en memoria)
-  const [mostrarModal, setMostrarModal] = useState(false);
-  const [mostrarRanking, setMostrarRanking] = useState(false);
-  const [rankingData, setRankingData] = useState([]);
-  const [jornadasSecuencialesModal, setJornadasSecuencialesModal] = useState([]);
-  const [cargandoRanking, setCargandoRanking] = useState(false);
-  
-  const [esSoloSurvivor, setEsSoloSurvivor] = useState(false);
-  const [cargandoPerfil, setCargandoPerfil] = useState(true);
+  const [jornadaSeleccionada, setJornadaSeleccionada] = useState("");
+
+  const [datosGrafica, setDatosGrafica] = useState([]);
+  const [ausentesQuiniela, setAusentesQuiniela] = useState([]);
+  const [ausentesSurvivor, setAusentesSurvivor] = useState([]);
+
+  const [rankingQuinielas, setRankingQuinielas] = useState([]);
+  const [jornadasSecuenciales, setJornadasSecuenciales] = useState([]);
+
+  const [cargando, setCargando] = useState(true);
+
+  const [modalPDFAbierto, setModalPDFAbierto] = useState(false);
+  const [jornadaParaPDF, setJornadaParaPDF] = useState("");
+  const [exportandoPDF, setExportandoPDF] = useState(false);
 
   useEffect(() => {
-    cargarDatosIniciales();
+    cargarDashboard();
   }, []);
 
   useEffect(() => {
@@ -37,896 +49,847 @@ export default function Quiniela() {
     validarSesion();
   }, [navigate]);
 
-  const cargarDatosIniciales = async () => {
-    setCargandoPerfil(true);
-    const ahora = await obtenerHoraMexico();
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: perfil } = await supabase
-        .from("profiles")
-        .select("solo_survivor")
-        .eq("id", user.id)
-        .single();
-      setEsSoloSurvivor(perfil?.solo_survivor === true);
-    }
-    setCargandoPerfil(false);
-
-    const { data: todasJornadas } = await supabase
-      .from("jornadas")
-      .select("*")
-      .order("id", { ascending: false });
-
-    if (todasJornadas) {
-      const cerradas = todasJornadas.filter((j) => {
-        if (!j.fecha_limite) return false;
-        const limiteQ = new Date(j.fecha_limite);
-        const limiteS = j.fecha_limite_survivor ? new Date(j.fecha_limite_survivor) : limiteQ;
-        return ahora > limiteQ && ahora > limiteS;
-      });
-      setJornadas(cerradas);
-      if (cerradas.length > 0) setJornadaSeleccionadaPDF(cerradas[0].id.toString());
-    }
-
-    const { data: activa } = await supabase
-      .from("jornadas")
-      .select("*")
-      .eq("activa", true)
-      .single();
-
-    if (activa) {
-      setJornadaActiva(activa);
-      await cargarMiQuiniela(activa.id);
-      await cargarPartidos(activa.id);
-
-      if (activa.fecha_limite) {
-        const limiteQ = new Date(activa.fecha_limite);
-        const limiteS = activa.fecha_limite_survivor ? new Date(activa.fecha_limite_survivor) : limiteQ;
-        setJornadaCerrada(ahora > limiteQ && ahora > limiteS);
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === "Escape" && modalPDFAbierto) {
+        setModalPDFAbierto(false);
       }
-    }
-  };
-
-  const cargarPartidos = async (jornadaId) => {
-    if (!jornadaId) return;
-    const { data, error } = await supabase
-      .from("partidos")
-      .select("id, jornada_id, jornada_original, local, visitante, resultado, pospuesto, reactivado")
-      .eq("jornada_id", jornadaId);
-      
-    if (error) {
-      console.error("Error cargando partidos:", error);
-      return;
-    }
-    setPartidos(data || []);
-  };
-
-  const cargarMiQuiniela = async (jornadaId) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !jornadaId) return;
-
-    const { data, error } = await supabase
-      .from("quinielas")
-      .select("*")
-      .eq("usuario_id", user.id)
-      .eq("jornada_id", jornadaId);
-
-    if (error) {
-      console.error("Error cargando quiniela:", error);
-      return;
-    }
-
-    setQuinielaGuardada(data || []);
-    const nuevosPronosticos = {};
-    data?.forEach((item) => { nuevosPronosticos[item.partido_id] = item.pronostico; });
-    setPronosticos(nuevosPronosticos);
-  };
-
-  // 🚨 FUNCIÓN DE RANKING 100% EN MEMORIA (Sin consultar tabla 'ranking')
-  const cargarRankingParaModal = async () => {
-    setCargandoRanking(true);
-    setRankingData([]);
-    
-    try {
-      console.log("🔍 Calculando ranking en memoria...");
-      
-      // 1. Obtenemos solo las tablas base necesarias
-      const { data: perfilesData, error: errPerfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor");
-      const { data: quinielasData, error: errQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico");
-      const { data: partidosData, error: errPartidos } = await supabase.from("partidos").select("id, jornada_id, resultado, pospuesto");
-      const { data: jornadasData, error: errJornadas } = await supabase.from("jornadas").select("id, nombre, fecha_limite").order("id", { ascending: true });
-
-      if (errPerfiles || errQuinielas || errPartidos || errJornadas) {
-        console.error("❌ Error en consultas base:", { errPerfiles, errQuinielas, errPartidos, errJornadas });
-        alert("Error al obtener datos base. Revisa la consola (F12).");
-        setCargandoRanking(false);
-        return;
-      }
-
-      const esAdmin = (p) => {
-        const rol = (p.rol || "").toLowerCase();
-        const email = (p.email || "").toLowerCase();
-        const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
-        return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
-      };
-
-      const jornadasSecuenciales = (jornadasData || []).map((jornada, index) => ({
-        idSupabase: jornada.id,
-        numero: index + 1,
-        nombre: jornada.nombre || `J${index + 1}`
-      }));
-
-      const acumulado = {};
-      (perfilesData || []).forEach(usuario => {
-        // Excluimos admins y los que solo juegan survivor
-        if (esAdmin(usuario) || usuario.solo_survivor === true) return; 
-        
-        acumulado[usuario.id] = {
-          usuario_id: usuario.id,
-          nombre: usuario.nombre_usuario || usuario.nombre || "Sin nombre",
-          totalAciertos: 0,
-          aciertosPorJornada: {},
-        };
-        
-        jornadasSecuenciales.forEach(j => {
-          acumulado[usuario.id].aciertosPorJornada[j.numero] = 0;
-        });
-      });
-
-      // 2. Calculamos los aciertos en el navegador
-      (jornadasData || []).forEach(jornada => {
-        const jornadaId = jornada.id;
-        const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornadaId)?.numero;
-
-        const partidosDeJornada = (partidosData || []).filter(p => String(p.jornada_id) === String(jornadaId) && !p.pospuesto);
-        const quinielasDeJornada = (quinielasData || []).filter(q => String(q.jornada_id) === String(jornadaId));
-
-        (perfilesData || []).forEach(usuario => {
-          if (esAdmin(usuario) || usuario.solo_survivor === true) return;
-          const reg = acumulado[usuario.id];
-          if (!reg) return;
-
-          const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
-          if (quinielasUsuario.length > 0) {
-            quinielasUsuario.forEach(q => {
-              const partido = partidosDeJornada.find(p => String(p.id) === String(q.partido_id));
-              if (partido && partido.resultado && q.pronostico === partido.resultado) {
-                if (secNum) reg.aciertosPorJornada[secNum] = (reg.aciertosPorJornada[secNum] || 0) + 1;
-                reg.totalAciertos++;
-              }
-            });
-          }
-        });
-      });
-
-      // 3. Ordenamos el ranking
-      const rankingQuinielas = Object.values(acumulado)
-        .sort((a, b) => {
-          if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
-          return a.nombre.localeCompare(b.nombre);
-        });
-
-      console.log("✅ Ranking calculado con éxito. Usuarios:", rankingQuinielas.length);
-      
-      setRankingData(rankingQuinielas);
-      setJornadasSecuencialesModal(jornadasSecuenciales);
-
-    } catch (err) {
-      console.error("💥 Error crítico en cálculo de ranking:", err);
-      alert("Ocurrió un error al calcular el ranking. Revisa la consola (F12).");
-    } finally {
-      setCargandoRanking(false);
-    }
-  };
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, [modalPDFAbierto]);
 
   const cerrarSesion = async () => {
     await supabase.auth.signOut();
-    navigate("/");
+    window.location.replace("/");
   };
 
-  const actualizarPronostico = (partidoId, valor) => {
-    setPronosticos({ ...pronosticos, [partidoId]: valor });
+  const esAdmin = (p) => {
+    const rol = (p.rol || "").toLowerCase();
+    const email = (p.email || "").toLowerCase();
+    const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
+    return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
   };
 
-  const guardarQuiniela = async () => {
-    if (esSoloSurvivor === true) {
-      alert("⚠️ Tu cuenta está configurada solo para jugar Survivor. No puedes guardar quinielas.");
-      return;
-    }
-
-    const horaMexico = await obtenerHoraMexico();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!jornadaActiva) {
-      alert("No existe una jornada activa");
-      return;
-    }
-
-    if (jornadaCerrada) {
-      alert("🔒 La jornada ya fue cerrada. No se permiten modificaciones.");
-      return;
-    }
-
-    const registros = Object.entries(pronosticos).map(([partidoId, valor]) => ({
-      usuario: user.email,
-      usuario_id: user.id,
-      partido_id: Number(partidoId),
-      pronostico: valor,
-      jornada_id: jornadaActiva.id,
-      fecha_envio: horaMexico.toISOString(),
-    }));
-
-    const { error: deleteError } = await supabase
-      .from("quinielas")
-      .delete()
-      .eq("usuario_id", user.id)
-      .eq("jornada_id", jornadaActiva.id);
-
-    if (deleteError) {
-      alert(deleteError.message);
-      return;
-    }
-
-    const { data, error } = await supabase.from("quinielas").insert(registros).select();
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setQuinielaGuardada(data || []);
-    const nuevosPronosticos = {};
-    data?.forEach((item) => { nuevosPronosticos[item.partido_id] = item.pronostico; });
-    setPronosticos(nuevosPronosticos);
-
-    alert("✅ Quiniela guardada correctamente");
-  };
-
-  const exportarPDF = async () => {
-    if (!jornadaSeleccionadaPDF) {
-      alert("Por favor selecciona una jornada para descargar.");
-      return;
-    }
-
-    const jornadaAExportar = jornadas.find((j) => j.id.toString() === jornadaSeleccionadaPDF);
+  //---------------------------------------
+  // CARGA DEL DASHBOARD CON PAGINACIÓN AUTOMÁTICA
+  //---------------------------------------
+  const cargarDashboard = async () => {
+    setCargando(true);
+    const t0 = performance.now();
 
     try {
-      setCargandoPDF(true);
+      const ahora = await obtenerHoraMexico();
+
+      const fetchAllRows = async (tableName, columns) => {
+        let allData = [];
+        let from = 0;
+        let to = 999;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from(tableName)
+            .select(columns)
+            .order("id", { ascending: false })
+            .range(from, to);
+
+          if (error) {
+            console.error(`Error fetching ${tableName}:`, error);
+            break;
+          }
+
+          if (!data || data.length === 0) {
+            hasMore = false;
+          } else {
+            allData = [...allData, ...data];
+            if (data.length < 1000) {
+              hasMore = false;
+            } else {
+              from += 1000;
+              to += 1000;
+            }
+          }
+        }
+        return allData;
+      };
+
+      const [jornadasRes, jornadaActivaRes, participantesRes, perfilesRes] = await Promise.all([
+        supabase.from("jornadas").select("id, nombre, activa, fecha_limite").order("id", { ascending: true }),
+        supabase.from("jornadas").select("id, nombre").eq("activa", true).single(),
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor")
+      ]);
+
+      const [todasQuinielas, todosSurvivor, todosPartidos] = await Promise.all([
+        fetchAllRows("quinielas", "jornada_id, usuario_id, partido_id, pronostico"),
+        fetchAllRows("survivor", "jornada_id, usuario_id, equipo"),
+        fetchAllRows("partidos", "id, jornada_id, local, visitante, resultado, pospuesto")
+      ]);
+
+      const jornadasData = jornadasRes.data || [];
+      const jornadaActivaData = jornadaActivaRes.data;
+      const perfilesData = perfilesRes.data || [];
+
+      setJornadas(jornadasData);
+      setJornadaActiva(jornadaActivaData);
+      setParticipantes(participantesRes.count || 0);
+      if (jornadaActivaData) setJornadaSeleccionada(jornadaActivaData.id);
+
+      const resultados = procesarTodosLosDatos(
+        jornadasData,
+        perfilesData,
+        todasQuinielas,
+        todosSurvivor,
+        todosPartidos,
+        ahora,
+        jornadaActivaData?.id
+      );
+
+      setDatosGrafica(resultados.datosGrafica);
+      setRankingQuinielas(resultados.rankingQuinielas);
+      setJornadasSecuenciales(resultados.jornadasSecuenciales);
+      setAusentesQuiniela(resultados.ausentesQuiniela);
+      setAusentesSurvivor(resultados.ausentesSurvivor);
+      setQuinielasActivas(resultados.quinielasActivas);
+
+      const t1 = performance.now();
+      console.log(`⚡ Dashboard cargado en ${Math.round(t1 - t0)}ms`);
+
+    } catch (error) {
+      console.error("Error cargando dashboard:", error);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  //---------------------------------------
+  // PROCESAMIENTO DE DATOS
+  //---------------------------------------
+  const procesarTodosLosDatos = (
+    jornadasData,
+    perfilesData,
+    todasQuinielas,
+    todosSurvivor,
+    todosPartidos,
+    ahora,
+    idJornadaActiva
+  ) => {
+    const jornadasSecuenciales = jornadasData.map((jornada, index) => ({
+      idSupabase: jornada.id,
+      numero: index + 1,
+      nombre: `J${index + 1}`
+    }));
+
+    const usuariosConPicksSurvivor = new Set(
+      (todosSurvivor || []).map(s => s.usuario_id)
+    );
+
+    const usuariosQueJueganSurvivor = new Set(
+      perfilesData
+        .filter(p => p.solo_survivor === true || usuariosConPicksSurvivor.has(p.id))
+        .map(p => p.id)
+    );
+
+    const acumulado = {};
+    perfilesData.forEach(usuario => {
+      if (esAdmin(usuario)) return;
+      acumulado[usuario.id] = {
+        usuario_id: usuario.id,
+        nombre: usuario.nombre_usuario || usuario.nombre || "Sin nombre",
+        totalAciertos: 0,
+        vidas: 0,
+        quinielasEnviadas: 0,
+        survivorEnviados: 0,
+        aciertosPorJornada: {},
+        soloSurvivor: usuario.solo_survivor === true
+      };
+      jornadasSecuenciales.forEach(j => {
+        acumulado[usuario.id].aciertosPorJornada[j.numero] = 0;
+      });
+    });
+
+    const quinielasPorJornadaCount = {};
+    const survivorPorJornadaCount = {};
+
+    jornadasData.forEach(jornada => {
+      const jornadaId = jornada.id;
+      const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornadaId)?.numero;
+      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
+
+      quinielasPorJornadaCount[jornadaId] = new Set();
+      survivorPorJornadaCount[jornadaId] = new Set();
+
+      const partidosDeJornada = todosPartidos.filter(p => String(p.jornada_id) === String(jornadaId) && !p.pospuesto);
+      const quinielasDeJornada = todasQuinielas.filter(q => String(q.jornada_id) === String(jornadaId));
+      const survivorDeJornada = todosSurvivor.filter(s => String(s.jornada_id) === String(jornadaId));
+
+      perfilesData.forEach(usuario => {
+        if (esAdmin(usuario)) return;
+        const reg = acumulado[usuario.id];
+        if (!reg) return;
+
+        const esJugadorSurvivor = usuariosQueJueganSurvivor.has(usuario.id);
+
+        if (esJugadorSurvivor) {
+          const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
+          if (seleccionSurvivor && seleccionSurvivor.equipo) {
+            reg.survivorEnviados++;
+            survivorPorJornadaCount[jornadaId].add(usuario.id);
+            if (esPasadaYCerrada) {
+              const normalizar = (texto) => texto.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const equipoLimpio = normalizar(seleccionSurvivor.equipo);
+              
+              const partido = partidosDeJornada.find(p => {
+                return normalizar(p.local) === equipoLimpio || normalizar(p.visitante) === equipoLimpio;
+              });
+
+              if (partido?.resultado) {
+                let perdio = false;
+                const esLocal = normalizar(partido.local) === equipoLimpio;
+                
+                if (esLocal && partido.resultado === "V") perdio = true;
+                if (!esLocal && partido.resultado === "L") perdio = true;
+                
+                if (perdio && reg.vidas < 3) reg.vidas++;
+              }
+            }
+          } else if (esPasadaYCerrada && reg.vidas < 3) {
+            reg.vidas++;
+          }
+        }
+
+        if (reg.soloSurvivor) return;
+
+        const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
+        if (quinielasUsuario.length > 0) {
+          reg.quinielasEnviadas++;
+          quinielasPorJornadaCount[jornadaId].add(usuario.id);
+          quinielasUsuario.forEach(q => {
+            const partido = partidosDeJornada.find(p => String(p.id) === String(q.partido_id));
+            if (partido && partido.resultado && q.pronostico === partido.resultado) {
+              if (secNum) reg.aciertosPorJornada[secNum] = (reg.aciertosPorJornada[secNum] || 0) + 1;
+              reg.totalAciertos++;
+            }
+          });
+        }
+      });
+    });
+
+    console.log("\n📊 RESUMEN DE VIDAS PERDIDAS:");
+    Object.values(acumulado).forEach(reg => {
+      if (reg.vidas > 0) {
+        console.log(`  ${reg.nombre}: ${reg.vidas} vidas perdidas`);
+      }
+    });
+    console.log("=== FIN RESUMEN ===\n");
+
+    const rankingQuinielas = Object.values(acumulado)
+      .filter(u => !u.soloSurvivor)
+      .sort((a, b) => {
+        if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
+        if (a.vidas !== b.vidas) return a.vidas - b.vidas;
+        return a.nombre.localeCompare(b.nombre);
+      });
+
+    const datosGrafica = jornadasData.map(jornada => {
+      const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornada.id)?.numero;
+      return {
+        nombre: jornada.nombre || `J${secNum || jornada.id}`,
+        quinielas: quinielasPorJornadaCount[jornada.id]?.size || 0,
+        survivor: survivorPorJornadaCount[jornada.id]?.size || 0
+      };
+    });
+
+    let ausentesQuiniela = [];
+    let ausentesSurvivor = [];
+    let quinielasActivas = 0;
+
+    if (idJornadaActiva) {
+      const jornadaActivaSecNum = jornadasSecuenciales.find(j => j.idSupabase === idJornadaActiva)?.numero;
+      const jornadasHastaActiva = jornadaActivaSecNum || 0;
+      
+      const quinielasDeJornadaActiva = todasQuinielas.filter(q => String(q.jornada_id) === String(idJornadaActiva));
+      const quinielasActivaSet = new Set(quinielasDeJornadaActiva.map(q => q.usuario_id));
+      
+      const survivorDeJornadaActiva = todosSurvivor.filter(s => String(s.jornada_id) === String(idJornadaActiva));
+      const survivorActivaSet = new Set(survivorDeJornadaActiva.filter(s => s.equipo).map(s => s.usuario_id));
+      
+      quinielasActivas = quinielasActivaSet.size;
+
+      ausentesQuiniela = perfilesData
+        .filter(p => {
+          if (esAdmin(p)) return false;
+          if (p.solo_survivor === true) return false;
+          const reg = acumulado[p.id];
+          if (!reg) return false;
+          return !quinielasActivaSet.has(p.id);
+        })
+        .map(p => {
+          const reg = acumulado[p.id];
+          let motivo = "Falta en jornada actual";
+          let tipo = "normal";
+          
+          const jornadasFaltadas = jornadasHastaActiva - reg.quinielasEnviadas;
+          if (jornadasFaltadas > 1) {
+            motivo = `Inactivo (faltó ${jornadasFaltadas} jornadas)`;
+            tipo = "inactivo";
+          }
+          return { ...p, motivo, tipo };
+        });
+
+      ausentesSurvivor = perfilesData
+        .filter(p => {
+          if (esAdmin(p)) return false;
+          if (!usuariosQueJueganSurvivor.has(p.id)) return false;
+          if (survivorActivaSet.has(p.id)) return false;
+          
+          const reg = acumulado[p.id];
+          if (reg && reg.vidas >= 3) return false;
+          
+          return true;
+        })
+        .map(p => {
+          const reg = acumulado[p.id];
+          let motivo = "Falta en jornada actual";
+          let tipo = "normal";
+          if (reg && reg.vidas >= 3) {
+            motivo = "Eliminado (3 vidas)";
+            tipo = "eliminado";
+          }
+          return { ...p, motivo, tipo };
+        });
+    }
+
+    return {
+      rankingQuinielas,
+      jornadasSecuenciales,
+      datosGrafica,
+      ausentesQuiniela,
+      ausentesSurvivor,
+      quinielasActivas
+    };
+  };
+
+  const getNombreUsuario = (p) => {
+    return p.nombre_usuario || p.nombre || (p.email ? p.email.split('@')[0] : 'Usuario');
+  };
+
+  //---------------------------------------
+  // EXPORTAR A IMAGEN (JPEG)
+  //---------------------------------------
+  const exportarImagen = async () => {
+    try {
+      const rankingOrdenado = [...rankingQuinielas].sort((a, b) => {
+        if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
+        return a.nombre.localeCompare(b.nombre);
+      });
+
+      const liderScore = rankingOrdenado.length > 0 ? rankingOrdenado[0].totalAciertos : 0;
+
+      const contenedorTemp = document.createElement('div');
+      contenedorTemp.style.position = 'fixed';
+      contenedorTemp.style.top = '0';
+      contenedorTemp.style.left = '0';
+      contenedorTemp.style.width = '1400px';
+      contenedorTemp.style.background = 'white';
+      contenedorTemp.style.padding = '40px';
+      contenedorTemp.style.boxShadow = '0 0 20px rgba(0,0,0,0.1)';
+      contenedorTemp.style.zIndex = '9999';
+      
+      const titulo = document.createElement('h2');
+      titulo.textContent = '🏆 Ranking General Acumulado - Quinielas';
+      titulo.style.fontSize = '28px';
+      titulo.style.fontWeight = 'bold';
+      titulo.style.marginBottom = '20px';
+      titulo.style.textAlign = 'center';
+      contenedorTemp.appendChild(titulo);
+
+      const tabla = document.createElement('table');
+      tabla.style.width = '100%';
+      tabla.style.borderCollapse = 'collapse';
+      tabla.style.fontSize = '13px';
+
+      const thead = document.createElement('thead');
+      let encabezadosHTML = `
+        <tr style="background-color: #16a34a; color: white;">
+          <th style="border: 1px solid #15803d; padding: 8px; text-align: center; width: 50px;">Pos</th>
+          <th style="border: 1px solid #15803d; padding: 8px; text-align: left; width: 150px;">Usuario</th>
+      `;
+
+      jornadasSecuenciales.forEach(jornadaSec => {
+        encabezadosHTML += `<th style="border: 1px solid #15803d; padding: 8px; text-align: center; width: 50px;">${jornadaSec.nombre}</th>`;
+      });
+      encabezadosHTML += `<th style="border: 1px solid #15803d; padding: 8px; text-align: center; width: 70px; background-color: #15803d; font-weight: bold;">TOTAL</th></tr>`;
+      thead.innerHTML = encabezadosHTML;
+      tabla.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      
+      rankingOrdenado.forEach((fila, index) => {
+        const pos = index + 1;
+        let bgColor = '#ffffff';
+        let textColor = '#000000';
+        let fontWeight = 'normal';
+
+        if (pos === 1) {
+          bgColor = '#22c55e'; textColor = '#ffffff'; fontWeight = 'bold';
+        } else if (pos === 2) {
+          bgColor = '#eab308'; textColor = '#000000'; fontWeight = 'bold';
+        } else if (pos === 3) {
+          bgColor = '#f97316'; textColor = '#ffffff'; fontWeight = 'bold';
+        } else if (pos === 4) {
+          bgColor = '#3b82f6'; textColor = '#ffffff'; fontWeight = 'bold';
+        } else if (pos === 5) {
+          bgColor = '#8b5cf6'; textColor = '#ffffff'; fontWeight = 'bold';
+        }
+
+        if (liderScore - fila.totalAciertos > 11) {
+          bgColor = '#ef4444'; textColor = '#ffffff'; fontWeight = 'bold';
+        }
+
+        const tr = document.createElement('tr');
+        tr.style.backgroundColor = bgColor;
+        tr.style.color = textColor;
+
+        let filaHTML = `
+          <td style="border: 1px solid rgba(156, 163, 175, 0.5); padding: 8px; text-align: center; font-weight: ${fontWeight};">${pos}</td>
+          <td style="border: 1px solid rgba(156, 163, 175, 0.5); padding: 8px; font-weight: ${fontWeight};">${fila.nombre}</td>
+        `;
+
+        jornadasSecuenciales.forEach(jornadaSec => {
+          const aciertos = fila.aciertosPorJornada[jornadaSec.numero] || 0;
+          filaHTML += `<td style="border: 1px solid rgba(156, 163, 175, 0.5); padding: 8px; text-align: center;">${aciertos}</td>`;
+        });
+        
+        filaHTML += `<td style="border: 1px solid rgba(156, 163, 175, 0.5); padding: 8px; text-align: center; font-weight: bold; background-color: rgba(0,0,0,0.1);">${fila.totalAciertos}</td></tr>`;
+        tr.innerHTML = filaHTML;
+        tbody.appendChild(tr);
+      });
+
+      tabla.appendChild(tbody);
+      contenedorTemp.appendChild(tabla);
+
+      document.body.appendChild(contenedorTemp);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(contenedorTemp, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+      });
+
+      document.body.removeChild(contenedorTemp);
+
+      const imagenData = canvas.toDataURL("image/jpeg", 0.95);
+      const link = document.createElement("a");
+      link.download = `Ranking_General_Quinielas.jpg`;
+      link.href = imagenData;
+      link.click();
+      
+    } catch (error) {
+      console.error("Error al exportar:", error);
+      alert("Error al generar la imagen: " + error.message);
+    }
+  };
+
+  //---------------------------------------
+  // MODAL PDF
+  //---------------------------------------
+  const abrirModalPDF = () => {
+    const preSeleccion = jornadaActiva?.id || (jornadas.length > 0 ? jornadas[0].id : "");
+    setJornadaParaPDF(preSeleccion);
+    setModalPDFAbierto(true);
+  };
+
+  //---------------------------------------
+  // ✅ EXPORTAR PDF (OPTIMIZADO PARA UNA SOLA HOJA)
+  //---------------------------------------
+  const exportarPDF = async (jornadaId) => {
+    if (!jornadaId) {
+      alert("Selecciona una jornada.");
+      return;
+    }
+
+    setExportandoPDF(true);
+
+    try {
       const { default: jsPDF } = await import("jspdf");
       const { default: autoTable } = await import("jspdf-autotable");
 
-      const { data: partidosData } = await supabase
+      const { data: jornadaActivaPDF } = await supabase.from("jornadas").select("*").eq("id", jornadaId).single();
+      
+      const { data: partidos } = await supabase
         .from("partidos")
-        .select("id, local, visitante, resultado")
-        .eq("jornada_id", jornadaSeleccionadaPDF)
+        .select("id, local, visitante, resultado, pospuesto")
+        .eq("jornada_id", jornadaId)
         .order("id");
+        
+      const { data: quinielasData } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico").eq("jornada_id", jornadaId);
+      const { data: perfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, nombre_completo");
 
-      const { data: quinielasData } = await supabase
-        .from("quinielas")
-        .select("usuario_id, partido_id, pronostico")
-        .eq("jornada_id", jornadaSeleccionadaPDF);
+      let usuarios = [...new Set(quinielasData?.map(q => q.usuario_id) || [])];
 
-      const { data: perfiles } = await supabase
-        .from("profiles")
-        .select("id, nombre, nombre_usuario, nombre_completo");
+      if (usuarios.length === 0) {
+        alert("⚠️ No hay quinielas registradas para esta jornada.");
+        setExportandoPDF(false);
+        return;
+      }
 
-      const usuarios = [...new Set(quinielasData?.map((q) => q.usuario_id) || [])];
+      const usuariosConPuntajes = usuarios.map(usuarioId => {
+        let aciertos = 0;
+        const pronosticosUsuario = {};
+        
+        (partidos || []).forEach(partido => {
+          const pronostico = quinielasData?.find(q => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId);
+          
+          if (pronostico) {
+            pronosticosUsuario[partido.id] = pronostico.pronostico;
+            if (partido.resultado && pronostico.pronostico === partido.resultado) {
+              aciertos++;
+            }
+          } else {
+            pronosticosUsuario[partido.id] = "-";
+          }
+        });
+        
+        return { usuarioId, aciertos, pronosticosUsuario };
+      });
 
-      const columnas = [
-        "Partido",
-        "Resultado",
-        ...usuarios.map((usuarioId) => {
-          const perfil = perfiles?.find((p) => p.id === usuarioId);
-          return perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || usuarioId;
-        }),
+      usuariosConPuntajes.sort((a, b) => b.aciertos - a.aciertos);
+
+      const posiciones = {};
+      usuariosConPuntajes.forEach((u, index) => {
+        if (index === 0) {
+          posiciones[u.usuarioId] = 1;
+        } else {
+          const prev = usuariosConPuntajes[index - 1];
+          if (u.aciertos === prev.aciertos) {
+            posiciones[u.usuarioId] = posiciones[prev.usuarioId];
+          } else {
+            posiciones[u.usuarioId] = index + 1;
+          }
+        }
+      });
+
+      const columnasDef = [
+        { header: "Pos", dataKey: "pos" },
+        { header: "Usuario", dataKey: "usuario" },
+        ...(partidos || []).map(p => ({ header: `${p.local} vs ${p.visitante}`, dataKey: `p_${p.id}` })),
+        { header: "Total", dataKey: "total" }
       ];
 
-      const aciertos = {};
-      usuarios.forEach((usuarioId) => { aciertos[usuarioId] = 0; });
+      const head = [columnasDef.map(col => col.header)];
 
-      const filas = (partidosData || []).map((partido) => {
-        const fila = [`${partido.local} vs ${partido.visitante}`, partido.resultado || "-"];
-        usuarios.forEach((usuarioId) => {
-          const pronostico = quinielasData?.find(
-            (q) => Number(q.partido_id) === Number(partido.id) && q.usuario_id === usuarioId
-          );
-          let valor = "-";
-          if (pronostico) {
-            valor = pronostico.pronostico;
-            if (partido.resultado && pronostico.pronostico === partido.resultado) {
-              aciertos[usuarioId]++;
-            }
-          }
-          fila.push(valor);
+      const body = usuariosConPuntajes.map(u => {
+        const perfil = perfiles?.find(p => p.id === u.usuarioId);
+        let nombre = perfil?.nombre_usuario || perfil?.nombre || perfil?.nombre_completo || u.usuarioId;
+        
+        if (nombre && nombre.length > 15) {
+          nombre = nombre.substring(0, 14) + "..";
+        }
+        
+        const row = {
+          pos: `#${posiciones[u.usuarioId]}`,
+          usuario: nombre,
+          total: u.aciertos
+        };
+        
+        (partidos || []).forEach(p => {
+          row[`p_${p.id}`] = u.pronosticosUsuario[p.id] || "-";
         });
-        return fila;
+        
+        return columnasDef.map(col => row[col.dataKey]);
       });
 
-      const filaTotales = ["TOTAL", "", ...usuarios.map((usuarioId) => aciertos[usuarioId])];
-      filas.push(filaTotales);
+      // 🚨 Configuración optimizada para UNA SOLA HOJA HORIZONTAL
+      const doc = new jsPDF("landscape", "mm", "a4");
 
-      const doc = new jsPDF("landscape");
-      doc.setFontSize(18);
-      doc.text(`Quinielas - ${jornadaAExportar ? jornadaAExportar.nombre : `Jornada ${jornadaSeleccionadaPDF}`}`, 14, 15);
+      doc.setFontSize(14); // Ligeramente más pequeño para el título
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(34, 197, 94);
+      doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 12);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 100, 100);
+      doc.text(`Generado: ${new Date().toLocaleDateString('es-MX')}`, 14, 17);
 
       autoTable(doc, {
-        head: [columnas],
-        body: filas,
-        startY: 22,
+        head: head,
+        body: body,
+        startY: 20, // Empezar más arriba para ganar espacio vertical
         theme: "grid",
-        styles: { fontSize: 8, halign: "center", valign: "middle" },
-        headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: "bold" },
+        styles: {
+          fontSize: 5, // 🚨 Fuente más pequeña para que quepa todo
+          halign: "center",
+          valign: "middle",
+          cellPadding: 0.5, // 🚨 Relleno mínimo para ahorrar espacio
+          lineColor: [200, 200, 200],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [34, 197, 94],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 5,
+          halign: "center",
+          cellPadding: 0.5,
+          // 🚨 Se eliminó minCellHeight para que el encabezado no ocupe espacio innecesario
+        },
+        columnStyles: {
+          0: { halign: "center", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 12 },
+          1: { halign: "left", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 35 },
+        },
         didParseCell: (data) => {
-          if (data.section === "body" && data.row.index === filas.length - 1) {
-            data.cell.styles.fillColor = [230, 230, 230];
+          if (data.section === "body" && data.column.index === columnasDef.length - 1) {
+            data.cell.styles.fillColor = [220, 252, 231];
             data.cell.styles.fontStyle = "bold";
+            data.cell.styles.textColor = [22, 101, 52];
+            data.cell.styles.fontSize = 6;
             return;
           }
-          if (data.section !== "body" || data.column.index < 2) return;
-          const fila = filas[data.row.index];
-          if (!fila) return;
-          if (fila[1] !== "-" && fila[1] !== null && data.cell.raw === fila[1]) {
-            data.cell.styles.textColor = [22, 163, 74];
-            data.cell.styles.fontStyle = "bold";
+
+          if (data.section === "body" && data.column.index >= 2 && data.column.index < columnasDef.length - 1) {
+            const colDataKey = columnasDef[data.column.index].dataKey;
+            const partidoId = Number(colDataKey.replace('p_', ''));
+            const partido = partidos?.find(p => p.id === partidoId);
+            
+            if (partido && partido.resultado && data.cell.raw === partido.resultado) {
+              data.cell.styles.textColor = [0, 128, 0];
+              data.cell.styles.fontStyle = "bold";
+              data.cell.styles.fillColor = [240, 253, 244];
+            }
           }
         },
+        // 🚨 Márgenes mínimos para aprovechar todo el ancho de la hoja A4 horizontal
+        margin: { top: 20, left: 5, right: 5, bottom: 5 },
       });
 
-      const nombreArchivo = jornadaAExportar
-        ? `Quinielas_${jornadaAExportar.nombre.replace(/\s+/g, "_")}.pdf`
-        : `Quinielas_Jornada_${jornadaSeleccionadaPDF}.pdf`;
-
-      doc.save(nombreArchivo);
-    } catch (err) {
-      console.error("Error generando PDF:", err);
-      alert("Ocurrió un error al generar el PDF.");
+      doc.save(`Quinielas_${jornadaActivaPDF?.nombre || 'Jornada'}.pdf`);
+      setModalPDFAbierto(false);
+    } catch (error) {
+      console.error("Error al exportar PDF:", error);
+      alert("Error al generar el PDF: " + error.message);
     } finally {
-      setCargandoPDF(false);
+      setExportandoPDF(false);
     }
   };
 
-  if (cargandoPerfil) {
+  //---------------------------------------
+  // INTERFAZ
+  //---------------------------------------
+  if (cargando) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center max-w-sm w-full">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-lg font-bold text-slate-800">Cargando tu perfil...</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-green-600 border-t-transparent mb-4"></div>
+          <p className="text-xl font-semibold text-gray-700">Cargando Dashboard...</p>
+          <p className="text-sm text-gray-500 mt-2">Procesando datos de quinielas y survivor</p>
         </div>
       </div>
     );
   }
 
-  const puedeGuardar = !jornadaCerrada;
-  const pronosticosCompletados = Object.keys(pronosticos).length;
-  const partidosDisponibles = partidos.filter(p => !p.pospuesto || p.reactivado).length;
-  const progresoPorcentaje = Math.round((pronosticosCompletados / Math.max(partidosDisponibles, 1)) * 100);
-
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
-              <span className="text-orange-500">⚽</span> Mi Quiniela
-            </h1>
-            {jornadaActiva && (
-              <p className="text-slate-500 font-medium mt-1 flex items-center gap-2">
-                <span className="bg-slate-900 text-white text-xs font-bold px-2 py-0.5 rounded uppercase tracking-wide">
-                  {jornadaActiva.nombre}
-                </span>
-                <span>Jornada Activa</span>
-              </p>
-            )}
-          </div>
-          <button 
-            onClick={cerrarSesion} 
-            className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors self-start sm:self-auto"
-          >
-            Cerrar Sesión
-          </button>
-        </div>
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Dashboard Administrador</h1>
 
-        {/* Survivor CTA */}
-        <Link 
-          to="/survivor" 
-          className="block bg-orange-50 border-2 border-orange-200 rounded-2xl p-5 hover:border-orange-400 hover:shadow-md transition-all duration-300 group"
+      <div className="flex flex-wrap gap-3 mb-6">
+        <select
+          value={jornadaSeleccionada}
+          onChange={(e) => setJornadaSeleccionada(Number(e.target.value))}
+          className="border rounded px-3 py-2 bg-white"
         >
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="bg-orange-500 text-white p-3 rounded-xl shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-orange-700 font-black text-xl tracking-tight">MODO SURVIVOR</h3>
-                <p className="text-slate-600 text-sm font-medium">Elige al equipo que sobrevivirá esta jornada</p>
-              </div>
-            </div>
-            <span className="hidden sm:flex bg-orange-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm group-hover:translate-x-1 transition-transform duration-300 items-center gap-2 shadow-sm">
-              ENTRAR →
-            </span>
-          </div>
-        </Link>
+          {jornadas.map((j) => (
+            <option key={j.id} value={j.id}>{j.nombre} {j.activa ? " (Activa)" : ""}</option>
+          ))}
+        </select>
 
-        {/* Progress Bar */}
-        {jornadaActiva && !esSoloSurvivor && (
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-sm font-bold text-slate-600 uppercase tracking-wide">Progreso</span>
-              <span className="text-sm font-black text-orange-600">{pronosticosCompletados} / {partidosDisponibles} completados</span>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-              <div 
-                className="bg-gradient-to-r from-orange-500 to-amber-500 h-3 rounded-full transition-all duration-700 ease-out"
-                style={{ width: `${progresoPorcentaje}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
+        <button 
+          onClick={exportarImagen} 
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+        >
+          📸 Exportar Ranking General Quinielas (JPEG)
+        </button>
 
-        {/* 🚨 Top Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          
-          <button
-            onClick={() => {
-              console.log("👆 Abriendo modal de ranking...");
-              setMostrarRanking(true);
-              cargarRankingParaModal();
-            }}
-            className="flex items-center justify-center gap-2 px-5 py-3.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Ver Ranking General
-          </button>
-
-          <button
-            onClick={() => setMostrarModal(true)}
-            className="flex items-center justify-center gap-2 px-5 py-3.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Reglas y Premios
-          </button>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div className="flex-1 w-full">
-              <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                Descargar PDF
-              </label>
-              <select
-                value={jornadaSeleccionadaPDF}
-                onChange={(e) => setJornadaSeleccionadaPDF(e.target.value)}
-                disabled={jornadas.length === 0}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-800 bg-slate-50 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all disabled:opacity-50 font-medium"
-              >
-                {jornadas.length === 0 ? (
-                  <option value="">Sin jornadas cerradas</option>
-                ) : (
-                  jornadas.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {j.nombre}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-            <button
-              onClick={exportarPDF}
-              disabled={jornadas.length === 0 || cargandoPDF}
-              className={`w-full sm:w-auto px-5 py-2.5 rounded-lg text-sm font-bold text-white shadow-sm transition-all duration-200 flex items-center justify-center gap-2 ${
-                jornadas.length > 0 && !cargandoPDF 
-                  ? "bg-slate-900 hover:bg-slate-800" 
-                  : "bg-slate-300 cursor-not-allowed"
-              }`}
-            >
-              {cargandoPDF ? "Generando..." : "Descargar"}
-            </button>
-          </div>
-        </div>
-
-        {/* SOLO SURVIVOR MODE */}
-        {esSoloSurvivor ? (
-          <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-8 text-center shadow-sm mt-6">
-            <div className="text-5xl mb-4">🦖</div>
-            <h2 className="text-2xl font-black text-indigo-900 mb-3">Modo Solo Survivor</h2>
-            <p className="text-indigo-800 mb-6 max-w-md mx-auto leading-relaxed">
-              Tu cuenta está configurada para participar <strong>únicamente en el juego de Survivor</strong>. 
-              No tienes permitido realizar selecciones de quiniela.
-            </p>
-            <Link 
-              to="/survivor" 
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
-            >
-              Ir a mi selección de Survivor →
-            </Link>
-          </div>
-        ) : (
-          <>
-            {/* MATCH LIST */}
-            <div className="space-y-4 mt-8">
-              {partidos.map((partido, index) => {
-                const estaPospuesto = partido.pospuesto && !partido.reactivado;
-                const estaReactivado = partido.reactivado;
-                const tieneResultado = !!partido.resultado;
-                const fueMovido = partido.jornada_original && partido.jornada_original !== partido.jornada_id;
-                const estaDeshabilitado = jornadaCerrada || tieneResultado || estaPospuesto;
-
-                return (
-                  <div 
-                    key={partido.id} 
-                    className={`relative bg-white rounded-2xl border p-5 sm:p-6 transition-all duration-200 ${
-                      estaDeshabilitado 
-                        ? "border-slate-200 bg-slate-50/50" 
-                        : "border-slate-200 shadow-sm hover:shadow-md hover:border-orange-300"
-                    } ${estaReactivado && !tieneResultado ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
-                  >
-                    <span className="absolute -top-3 -left-3 bg-slate-900 text-white text-xs font-black w-8 h-8 rounded-full flex items-center justify-center shadow-md border-2 border-white">
-                      {String(index + 1).padStart(2, '0')}
-                    </span>
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pl-2 sm:pl-0">
-                      <h3 className="text-lg sm:text-xl font-black text-slate-900 text-center sm:text-left tracking-tight">
-                        {partido.local.toUpperCase()} <span className="text-slate-400 font-medium text-base mx-1">vs</span> {partido.visitante.toUpperCase()}
-                      </h3>
-                      
-                      <div className="flex flex-wrap justify-center sm:justify-end gap-2">
-                        {estaPospuesto && !fueMovido && (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">
-                            ⏸️ Pospuesto
-                          </span>
-                        )}
-                        {fueMovido && !jornadaCerrada && (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            ⚠️ Reprogramado
-                          </span>
-                        )}
-                        {estaReactivado && !tieneResultado && !jornadaCerrada && (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 animate-pulse">
-                            ✅ Editable
-                          </span>
-                        )}
-                        {tieneResultado && (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border border-blue-200">
-                            🔒 Cerrado
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {estaPospuesto && !fueMovido && (
-                      <div className="bg-orange-50 border-l-4 border-orange-400 p-3 mb-4 rounded-r-lg text-sm text-orange-800 flex items-start gap-2">
-                        <span className="text-lg">ℹ️</span>
-                        <span>Este partido fue pospuesto. No puedes hacer pronóstico hasta que sea reactivado.</span>
-                      </div>
-                    )}
-                    
-                    <div className="grid grid-cols-3 gap-3 pl-2 sm:pl-0">
-                      {["L", "E", "V"].map((valor) => {
-                        const isSelected = pronosticos[partido.id] === valor;
-                        const labels = { L: "LOCAL", E: "EMPATE", V: "VISITANTE" };
-                        const colors = isSelected 
-                          ? "bg-orange-500 border-orange-500 text-white shadow-md shadow-orange-200 scale-[1.02]" 
-                          : "bg-white border-slate-200 text-slate-600 hover:border-orange-400 hover:bg-orange-50";
-                        
-                        return (
-                          <label 
-                            key={valor}
-                            className={`relative flex flex-col items-center justify-center py-4 px-2 rounded-xl border-2 font-black text-sm cursor-pointer transition-all duration-200 ${
-                              estaDeshabilitado 
-                                ? "opacity-60 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400" 
-                                : colors
-                            }`}
-                          >
-                            <input 
-                              type="radio" 
-                              name={`partido-${partido.id}`} 
-                              value={valor}
-                              checked={isSelected} 
-                              onChange={() => actualizarPronostico(partido.id, valor)} 
-                              disabled={estaDeshabilitado} 
-                              className="sr-only" 
-                            />
-                            <span className="tracking-wider text-sm sm:text-base">{labels[valor]}</span>
-                            {isSelected && (
-                              <span className="absolute top-2 right-2 text-white">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                              </span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {jornadaCerrada && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 text-red-800 font-bold mt-6">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                <span>La jornada ya fue cerrada. Todos los pronósticos están bloqueados.</span>
-              </div>
-            )}
-
-            <div className="pt-6 pb-8 text-center sticky bottom-4 z-10">
-              {puedeGuardar && (
-                <button
-                  disabled={!puedeGuardar || pronosticosCompletados === 0}
-                  onClick={guardarQuiniela}
-                  className={`w-full sm:w-auto flex items-center justify-center gap-3 px-10 py-4 rounded-2xl font-black text-lg shadow-lg transition-all duration-200 transform ${
-                    puedeGuardar && pronosticosCompletados > 0
-                      ? "bg-orange-500 hover:bg-orange-600 text-white hover:shadow-orange-200 hover:-translate-y-0.5" 
-                      : "bg-slate-300 text-slate-500 cursor-not-allowed shadow-none"
-                  }`}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                  </svg>
-                  GUARDAR QUINIELA
-                </button>
-              )}
-            </div>
-
-            {quinielaGuardada.length > 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-8">
-                <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                    <span className="text-emerald-600">✓</span> Pronósticos Enviados
-                  </h2>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-slate-900 text-white">
-                    {quinielaGuardada.length} / {partidosDisponibles}
-                  </span>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-white text-slate-500 text-xs font-black uppercase tracking-wider border-b border-slate-200">
-                        <th className="px-6 py-4">Partido</th>
-                        <th className="px-6 py-4 text-center">Tu Selección</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {quinielaGuardada.map((item) => {
-                        const partido = partidos.find((p) => String(p.id) === String(item.partido_id));
-                        let badgeColor = "bg-slate-100 text-slate-700";
-                        let badgeText = "Empate";
-                        
-                        if (item.pronostico === "L") { badgeColor = "bg-blue-100 text-blue-700"; badgeText = "Local"; }
-                        if (item.pronostico === "V") { badgeColor = "bg-orange-100 text-orange-700"; badgeText = "Visitante"; }
-
-                        return (
-                          <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4">
-                              <p className="font-bold text-slate-900">
-                                {partido ? `${partido.local} vs ${partido.visitante}` : "Partido no encontrado"}
-                              </p>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <span className={`inline-flex items-center px-4 py-1.5 rounded-lg text-sm font-black ${badgeColor}`}>
-                                {badgeText}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+        <button 
+          onClick={abrirModalPDF} 
+          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
+        >
+          📄 Exportar PDF
+        </button>
+        
+        <Link to="/admin" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">Crear Jornada</Link>
+        <Link to="/partidos" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">Crear Partidos</Link>
+        <Link to="/admin/resultados" className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 transition">Capturar Resultados</Link>
+        <Link to="/posiciones" className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition">Ranking</Link>
+        <Link to="/admin-survivor" className="bg-pink-600 text-white px-4 py-2 rounded hover:bg-pink-700 transition">🏆 Admin Survivor</Link>
+        <Link to="/acceso-pronosticos" className="bg-cyan-600 text-white px-4 py-2 rounded hover:bg-cyan-700 transition">🔒 Pronósticos Privados</Link>
+        <button onClick={cerrarSesion} className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 transition">🚪 Cerrar Sesión</button>
       </div>
 
-      {/* 🚨 MODAL DE RANKING GENERAL (Cálculo 100% en memoria) */}
-      {mostrarRanking && (
-        <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" 
-          onClick={() => setMostrarRanking(false)}
-        >
-          <div 
-            className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => setMostrarRanking(false)} 
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full p-2 transition-colors z-10" 
-              aria-label="Cerrar"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            
-            <div className="p-6 sm:p-8">
-              <div className="text-center mb-6">
-                <span className="text-4xl mb-2 block">🏆</span>
-                <h2 className="text-2xl font-black text-slate-900">Ranking General Acumulado</h2>
-                <div className="h-1.5 w-20 bg-indigo-500 mx-auto mt-3 rounded-full"></div>
-              </div>
-              
-              {cargandoRanking ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent mb-4"></div>
-                  <p className="text-slate-600 font-medium">Calculando clasificación en tiempo real...</p>
-                </div>
-              ) : rankingData.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-indigo-50 text-indigo-900 text-xs font-black uppercase tracking-wider">
-                        <th className="px-4 py-3 text-center w-16 border border-indigo-100">Pos</th>
-                        <th className="px-4 py-3 border border-indigo-100">Jugador</th>
-                        {jornadasSecuencialesModal.map(j => (
-                          <th key={j.numero} className="px-2 py-3 text-center border border-indigo-100 min-w-[60px]">
-                            {j.nombre}
-                          </th>
-                        ))}
-                        <th className="px-4 py-3 text-center border border-indigo-100 bg-indigo-100 font-black">TOTAL</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {rankingData.map((fila, index) => {
-                        const pos = index + 1;
-                        let rowClass = "hover:bg-slate-50 transition-colors";
-                        let posClass = "bg-slate-100 text-slate-600";
-                        
-                        if (pos === 1) { rowClass = "bg-green-50 hover:bg-green-100 transition-colors"; posClass = "bg-yellow-100 text-yellow-700 font-black"; }
-                        if (pos === 2) posClass = "bg-slate-200 text-slate-700 font-black";
-                        if (pos === 3) posClass = "bg-orange-100 text-orange-800 font-black";
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white rounded shadow p-4 border-l-4 border-blue-500">
+          <p className="text-gray-500 text-sm font-semibold">JORNADA ACTIVA</p>
+          <p className="text-2xl font-bold text-gray-800">{jornadaActiva ? jornadaActiva.nombre : "Sin jornada activa"}</p>
+        </div>
+        <div className="bg-white rounded shadow p-4 border-l-4 border-green-500">
+          <p className="text-gray-500 text-sm font-semibold">TOTAL PARTICIPANTES</p>
+          <p className="text-2xl font-bold text-gray-800">{participantes}</p>
+        </div>
+        <div className="bg-white rounded shadow p-4 border-l-4 border-purple-500">
+          <p className="text-gray-500 text-sm font-semibold">QUINIELAS RECIBIDAS (ACTIVA)</p>
+          <p className="text-2xl font-bold text-gray-800">{quinielasActivas}</p>
+        </div>
+      </div>
 
-                        return (
-                          <tr key={fila.usuario_id} className={rowClass}>
-                            <td className="px-4 py-3 text-center border border-slate-100">
-                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${posClass}`}>
-                                {pos}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-semibold text-slate-800 border border-slate-100">
-                              {fila.nombre}
-                            </td>
-                            {jornadasSecuencialesModal.map(j => (
-                              <td key={j.numero} className="px-2 py-3 text-center text-slate-600 border border-slate-100">
-                                {fila.aciertosPorJornada[j.numero] || 0}
-                              </td>
-                            ))}
-                            <td className="px-4 py-3 text-center font-black text-indigo-600 border border-slate-100 bg-indigo-50/50">
-                              {fila.totalAciertos}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
-                  <p className="text-slate-500 font-medium">No hay datos de ranking disponibles.</p>
-                  <p className="text-xs text-red-500 font-bold mt-2">
-                    (Usuarios válidos encontrados: {rankingData.length})
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Verifica que existan usuarios que no sean 'admin' ni 'solo_survivor' y que hayan enviado quinielas.
-                  </p>
-                </div>
-              )}
+      <div className="bg-white rounded shadow p-6 mb-8">
+        <h2 className="text-xl font-bold mb-4">Participación por Jornada</h2>
+        <div style={{ width: '100%', height: 300 }}>
+          <ResponsiveContainer>
+            <BarChart data={datosGrafica}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="nombre" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="quinielas" name="Quinielas" fill="#16a34a" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="survivor" name="Survivor" fill="#db2777" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
-              <div className="mt-6 text-center">
-                <button 
-                  onClick={() => setMostrarRanking(false)} 
-                  className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-black px-8 py-3 rounded-xl shadow-lg transition-all"
-                >
-                  Cerrar
-                </button>
-              </div>
+      {jornadaActiva && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesQuiniela.length}</span>
+                ❌ Faltan Quiniela
+              </h2>
             </div>
+            {ausentesQuiniela.length > 0 ? (
+              <div className="max-h-64 overflow-y-auto pr-2">
+                <ul className="space-y-2">
+                  {ausentesQuiniela.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between p-2 border rounded text-sm bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-600 font-bold">•</span>
+                        <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                        p.tipo === 'inactivo' ? 'bg-gray-200 text-gray-700' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {p.motivo}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-green-600 bg-green-50 rounded border border-green-200">
+                <p className="font-semibold">✅ ¡Todos han registrado su quiniela!</p>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-bold">{ausentesSurvivor.length}</span>
+                🦖 Faltan Survivor
+              </h2>
+            </div>
+            {ausentesSurvivor.length > 0 ? (
+              <div className="max-h-64 overflow-y-auto pr-2">
+                <ul className="space-y-2">
+                  {ausentesSurvivor.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between p-2 border rounded text-sm bg-gray-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-orange-600 font-bold">•</span>
+                        <span className="text-gray-800 font-medium">{getNombreUsuario(p)}</span>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                        p.tipo === 'eliminado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {p.motivo}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-green-600 bg-green-50 rounded border border-green-200">
+                <p className="font-semibold">✅ ¡Todos los no eliminados han registrado su survivor!</p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Rules Modal */}
-      {mostrarModal && (
+      {modalPDFAbierto && (
         <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" 
-          onClick={() => setMostrarModal(false)}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => !exportandoPDF && setModalPDFAbierto(false)}
         >
           <div 
-            className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative" 
+            className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <button 
-              onClick={() => setMostrarModal(false)} 
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full p-2 transition-colors" 
-              aria-label="Cerrar"
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-800">📄 Exportar PDF</h3>
+              <button
+                onClick={() => setModalPDFAbierto(false)}
+                disabled={exportandoPDF}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="text-gray-600 mb-4 text-sm">
+              Selecciona la jornada que deseas exportar como PDF:
+            </p>
+
+            <select
+              value={jornadaParaPDF}
+              onChange={(e) => setJornadaParaPDF(Number(e.target.value))}
+              disabled={exportandoPDF}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 mb-6 focus:ring-2 focus:ring-red-500 focus:border-red-500 disabled:bg-gray-100"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            
-            <div className="p-6 sm:p-8">
-              <div className="text-center mb-8">
-                <span className="text-4xl mb-2 block">📜</span>
-                <h2 className="text-2xl font-black text-slate-900">Reglas, Premios y Costos</h2>
-                <div className="h-1.5 w-20 bg-orange-500 mx-auto mt-3 rounded-full"></div>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="bg-emerald-50 rounded-2xl p-6 border border-emerald-100">
-                  <h3 className="text-lg font-black text-emerald-900 mb-4 flex items-center gap-2">
-                    🏆 Pronósticos y Premios
-                  </h3>
-                  <ul className="space-y-3 text-emerald-800 font-medium">
-                    <li className="flex items-start gap-3">
-                      <span className="font-black mt-0.5 text-emerald-600">•</span>
-                      <span>Premio semanal de <strong>$180.00</strong>.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="font-black mt-0.5 text-emerald-600">•</span>
-                      <span>Ganador de liguilla se lleva <strong>$250.00</strong>.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="font-black mt-0.5 text-emerald-600">•</span>
-                      <span>Primer Lugar gana <strong>$3,620.00</strong>.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="font-black mt-0.5 text-emerald-600">•</span>
-                      <span>Segundo Lugar gana <strong>$1,300.00</strong>.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="font-black mt-0.5 text-emerald-600">•</span>
-                      <span>Tercer Lugar gana <strong>$550.00</strong>.</span>
-                    </li>
-                  </ul>
-                  <p className="text-xs text-emerald-700 mt-4 italic text-right border-t border-emerald-200 pt-3 font-medium">
-                    *(Valores calculados sobre 32 jugadores)*
-                  </p>
-                </div>
+              {jornadas.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.nombre} {j.activa ? "(Activa)" : ""}
+                </option>
+              ))}
+            </select>
 
-                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
-                  <h3 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
-                    📋 Reglas del Juego
-                  </h3>
-                  <ul className="space-y-4 text-slate-700 font-medium">
-                    <li className="flex items-start gap-3">
-                      <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">1</span>
-                      <span>Cada jornada el participante hará la selección de sus pronósticos: <strong>Local, Empate o Visitante</strong>.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">2</span>
-                      <span>Se llevará un <strong>ranking semanal</strong>.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">3</span>
-                      <span>Los aciertos semanales se sumarán al acumulado de pronósticos acertados.</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="bg-orange-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">4</span>
-                      <span>En esta aplicación, se tiene un <strong>cronómetro para el inicio de la jornada</strong>.</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-8 text-center">
-                <button 
-                  onClick={() => setMostrarModal(false)} 
-                  className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-black px-8 py-3.5 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
-                >
-                  Entendido, ¡a jugar! ⚽
-                </button>
-              </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setModalPDFAbierto(false)}
+                disabled={exportandoPDF}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => exportarPDF(jornadaParaPDF)}
+                disabled={exportandoPDF || !jornadaParaPDF}
+                className="px-4 py-2 text-sm font-bold text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {exportandoPDF ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Generando...
+                  </>
+                ) : (
+                  <>📄 Generar PDF</>
+                )}
+              </button>
             </div>
           </div>
         </div>
