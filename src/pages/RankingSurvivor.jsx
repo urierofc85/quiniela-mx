@@ -7,7 +7,7 @@ import { obtenerHoraMexico } from "../services/horario";
 
 export default function AdminSurvivor() {
   //=========================================
-  // ESTADOS (LÓGICA INTACTA + SEGURIDAD)
+  // ESTADOS
   //=========================================
   const [jornadas, setJornadas] = useState([]);
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState("general");
@@ -20,7 +20,7 @@ export default function AdminSurvivor() {
   const [rawPerfiles, setRawPerfiles] = useState([]);
   const [rawPartidos, setRawPartidos] = useState([]);
 
-  // 🚨 NUEVO: Estado para controlar la hora del servidor y el desbloqueo automático
+  // 🚨 Estado para controlar la hora del servidor y el desbloqueo automático
   const [horaMexico, setHoraMexico] = useState(null);
 
   const tablaRef = useRef(null);
@@ -50,12 +50,11 @@ export default function AdminSurvivor() {
   }, [jornadaSeleccionada, rawSurvivor, rawPerfiles, rawPartidos, jornadas, horaMexico]);
 
   //=========================================
-  // CARGA DE DATOS (LÓGICA INTACTA)
+  // CARGA DE DATOS
   //=========================================
   const cargarDatosIniciales = async () => {
     setCargando(true);
 
-    // 🚨 Obtener la hora inicial junto con los datos
     const horaInicial = await obtenerHoraMexico();
     setHoraMexico(horaInicial);
 
@@ -117,15 +116,14 @@ export default function AdminSurvivor() {
   }, [jornadaSeleccionada, jornadaActualObj, horaMexico]);
 
   //=========================================
-  // 🚨 LÓGICA DEL RANKING (INTACTA)
+  // 🚨 LÓGICA DEL RANKING
   //=========================================
   const calcularRanking = async () => {
-    // Usamos la hora del estado para mantener consistencia
     const horaActual = horaMexico || await obtenerHoraMexico();
 
     const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
-      return Number(j.id) <= Number(jornadaSeleccionada); // <= para acumular correctamente
+      return Number(j.id) <= Number(jornadaSeleccionada);
     });
 
     const jornadasOrdenadas = [...jornadasAProcesar].sort((a, b) => Number(a.id) - Number(b.id));
@@ -273,7 +271,6 @@ export default function AdminSurvivor() {
       return;
     }
 
-    // 🚨 BLOQUEO DE SEGURIDAD: Si la jornada no ha cerrado, no procesar ni mostrar datos
     if (!jornadaEstaCerrada) {
       setReporteJornada([]);
       return;
@@ -300,7 +297,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // CALCULAR USOS POR EQUIPO (LÓGICA INTACTA)
+  // CALCULAR USOS POR EQUIPO
   //=========================================
   const datosUsosEquipo = useMemo(() => {
     const usuarios = rawPerfiles.map((u) => ({
@@ -339,30 +336,38 @@ export default function AdminSurvivor() {
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // 🚨 FUNCIONES PARA EXPORTAR (CON BLOQUEO)
+  // 🚨 FUNCIONES PARA EXPORTAR
   //=========================================
   const esperarRender = () =>
     new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-  const exportarJPG = async (ref, nombreArchivo, esReporteElecciones = false) => {
-    // 🚨 BLOQUEO DE EXPORTACIÓN: Impide descargar el reporte si la jornada está abierta
-    if (esReporteElecciones && !jornadaEstaCerrada) {
-      alert("🔒 Acceso denegado: Las elecciones están bloqueadas hasta el cierre oficial de la jornada.");
+  const exportarJPG = async (ref, nombreArchivo) => {
+    if (!ref || !ref.current) {
+      alert("⚠️ No se encontró el elemento a exportar. Intenta de nuevo.");
       return;
     }
-
-    if (!ref.current) {
-      alert("No hay información visible para exportar.");
-      return;
+    
+    try {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      
+      const canvas = await html2canvas(ref.current, {
+        scale: 2,
+        useCORS: true, 
+        allowTaint: true, 
+        logging: false, 
+        backgroundColor: "#ffffff",
+        windowWidth: ref.current.scrollWidth,
+        windowHeight: ref.current.scrollHeight
+      });
+      
+      const link = document.createElement("a");
+      link.download = `${nombreArchivo}.jpg`;
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
+      link.click();
+    } catch (error) {
+      console.error("Error al exportar JPG:", error);
+      alert("❌ Ocurrió un error al generar la imagen. Revisa la consola del navegador (F12) para más detalles.");
     }
-    await esperarRender();
-    const canvas = await html2canvas(ref.current, {
-      scale: 3, useCORS: true, allowTaint: true, logging: false, backgroundColor: "#ffffff",
-    });
-    const link = document.createElement("a");
-    link.download = `${nombreArchivo}.jpg`;
-    link.href = canvas.toDataURL("image/jpeg", 1);
-    link.click();
   };
 
   const exportarTablaUsosPDF = () => {
@@ -453,15 +458,13 @@ export default function AdminSurvivor() {
               Exportar Ranking (JPG)
             </button>
 
-            {jornadaSeleccionada !== "general" && (
-              <button
-                onClick={() => exportarJPG(reporteRef, `Elecciones-${jornadaActualObj?.nombre || "Jornada"}`, true)}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                Exportar Elecciones (JPG)
-              </button>
-            )}
+            <button
+              onClick={() => exportarJPG(reporteRef, `Elecciones-${jornadaActualObj?.nombre || "Jornada"}`)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              Exportar Elecciones (JPG)
+            </button>
 
             <button
               onClick={exportarTablaUsosPDF}
@@ -474,12 +477,12 @@ export default function AdminSurvivor() {
         </div>
 
         {/* Tabla Ranking */}
-        <div ref={tablaRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+        <div ref={tablaRef} className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden" style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
+          <div className="px-6 py-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: '#f1f5f9' }}>
+            <h2 className="text-xl font-black flex items-center gap-2" style={{ color: '#0f172a' }}>
               {jornadaSeleccionada === "general" ? "Ranking General" : `Resultados: ${jornadaActualObj?.nombre || "Jornada"}`}
             </h2>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold" style={{ backgroundColor: '#f1f5f9', color: '#475569' }}>
               {ranking.length} Participantes {jornadaSeleccionada !== "general" && "(Activos)"}
             </span>
           </div>
@@ -487,7 +490,7 @@ export default function AdminSurvivor() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider">
+                <tr className="text-xs font-black uppercase tracking-wider" style={{ backgroundColor: '#f8fafc', color: '#64748b' }}>
                   <th className="px-6 py-4 w-20 text-center">Pos</th>
                   <th className="px-6 py-4">Participante</th>
                   {jornadaSeleccionada !== "general" && <th className="px-6 py-4">Equipo Elegido</th>}
@@ -495,44 +498,50 @@ export default function AdminSurvivor() {
                   <th className="px-6 py-4 w-40 text-center">Vidas Restantes</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {ranking.length === 0 ? (
                   <tr>
-                    <td colSpan={jornadaSeleccionada !== "general" ? 5 : 4} className="px-6 py-12 text-center text-slate-500 font-medium">
+                    <td colSpan={jornadaSeleccionada !== "general" ? 5 : 4} className="px-6 py-12 text-center font-medium" style={{ color: '#64748b', borderBottom: '1px solid #f1f5f9' }}>
                       {jornadaSeleccionada !== "general" ? "No hay participantes activos en esta jornada." : "No se encontraron registros."}
                     </td>
                   </tr>
                 ) : (
                   ranking.map((fila, index) => {
                     const vidasRestantes = Math.max(0, 3 - fila.vidas);
-                    
                     return (
-                      <tr key={fila.usuario_id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={fila.usuario_id} className="transition-colors" style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td className="px-6 py-4 text-center">
-                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm ${
-                            index === 0 ? "bg-yellow-100 text-yellow-700" :
-                            index === 1 ? "bg-slate-200 text-slate-700" :
-                            index === 2 ? "bg-orange-100 text-orange-800" : "text-slate-500"
-                          }`}>
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-sm" style={{ 
+                            backgroundColor: index === 0 ? '#fef9c3' : index === 1 ? '#e2e8f0' : index === 2 ? '#ffedd5' : 'transparent',
+                            color: index === 0 ? '#a16207' : index === 1 ? '#334155' : index === 2 ? '#9a3412' : '#64748b'
+                          }}>
                             {index + 1}
                           </span>
                         </td>
-                        <td className="px-6 py-4 font-bold text-slate-800">{fila.nombre}</td>
+                        <td className="px-6 py-4 font-bold" style={{ color: '#1e293b' }}>{fila.nombre}</td>
                         
+                        {/* 🚨 CORRECCIÓN DE SEGURIDAD: Ocultar equipo elegido si la jornada no ha cerrado */}
                         {jornadaSeleccionada !== "general" && (
-                          <td className="px-6 py-4 text-sm font-medium text-slate-600">
-                            {fila.equipoElegido === "Sin selección" ? (
-                              <span className="text-red-500 italic">Sin selección</span>
-                            ) : fila.equipoElegido}
+                          <td className="px-6 py-4 text-sm font-medium" style={{ color: '#475569' }}>
+                            {!jornadaEstaCerrada ? (
+                              <span className="inline-flex items-center gap-1.5 text-slate-400 italic font-semibold">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                Oculto hasta el cierre
+                              </span>
+                            ) : fila.equipoElegido === "Sin selección" ? (
+                              <span className="italic" style={{ color: '#ef4444' }}>Sin selección</span>
+                            ) : (
+                              fila.equipoElegido
+                            )}
                           </td>
                         )}
                         
                         <td className="px-6 py-4 text-center">
-                          <div className={`text-lg font-black ${fila.tuvoInfraccion ? "text-red-600" : "text-slate-800"}`}>
+                          <div className="text-lg font-black" style={{ color: fila.tuvoInfraccion ? '#dc2626' : '#1e293b' }}>
                             {fila.puntos}
                           </div>
                           {fila.tuvoInfraccion && (
-                            <span className="inline-block mt-1 text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                            <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full border" style={{ color: '#b91c1c', backgroundColor: '#fee2e2', borderColor: '#fecaca' }}>
                               ⚠️ Penalizado
                             </span>
                           )}
@@ -545,11 +554,12 @@ export default function AdminSurvivor() {
                               return (
                                 <span 
                                   key={i} 
-                                  className={`text-2xl transition-all ${
-                                    estaLleno 
-                                      ? "text-red-500 scale-100" 
-                                      : "text-slate-200 scale-90 grayscale"
-                                  }`}
+                                  className="text-2xl transition-all"
+                                  style={{ 
+                                    color: estaLleno ? '#ef4444' : '#e2e8f0',
+                                    transform: estaLleno ? 'scale(1)' : 'scale(0.9)',
+                                    filter: estaLleno ? 'none' : 'grayscale(100%)'
+                                  }}
                                 >
                                   ❤️
                                 </span>
@@ -557,7 +567,7 @@ export default function AdminSurvivor() {
                             })}
                           </div>
                           {fila.vidas >= 3 && (
-                            <span className="text-xs font-bold text-red-600 mt-1 block">Eliminado</span>
+                            <span className="text-xs font-bold block mt-1" style={{ color: '#dc2626' }}>Eliminado</span>
                           )}
                         </td>
                       </tr>
@@ -569,15 +579,16 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* 🚨 Reporte Elecciones (CON BLOQUEO DE SEGURIDAD) */}
+        {/* Reporte Elecciones (CON BLOQUEO DE SEGURIDAD) */}
         {jornadaSeleccionada !== "general" && (
-          <div ref={reporteRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h2 className="text-xl font-black text-slate-900">Resumen de Elecciones: {jornadaActualObj?.nombre || ""}</h2>
+          <div ref={reporteRef} className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden" style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
+            <div className="px-6 py-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: '#f1f5f9' }}>
+              <h2 className="text-xl font-black flex items-center gap-2" style={{ color: '#0f172a' }}>
+                Resumen de Elecciones: {jornadaActualObj?.nombre || ""}
+              </h2>
               
-              {/* Indicador visual de estado */}
               {!jornadaEstaCerrada && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border" style={{ backgroundColor: '#fef3c7', color: '#92400e', borderColor: '#fcd34d' }}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                   Oculto hasta el cierre
                 </span>
@@ -585,19 +596,19 @@ export default function AdminSurvivor() {
             </div>
             
             {!jornadaEstaCerrada ? (
-              <div className="p-8 text-center bg-slate-50 border-b border-slate-100">
-                <p className="text-slate-600 font-medium flex flex-col items-center justify-center gap-2">
-                  <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              <div className="p-8 text-center" style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                <p className="font-medium flex flex-col items-center justify-center gap-2" style={{ color: '#475569' }}>
+                  <svg className="w-8 h-8" style={{ color: '#94a3b8' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                   <span>Las elecciones de los participantes están ocultas por seguridad.</span>
-                  <span className="text-sm text-slate-500">
+                  <span className="text-sm" style={{ color: '#64748b' }}>
                     Se revelarán automáticamente al cerrar la jornada 
                     {jornadaActualObj?.fecha_limite && ` (${new Date(jornadaActualObj.fecha_limite).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })})`}.
                   </span>
                 </p>
               </div>
             ) : reporteJornada.length === 0 ? (
-              <div className="p-8 text-center bg-amber-50 border-b border-amber-100">
-                <p className="text-amber-800 font-medium flex items-center justify-center gap-2">
+              <div className="p-8 text-center" style={{ backgroundColor: '#fffbeb', borderBottom: '1px solid #fcd34d' }}>
+                <p className="font-medium flex items-center justify-center gap-2" style={{ color: '#92400e' }}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                   No se registraron selecciones válidas en esta jornada.
                 </p>
@@ -606,22 +617,22 @@ export default function AdminSurvivor() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider">
+                    <tr className="text-xs font-black uppercase tracking-wider" style={{ backgroundColor: '#f8fafc', color: '#64748b' }}>
                       <th className="px-6 py-4">Participante</th>
                       <th className="px-6 py-4 text-center">Equipo Seleccionado</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y" style={{ borderColor: '#f1f5f9' }}>
                     {reporteJornada.map((fila, index) => (
-                      <tr key={index} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 font-medium text-slate-800">{fila.participante}</td>
+                      <tr key={index} className="transition-colors hover:bg-slate-50">
+                        <td className="px-6 py-4 font-medium" style={{ color: '#1e293b' }}>{fila.participante}</td>
                         <td className="px-6 py-4 text-center">
                           {fila.seleccion === "Sin selección" ? (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border" style={{ backgroundColor: '#fee2e2', color: '#b91c1c', borderColor: '#fecaca' }}>
                               Sin selección
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border" style={{ backgroundColor: '#eef2ff', color: '#4338ca', borderColor: '#c7d2fe' }}>
                               {fila.seleccion}
                             </span>
                           )}
