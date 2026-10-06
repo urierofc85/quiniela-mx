@@ -15,7 +15,7 @@ export default function Quiniela() {
   const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
   const [cargandoPDF, setCargandoPDF] = useState(false);
   
-  // 🚨 ESTADOS PARA EL MODAL DE RANKING (Cálculo en tiempo real)
+  // 🚨 ESTADOS PARA EL MODAL DE RANKING
   const [mostrarModal, setMostrarModal] = useState(false);
   const [mostrarRanking, setMostrarRanking] = useState(false);
   const [rankingData, setRankingData] = useState([]);
@@ -122,14 +122,32 @@ export default function Quiniela() {
     setPronosticos(nuevosPronosticos);
   };
 
-  // 🚨 FUNCIÓN PARA CALCULAR EL RANKING EN TIEMPO REAL (Igual que en AdminDashboard)
+  // 🚨 FUNCIÓN DE RANKING CON DIAGNÓSTICO MEJORADO
   const cargarRankingParaModal = async () => {
     setCargandoRanking(true);
+    setRankingData([]); // Resetear datos anteriores
+    
     try {
-      const { data: perfilesData } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor");
-      const { data: quinielasData } = await supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico");
-      const { data: partidosData } = await supabase.from("partidos").select("id, jornada_id, resultado, pospuesto");
-      const { data: jornadasData } = await supabase.from("jornadas").select("id, nombre, fecha_limite").order("id", { ascending: true });
+      console.log("🔍 Iniciando carga de ranking...");
+      
+      const { data: perfilesData, error: errPerfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor");
+      const { data: quinielasData, error: errQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico");
+      const { data: partidosData, error: errPartidos } = await supabase.from("partidos").select("id, jornada_id, resultado, pospuesto");
+      const { data: jornadasData, error: errJornadas } = await supabase.from("jornadas").select("id, nombre, fecha_limite").order("id", { ascending: true });
+
+      if (errPerfiles || errQuinielas || errPartidos || errJornadas) {
+        console.error("❌ Errores en consultas Supabase:", { errPerfiles, errQuinielas, errPartidos, errJornadas });
+        alert("Error al conectar con la base de datos. Revisa la consola (F12) para ver el detalle.");
+        setCargandoRanking(false);
+        return;
+      }
+
+      console.log("✅ Datos obtenidos:", { 
+        perfiles: perfilesData?.length, 
+        quinielas: quinielasData?.length, 
+        partidos: partidosData?.length, 
+        jornadas: jornadasData?.length 
+      });
 
       const esAdmin = (p) => {
         const rol = (p.rol || "").toLowerCase();
@@ -146,7 +164,8 @@ export default function Quiniela() {
 
       const acumulado = {};
       (perfilesData || []).forEach(usuario => {
-        if (esAdmin(usuario) || usuario.solo_survivor === true) return; // Solo usuarios de quiniela
+        // Filtramos admins y solo_survivor
+        if (esAdmin(usuario) || usuario.solo_survivor === true) return; 
         
         acumulado[usuario.id] = {
           usuario_id: usuario.id,
@@ -159,6 +178,8 @@ export default function Quiniela() {
           acumulado[usuario.id].aciertosPorJornada[j.numero] = 0;
         });
       });
+
+      console.log(`👥 Usuarios válidos para ranking: ${Object.keys(acumulado).length}`);
 
       (jornadasData || []).forEach(jornada => {
         const jornadaId = jornada.id;
@@ -191,12 +212,18 @@ export default function Quiniela() {
           return a.nombre.localeCompare(b.nombre);
         });
 
+      console.log("🏆 Ranking final calculado:", rankingQuinielas);
+      
+      if (rankingQuinielas.length === 0) {
+        alert("⚠️ El ranking está vacío. Es posible que todos los usuarios estén marcados como 'solo_survivor' o 'admin', o que no haya quinielas registradas.");
+      }
+
       setRankingData(rankingQuinielas);
       setJornadasSecuencialesModal(jornadasSecuenciales);
 
     } catch (err) {
-      console.error("Error cargando ranking:", err);
-      setRankingData([]);
+      console.error("💥 Error crítico cargando ranking:", err);
+      alert("Ocurrió un error inesperado al calcular el ranking. Revisa la consola (F12).");
     } finally {
       setCargandoRanking(false);
     }
@@ -453,9 +480,10 @@ export default function Quiniela() {
         {/* 🚨 Top Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           
-          {/* 🚨 Botón que abre el Modal de Ranking calculado en tiempo real */}
+          {/* 🚨 Botón con diagnóstico de clic */}
           <button
             onClick={() => {
+              console.log("👆 Botón de ranking clickeado");
               setMostrarRanking(true);
               cargarRankingParaModal();
             }}
@@ -712,7 +740,7 @@ export default function Quiniela() {
         )}
       </div>
 
-      {/* 🚨 MODAL DE RANKING GENERAL (Cálculo en tiempo real, sin depender de tabla 'ranking') */}
+      {/* 🚨 MODAL DE RANKING GENERAL CON MENSAJE DE DIAGNÓSTICO */}
       {mostrarRanking && (
         <div 
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" 
@@ -796,6 +824,12 @@ export default function Quiniela() {
               ) : (
                 <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
                   <p className="text-slate-500 font-medium">No hay datos de ranking disponibles.</p>
+                  <p className="text-xs text-red-500 font-bold mt-2">
+                    (Usuarios cargados en tabla: {rankingData.length})
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Revisa la consola del navegador (F12) para ver los detalles del error.
+                  </p>
                 </div>
               )}
 
