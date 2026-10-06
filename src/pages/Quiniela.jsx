@@ -364,8 +364,20 @@ export default function Quiniela() {
           </div>
         )}
 
-        {/* Top Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* 🚨 Top Actions (CON BOTÓN DE RANKING RESTAURADO) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          
+          {/* 🚨 NUEVO: Botón dedicado para Ver Ranking General */}
+          <Link
+            to="/ranking"
+            className="flex items-center justify-center gap-2 px-5 py-3.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Ver Ranking General
+          </Link>
+
           <button
             onClick={() => setMostrarModal(true)}
             className="flex items-center justify-center gap-2 px-5 py-3.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
@@ -379,7 +391,7 @@ export default function Quiniela() {
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <div className="flex-1 w-full">
               <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5">
-                Descargar PDF General
+                Descargar PDF
               </label>
               <select
                 value={jornadaSeleccionadaPDF}
