@@ -15,11 +15,7 @@ export default function Quiniela() {
   const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
   const [cargandoPDF, setCargandoPDF] = useState(false);
   
-  // 🚨 ESTADOS PARA EL MODAL DE RANKING SIMPLIFICADO
   const [mostrarModal, setMostrarModal] = useState(false);
-  const [mostrarRanking, setMostrarRanking] = useState(false);
-  const [rankingData, setRankingData] = useState([]);
-  const [cargandoRanking, setCargandoRanking] = useState(false);
   
   const [esSoloSurvivor, setEsSoloSurvivor] = useState(false);
   const [cargandoPerfil, setCargandoPerfil] = useState(true);
@@ -119,77 +115,6 @@ export default function Quiniela() {
     const nuevosPronosticos = {};
     data?.forEach((item) => { nuevosPronosticos[item.partido_id] = item.pronostico; });
     setPronosticos(nuevosPronosticos);
-  };
-
-  // 🚨 FUNCIÓN DE RANKING SIMPLIFICADA: Solo Total de Aciertos (Rápida y en memoria)
-  const cargarRankingParaModal = async () => {
-    setCargandoRanking(true);
-    setRankingData([]);
-    
-    try {
-      console.log("🔍 Calculando ranking simplificado en memoria...");
-      
-      // 1. Obtenemos solo las tablas base necesarias
-      const { data: perfilesData, error: errPerfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor");
-      const { data: quinielasData, error: errQuinielas } = await supabase.from("quinielas").select("usuario_id, partido_id, pronostico");
-      const { data: partidosData, error: errPartidos } = await supabase.from("partidos").select("id, resultado, pospuesto");
-
-      if (errPerfiles || errQuinielas || errPartidos) {
-        console.error("❌ Error en consultas base:", { errPerfiles, errQuinielas, errPartidos });
-        alert("Error al obtener datos base. Revisa la consola (F12).");
-        setCargandoRanking(false);
-        return;
-      }
-
-      const esAdmin = (p) => {
-        const rol = (p.rol || "").toLowerCase();
-        const email = (p.email || "").toLowerCase();
-        const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
-        return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
-      };
-
-      // 2. Inicializamos el acumulador SOLO con el total de aciertos
-      const acumulado = {};
-      (perfilesData || []).forEach(usuario => {
-        if (esAdmin(usuario) || usuario.solo_survivor === true) return; 
-        
-        acumulado[usuario.id] = {
-          usuario_id: usuario.id,
-          nombre: usuario.nombre_usuario || usuario.nombre || "Sin nombre",
-          totalAciertos: 0
-        };
-      });
-
-      // 3. Contamos los aciertos de forma directa y eficiente
-      const partidosMap = new Map((partidosData || []).map(p => [String(p.id), p]));
-      
-      (quinielasData || []).forEach(q => {
-        const reg = acumulado[q.usuario_id];
-        if (reg) {
-          const partido = partidosMap.get(String(q.partido_id));
-          // Si el partido existe, no está pospuesto, tiene resultado y el pronóstico coincide
-          if (partido && !partido.pospuesto && partido.resultado && q.pronostico === partido.resultado) {
-            reg.totalAciertos++;
-          }
-        }
-      });
-
-      // 4. Ordenamos el ranking
-      const rankingQuinielas = Object.values(acumulado)
-        .sort((a, b) => {
-          if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
-          return a.nombre.localeCompare(b.nombre);
-        });
-
-      console.log("✅ Ranking calculado con éxito. Usuarios:", rankingQuinielas.length);
-      setRankingData(rankingQuinielas);
-
-    } catch (err) {
-      console.error("💥 Error crítico en cálculo de ranking:", err);
-      alert("Ocurrió un error al calcular el ranking. Revisa la consola (F12).");
-    } finally {
-      setCargandoRanking(false);
-    }
   };
 
   const cerrarSesion = async () => {
@@ -443,12 +368,9 @@ export default function Quiniela() {
         {/* 🚨 Top Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           
+          {/* 🚨 BOTÓN REDIRIGE A /posiciones */}
           <button
-            onClick={() => {
-              console.log("👆 Abriendo modal de ranking...");
-              setMostrarRanking(true);
-              cargarRankingParaModal();
-            }}
+            onClick={() => navigate("/posiciones")}
             className="flex items-center justify-center gap-2 px-5 py-3.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -701,100 +623,6 @@ export default function Quiniela() {
           </>
         )}
       </div>
-
-      {/* 🚨 MODAL DE RANKING GENERAL SIMPLIFICADO (Solo Total de Aciertos) */}
-      {mostrarRanking && (
-        <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" 
-          onClick={() => setMostrarRanking(false)}
-        >
-          <div 
-            className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto relative" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => setMostrarRanking(false)} 
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full p-2 transition-colors z-10" 
-              aria-label="Cerrar"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            
-            <div className="p-6 sm:p-8">
-              <div className="text-center mb-6">
-                <span className="text-4xl mb-2 block">🏆</span>
-                <h2 className="text-2xl font-black text-slate-900">Ranking General</h2>
-                <p className="text-sm text-slate-500 mt-1">Total de aciertos acumulados</p>
-                <div className="h-1.5 w-20 bg-indigo-500 mx-auto mt-3 rounded-full"></div>
-              </div>
-              
-              {cargandoRanking ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent mb-4"></div>
-                  <p className="text-slate-600 font-medium">Calculando clasificación...</p>
-                </div>
-              ) : rankingData.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-indigo-50 text-indigo-900 text-xs font-black uppercase tracking-wider">
-                        <th className="px-4 py-3 text-center w-16 border border-indigo-100">Pos</th>
-                        <th className="px-4 py-3 border border-indigo-100">Jugador</th>
-                        <th className="px-4 py-3 text-center w-24 border border-indigo-100 bg-indigo-100 font-black">TOTAL</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {rankingData.map((fila, index) => {
-                        const pos = index + 1;
-                        let rowClass = "hover:bg-slate-50 transition-colors";
-                        let posClass = "bg-slate-100 text-slate-600";
-                        
-                        if (pos === 1) { rowClass = "bg-yellow-50 hover:bg-yellow-100 transition-colors"; posClass = "bg-yellow-400 text-yellow-900 font-black"; }
-                        else if (pos === 2) { posClass = "bg-slate-300 text-slate-800 font-black"; }
-                        else if (pos === 3) { posClass = "bg-orange-300 text-orange-900 font-black"; }
-
-                        return (
-                          <tr key={fila.usuario_id} className={rowClass}>
-                            <td className="px-4 py-3 text-center border border-slate-100">
-                              <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm ${posClass}`}>
-                                {pos}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-semibold text-slate-800 border border-slate-100">
-                              {fila.nombre}
-                            </td>
-                            <td className="px-4 py-3 text-center font-black text-xl text-indigo-600 border border-slate-100">
-                              {fila.totalAciertos}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
-                  <p className="text-slate-500 font-medium">No hay datos de ranking disponibles.</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Verifica que existan usuarios que no sean 'admin' ni 'solo_survivor' y que hayan enviado quinielas.
-                  </p>
-                </div>
-              )}
-
-              <div className="mt-6 text-center">
-                <button 
-                  onClick={() => setMostrarRanking(false)} 
-                  className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-black px-8 py-3 rounded-xl shadow-lg transition-all"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Rules Modal */}
       {mostrarModal && (
