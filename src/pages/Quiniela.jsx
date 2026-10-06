@@ -15,10 +15,11 @@ export default function Quiniela() {
   const [jornadaSeleccionadaPDF, setJornadaSeleccionadaPDF] = useState("");
   const [cargandoPDF, setCargandoPDF] = useState(false);
   
-  // 🚨 NUEVOS ESTADOS PARA EL MODAL DE RANKING
+  // 🚨 ESTADOS PARA EL MODAL DE RANKING (Cálculo 100% en memoria)
   const [mostrarModal, setMostrarModal] = useState(false);
   const [mostrarRanking, setMostrarRanking] = useState(false);
   const [rankingData, setRankingData] = useState([]);
+  const [jornadasSecuencialesModal, setJornadasSecuencialesModal] = useState([]);
   const [cargandoRanking, setCargandoRanking] = useState(false);
   
   const [esSoloSurvivor, setEsSoloSurvivor] = useState(false);
@@ -121,24 +122,98 @@ export default function Quiniela() {
     setPronosticos(nuevosPronosticos);
   };
 
-  // 🚨 FUNCIÓN PARA CARGAR EL RANKING EN EL MODAL
+  // 🚨 FUNCIÓN DE RANKING 100% EN MEMORIA (Sin consultar tabla 'ranking')
   const cargarRankingParaModal = async () => {
     setCargandoRanking(true);
+    setRankingData([]);
+    
     try {
-      // NOTA: Ajusta esta consulta según el nombre real de tu tabla de ranking o vista.
-      // Este es un ejemplo genérico que ordena por puntos o aciertos.
-      const { data, error } = await supabase
-        .from("ranking") // <--- CAMBIA "ranking" por el nombre real de tu tabla/vista si es diferente
-        .select("*")
-        .order("puntos", { ascending: false })
-        .limit(20);
+      console.log("🔍 Calculando ranking en memoria...");
+      
+      // 1. Obtenemos solo las tablas base necesarias
+      const { data: perfilesData, error: errPerfiles } = await supabase.from("profiles").select("id, nombre, nombre_usuario, email, rol, solo_survivor");
+      const { data: quinielasData, error: errQuinielas } = await supabase.from("quinielas").select("jornada_id, usuario_id, partido_id, pronostico");
+      const { data: partidosData, error: errPartidos } = await supabase.from("partidos").select("id, jornada_id, resultado, pospuesto");
+      const { data: jornadasData, error: errJornadas } = await supabase.from("jornadas").select("id, nombre, fecha_limite").order("id", { ascending: true });
 
-      if (error) throw error;
-      setRankingData(data || []);
+      if (errPerfiles || errQuinielas || errPartidos || errJornadas) {
+        console.error("❌ Error en consultas base:", { errPerfiles, errQuinielas, errPartidos, errJornadas });
+        alert("Error al obtener datos base. Revisa la consola (F12).");
+        setCargandoRanking(false);
+        return;
+      }
+
+      const esAdmin = (p) => {
+        const rol = (p.rol || "").toLowerCase();
+        const email = (p.email || "").toLowerCase();
+        const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
+        return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
+      };
+
+      const jornadasSecuenciales = (jornadasData || []).map((jornada, index) => ({
+        idSupabase: jornada.id,
+        numero: index + 1,
+        nombre: jornada.nombre || `J${index + 1}`
+      }));
+
+      const acumulado = {};
+      (perfilesData || []).forEach(usuario => {
+        // Excluimos admins y los que solo juegan survivor
+        if (esAdmin(usuario) || usuario.solo_survivor === true) return; 
+        
+        acumulado[usuario.id] = {
+          usuario_id: usuario.id,
+          nombre: usuario.nombre_usuario || usuario.nombre || "Sin nombre",
+          totalAciertos: 0,
+          aciertosPorJornada: {},
+        };
+        
+        jornadasSecuenciales.forEach(j => {
+          acumulado[usuario.id].aciertosPorJornada[j.numero] = 0;
+        });
+      });
+
+      // 2. Calculamos los aciertos en el navegador
+      (jornadasData || []).forEach(jornada => {
+        const jornadaId = jornada.id;
+        const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornadaId)?.numero;
+
+        const partidosDeJornada = (partidosData || []).filter(p => String(p.jornada_id) === String(jornadaId) && !p.pospuesto);
+        const quinielasDeJornada = (quinielasData || []).filter(q => String(q.jornada_id) === String(jornadaId));
+
+        (perfilesData || []).forEach(usuario => {
+          if (esAdmin(usuario) || usuario.solo_survivor === true) return;
+          const reg = acumulado[usuario.id];
+          if (!reg) return;
+
+          const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
+          if (quinielasUsuario.length > 0) {
+            quinielasUsuario.forEach(q => {
+              const partido = partidosDeJornada.find(p => String(p.id) === String(q.partido_id));
+              if (partido && partido.resultado && q.pronostico === partido.resultado) {
+                if (secNum) reg.aciertosPorJornada[secNum] = (reg.aciertosPorJornada[secNum] || 0) + 1;
+                reg.totalAciertos++;
+              }
+            });
+          }
+        });
+      });
+
+      // 3. Ordenamos el ranking
+      const rankingQuinielas = Object.values(acumulado)
+        .sort((a, b) => {
+          if (b.totalAciertos !== a.totalAciertos) return b.totalAciertos - a.totalAciertos;
+          return a.nombre.localeCompare(b.nombre);
+        });
+
+      console.log("✅ Ranking calculado con éxito. Usuarios:", rankingQuinielas.length);
+      
+      setRankingData(rankingQuinielas);
+      setJornadasSecuencialesModal(jornadasSecuenciales);
+
     } catch (err) {
-      console.error("Error cargando ranking:", err);
-      // Fallback: si no existe la tabla 'ranking', mostramos un mensaje amigable
-      setRankingData([]);
+      console.error("💥 Error crítico en cálculo de ranking:", err);
+      alert("Ocurrió un error al calcular el ranking. Revisa la consola (F12).");
     } finally {
       setCargandoRanking(false);
     }
@@ -395,9 +470,9 @@ export default function Quiniela() {
         {/* 🚨 Top Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           
-          {/* 🚨 OPCIÓN 1: Botón que abre un Modal integrado (Recomendado, no depende de rutas) */}
           <button
             onClick={() => {
+              console.log("👆 Abriendo modal de ranking...");
               setMostrarRanking(true);
               cargarRankingParaModal();
             }}
@@ -408,21 +483,6 @@ export default function Quiniela() {
             </svg>
             Ver Ranking General
           </button>
-
-          {/* OPCIÓN 2: Si prefieres que abra una pestaña nueva, descomenta este bloque y borra el de arriba */}
-          {/*
-          <a
-            href="/ranking"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 px-5 py-3.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-            Ver Ranking (Nueva Pestaña)
-          </a>
-          */}
 
           <button
             onClick={() => setMostrarModal(true)}
@@ -669,14 +729,14 @@ export default function Quiniela() {
         )}
       </div>
 
-      {/* 🚨 MODAL DE RANKING GENERAL (Integrado, no requiere rutas nuevas) */}
+      {/* 🚨 MODAL DE RANKING GENERAL (Cálculo 100% en memoria) */}
       {mostrarRanking && (
         <div 
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity" 
           onClick={() => setMostrarRanking(false)}
         >
           <div 
-            className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto relative" 
+            className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative" 
             onClick={(e) => e.stopPropagation()}
           >
             <button 
@@ -692,52 +752,73 @@ export default function Quiniela() {
             <div className="p-6 sm:p-8">
               <div className="text-center mb-6">
                 <span className="text-4xl mb-2 block">🏆</span>
-                <h2 className="text-2xl font-black text-slate-900">Ranking General</h2>
+                <h2 className="text-2xl font-black text-slate-900">Ranking General Acumulado</h2>
                 <div className="h-1.5 w-20 bg-indigo-500 mx-auto mt-3 rounded-full"></div>
               </div>
               
               {cargandoRanking ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-500 border-t-transparent mb-4"></div>
-                  <p className="text-slate-600 font-medium">Cargando clasificación...</p>
+                  <p className="text-slate-600 font-medium">Calculando clasificación en tiempo real...</p>
                 </div>
               ) : rankingData.length > 0 ? (
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-indigo-50 text-indigo-900 text-xs font-black uppercase tracking-wider">
-                        <th className="px-4 py-3 text-center w-16">Pos</th>
-                        <th className="px-4 py-3">Jugador</th>
-                        <th className="px-4 py-3 text-center">Puntos</th>
+                        <th className="px-4 py-3 text-center w-16 border border-indigo-100">Pos</th>
+                        <th className="px-4 py-3 border border-indigo-100">Jugador</th>
+                        {jornadasSecuencialesModal.map(j => (
+                          <th key={j.numero} className="px-2 py-3 text-center border border-indigo-100 min-w-[60px]">
+                            {j.nombre}
+                          </th>
+                        ))}
+                        <th className="px-4 py-3 text-center border border-indigo-100 bg-indigo-100 font-black">TOTAL</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {rankingData.map((fila, index) => (
-                        <tr key={index} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3 text-center font-bold text-slate-700">
-                            <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${
-                              index === 0 ? "bg-yellow-100 text-yellow-700" :
-                              index === 1 ? "bg-slate-200 text-slate-700" :
-                              index === 2 ? "bg-orange-100 text-orange-800" : "bg-slate-100 text-slate-600"
-                            }`}>
-                              {index + 1}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 font-semibold text-slate-800">
-                            {fila.nombre || fila.usuario || "Jugador"}
-                          </td>
-                          <td className="px-4 py-3 text-center font-black text-indigo-600">
-                            {fila.puntos || fila.aciertos || 0}
-                          </td>
-                        </tr>
-                      ))}
+                      {rankingData.map((fila, index) => {
+                        const pos = index + 1;
+                        let rowClass = "hover:bg-slate-50 transition-colors";
+                        let posClass = "bg-slate-100 text-slate-600";
+                        
+                        if (pos === 1) { rowClass = "bg-green-50 hover:bg-green-100 transition-colors"; posClass = "bg-yellow-100 text-yellow-700 font-black"; }
+                        if (pos === 2) posClass = "bg-slate-200 text-slate-700 font-black";
+                        if (pos === 3) posClass = "bg-orange-100 text-orange-800 font-black";
+
+                        return (
+                          <tr key={fila.usuario_id} className={rowClass}>
+                            <td className="px-4 py-3 text-center border border-slate-100">
+                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm ${posClass}`}>
+                                {pos}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-slate-800 border border-slate-100">
+                              {fila.nombre}
+                            </td>
+                            {jornadasSecuencialesModal.map(j => (
+                              <td key={j.numero} className="px-2 py-3 text-center text-slate-600 border border-slate-100">
+                                {fila.aciertosPorJornada[j.numero] || 0}
+                              </td>
+                            ))}
+                            <td className="px-4 py-3 text-center font-black text-indigo-600 border border-slate-100 bg-indigo-50/50">
+                              {fila.totalAciertos}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               ) : (
                 <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
-                  <p className="text-slate-500 font-medium">No se pudo cargar el ranking.</p>
-                  <p className="text-sm text-slate-400 mt-1">Verifica que la tabla 'ranking' exista en tu base de datos.</p>
+                  <p className="text-slate-500 font-medium">No hay datos de ranking disponibles.</p>
+                  <p className="text-xs text-red-500 font-bold mt-2">
+                    (Usuarios válidos encontrados: {rankingData.length})
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Verifica que existan usuarios que no sean 'admin' ni 'solo_survivor' y que hayan enviado quinielas.
+                  </p>
                 </div>
               )}
 
