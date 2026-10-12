@@ -31,12 +31,18 @@ export default function AdminSurvivor() {
   useEffect(() => {
     cargarDatosIniciales();
     
-    const intervaloHora = setInterval(async () => {
+    // 🚨 REFRESCO AUTOMÁTICO: Actualiza hora Y jornadas cada 60 seg.
+    // Esto es crucial para detectar cuando cierras una jornada manualmente desde Admin.jsx
+    const intervalo = setInterval(async () => {
       const hora = await obtenerHoraMexico();
       setHoraMexico(hora);
+      
+      // Refrescamos las jornadas para detectar cambios en 'activa'
+      const { data } = await supabase.from("jornadas").select("*").order("id");
+      if (data) setJornadas(data);
     }, 60000);
 
-    return () => clearInterval(intervaloHora);
+    return () => clearInterval(intervalo);
   }, []);
 
   useEffect(() => {
