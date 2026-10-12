@@ -92,7 +92,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING (CON CONTADOR DE EQUIPOS USADOS)
+  // LÓGICA DEL RANKING
   //=========================================
   const calcularRanking = async () => {
     const horaActual = horaMexico || await obtenerHoraMexico();
@@ -113,11 +113,11 @@ export default function AdminSurvivor() {
         vidas: 0,
         equipoElegido: "-",
         tuvoInfraccion: false,
-        equiposUsados: new Set(), // 🚨 NUEVO: Set para contar equipos únicos usados
+        equiposUsados: new Set(),
       };
     });
 
-    // 🚨 NUEVO: Calcular equipos únicos usados por cada usuario en TODO el torneo
+    // Calcular equipos únicos usados por cada usuario en TODO el torneo
     rawSurvivor.forEach(s => {
       if (!s.equipo || !String(s.equipo).trim()) return;
       const equipoBase = s.equipo.split(' (vs ')[0].trim();
@@ -145,15 +145,6 @@ export default function AdminSurvivor() {
       });
     });
 
-    const usuariosConSeleccionPorJornada = {};
-    rawSurvivor.forEach(s => {
-      if (s.equipo && String(s.equipo).trim() !== "") {
-        const key = String(s.jornada_id);
-        if (!usuariosConSeleccionPorJornada[key]) usuariosConSeleccionPorJornada[key] = new Set();
-        usuariosConSeleccionPorJornada[key].add(String(s.usuario_id));
-      }
-    });
-
     for (const jornada of jornadasOrdenadas) {
       const esPasadaYCerrada = jornada.fecha_limite
         ? horaActual > new Date(jornada.fecha_limite)
@@ -171,10 +162,12 @@ export default function AdminSurvivor() {
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
+        // Asignamos el equipo elegido (o "Sin selección") para la vista de jornada específica
         if (jornadaSeleccionada !== "general") {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
+        // 🚨 Si no hay selección y la jornada YA CERRÓ, se pierde 1 vida
         if (!seleccion && esPasadaYCerrada) {
           if (registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
           return;
@@ -230,15 +223,15 @@ export default function AdminSurvivor() {
 
     let rankingFinal = Object.values(acumulado).map(fila => ({
       ...fila,
-      equiposUsados: fila.equiposUsados.size, // 🚨 Convertir Set a número
+      equiposUsados: fila.equiposUsados.size,
     }));
 
+    // 🚨 CORRECCIÓN CLAVE: Ahora mostramos a TODOS los jugadores activos (vidas < 3).
+    // Antes, este filtro ocultaba a los que no tenían selección, por eso no aparecían.
     if (jornadaSeleccionada !== "general") {
-      const usuariosConSeleccionEnEstaJornada = usuariosConSeleccionPorJornada[String(jornadaSeleccionada)] || new Set();
       rankingFinal = rankingFinal.filter((fila) => {
-        if (!usuariosConSeleccionEnEstaJornada.has(String(fila.usuario_id))) return false;
-        if (fila.vidas >= 3) return false;
-        return true;
+        if (fila.vidas >= 3) return false; // Solo eliminamos a los que ya perdieron las 3 vidas
+        return true; // Mantenemos a los que tienen 0, 1 o 2 vidas, HAYAN elegido o no
       });
     }
 
@@ -475,11 +468,17 @@ export default function AdminSurvivor() {
                         </td>
                         <td className="px-6 py-4 font-bold" style={{ color: '#1e293b' }}>{fila.nombre}</td>
                         
+                        {/* 🚨 Aquí ahora SÍ aparecerá "Sin selección" en rojo si el usuario no eligió */}
                         {jornadaSeleccionada !== "general" && (
                           <td className="px-6 py-4 text-sm font-medium" style={{ color: '#475569' }}>
                             {fila.equipoElegido === "Sin selección" ? (
-                              <span className="italic" style={{ color: '#ef4444' }}>Sin selección</span>
-                            ) : fila.equipoElegido}
+                              <span className="inline-flex items-center gap-1.5 font-bold italic" style={{ color: '#dc2626' }}>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                Sin selección
+                              </span>
+                            ) : (
+                              fila.equipoElegido
+                            )}
                           </td>
                         )}
                         
@@ -526,7 +525,7 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* 🚨 Lista Compacta de Sobrevivientes (CON COLUMNA EQUIPOS USADOS) */}
+        {/* Lista Compacta de Sobrevivientes */}
         <div 
           ref={sobrevivientesRef} 
           className="rounded-2xl border-2 shadow-sm overflow-hidden"
@@ -574,7 +573,11 @@ export default function AdminSurvivor() {
                         <td className="px-6 py-3 font-semibold" style={{ color: '#111827' }}>{fila.nombre}</td>
                         <td className="px-6 py-3 text-center font-bold" style={{ color: '#1f2937' }}>{fila.puntos}</td>
                         <td className="px-6 py-3 text-sm font-medium" style={{ color: '#374151' }}>
-                          {fila.equipoElegido !== "-" ? (
+                          {fila.equipoElegido === "Sin selección" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border font-bold italic" style={{ backgroundColor: '#fee2e2', color: '#dc2626', borderColor: '#fecaca' }}>
+                              Sin selección
+                            </span>
+                          ) : fila.equipoElegido !== "-" ? (
                             <span className="inline-flex items-center px-2 py-0.5 rounded border" style={{ backgroundColor: '#f3f4f6', color: '#1f2937', borderColor: '#d1d5db' }}>
                               {fila.equipoElegido}
                             </span>
@@ -582,7 +585,6 @@ export default function AdminSurvivor() {
                             <span className="italic text-xs" style={{ color: '#9ca3af' }}>Sin equipo registrado</span>
                           )}
                         </td>
-                        {/* 🚨 NUEVA COLUMNA: Equipos Usados */}
                         <td className="px-6 py-3 text-center">
                           <span className="inline-flex items-center justify-center w-10 h-10 rounded-full font-black text-lg" style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}>
                             {fila.equiposUsados}
