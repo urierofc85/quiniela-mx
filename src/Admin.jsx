@@ -296,6 +296,36 @@ export default function Admin() {
 
       }
 
+      // 🚨 NUEVO: Buscar la jornada que está actualmente activa
+      const { data: jornadaActivaActual, error: errorBusqueda } = await supabase
+        .from("jornadas")
+        .select("id")
+        .eq("activa", true)
+        .maybeSingle();
+
+      if (errorBusqueda) {
+        console.error("Error buscando jornada activa:", errorBusqueda);
+      }
+
+      // 🚨 NUEVO: Si hay una jornada activa y es diferente a la nueva, cerrarla
+      if (jornadaActivaActual && jornadaActivaActual.id !== Number(jornadaSeleccionada)) {
+        console.log(`Cerrando jornada anterior ID: ${jornadaActivaActual.id}`);
+        
+        const { error: errorCerrar } = await supabase
+          .from("jornadas")
+          .update({ 
+            cerrada: true,
+            estado: "cerrada"
+          })
+          .eq("id", jornadaActivaActual.id);
+
+        if (errorCerrar) {
+          console.error("Error cerrando jornada anterior:", errorCerrar);
+          alert("Error al cerrar la jornada anterior: " + errorCerrar.message);
+          return;
+        }
+      }
+
       const {
         error: desactivarError,
       } = await supabase
