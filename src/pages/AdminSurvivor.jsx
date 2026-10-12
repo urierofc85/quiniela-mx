@@ -146,9 +146,8 @@ export default function AdminSurvivor() {
     });
 
     for (const jornada of jornadasOrdenadas) {
-      const esPasadaYCerrada = jornada.fecha_limite
-        ? horaActual > new Date(jornada.fecha_limite)
-        : jornada.cerrada === true || jornada.estado === "cerrada";
+      // 🚨 CORREGIDO: Usa solo fecha_limite y activa, que son las columnas que existen en tu BD
+      const esPasadaYCerrada = (jornada.fecha_limite && horaActual > new Date(jornada.fecha_limite)) || !jornada.activa;
 
       const eleccionesJornada = rawSurvivor.filter(
         (s) => Number(s.jornada_id) === Number(jornada.id)
@@ -227,7 +226,6 @@ export default function AdminSurvivor() {
     }));
 
     // 🚨 CORRECCIÓN CLAVE: Ahora mostramos a TODOS los jugadores activos (vidas < 3).
-    // Antes, este filtro ocultaba a los que no tenían selección, por eso no aparecían.
     if (jornadaSeleccionada !== "general") {
       rankingFinal = rankingFinal.filter((fila) => {
         if (fila.vidas >= 3) return false; // Solo eliminamos a los que ya perdieron las 3 vidas
