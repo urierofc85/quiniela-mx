@@ -99,7 +99,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // 🚨 VALIDACIÓN DE SEGURIDAD DE JORNADA
+  // 🚨 VALIDACIÓN DE SEGURIDAD DE JORNADA (CORREGIDA)
   //=========================================
   const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
   
@@ -107,12 +107,11 @@ export default function AdminSurvivor() {
     if (jornadaSeleccionada === "general") return true;
     if (!jornadaActualObj || !horaMexico) return false;
     
-    // Prioridad 1: Fecha límite configurada
-    if (jornadaActualObj.fecha_limite) {
-      return horaMexico > new Date(jornadaActualObj.fecha_limite);
-    }
-    // 🚨 CORRECCIÓN: Se agrega "|| jornadaActualObj.activa === false" para detectar el cierre manual desde Admin
-    return jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada" || jornadaActualObj.activa === false;
+    // 🚨 CORRECCIÓN: Usamos OR (||) para que CUALQUIERA de estas condiciones cierre la jornada
+    const cerradaPorTiempo = jornadaActualObj.fecha_limite && horaMexico > new Date(jornadaActualObj.fecha_limite);
+    const cerradaManualmente = jornadaActualObj.activa === false || jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada";
+    
+    return cerradaPorTiempo || cerradaManualmente;
   }, [jornadaSeleccionada, jornadaActualObj, horaMexico]);
 
   //=========================================
@@ -169,10 +168,10 @@ export default function AdminSurvivor() {
     });
 
     for (const jornada of jornadasOrdenadas) {
-      // 🚨 CORRECCIÓN: Se agrega "|| jornada.activa === false" para detectar el cierre manual desde Admin
-      const esPasadaYCerrada = jornada.fecha_limite
-        ? horaActual > new Date(jornada.fecha_limite)
-        : (jornada.cerrada === true || jornada.estado === "cerrada" || jornada.activa === false);
+      // 🚨 CORRECCIÓN: Usamos OR (||) en lugar de ternario (? :) para evaluar TODAS las condiciones de cierre
+      const cerradaPorTiempo = jornada.fecha_limite && horaActual > new Date(jornada.fecha_limite);
+      const cerradaManualmente = jornada.activa === false || jornada.cerrada === true || jornada.estado === "cerrada";
+      const esPasadaYCerrada = cerradaPorTiempo || cerradaManualmente;
 
       const eleccionesJornada = rawSurvivor.filter(
         (s) => Number(s.jornada_id) === Number(jornada.id)
@@ -192,7 +191,10 @@ export default function AdminSurvivor() {
 
         // 🚨 Si no hay selección y la jornada YA CERRÓ, se pierde 1 vida
         if (!seleccion && esPasadaYCerrada) {
-          if (registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
+          if (registroAcumulado.vidas < 3) {
+            registroAcumulado.vidas += 1;
+            console.log(`✅ PENALIZACIÓN: A ${registroAcumulado.nombre} se le restó 1 vida en Jornada ${jornada.id}`);
+          }
           return;
         }
 
@@ -247,7 +249,6 @@ export default function AdminSurvivor() {
     let rankingFinal = Object.values(acumulado);
 
     // 🚨 CORRECCIÓN CLAVE: Ahora mostramos a TODOS los jugadores activos (vidas < 3).
-    // Antes, este filtro ocultaba a los que no tenían selección, por eso no aparecían.
     if (jornadaSeleccionada !== "general") {
       rankingFinal = rankingFinal.filter((fila) => {
         if (fila.vidas >= 3) return false; // Solo eliminamos a los que ya perdieron las 3 vidas
