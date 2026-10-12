@@ -283,7 +283,7 @@ export default function Admin() {
 
   };
 
-  // 🚨 NUEVA FUNCIÓN: Cerrar jornada manualmente
+  // 🚨 NUEVA FUNCIÓN: Cerrar jornada manualmente (usando solo la columna 'activa')
   const cerrarJornada = async (jornadaId) => {
     const confirmar = window.confirm(
       "¿Deseas cerrar esta jornada? Los participantes ya no podrán hacer cambios."
@@ -291,12 +291,10 @@ export default function Admin() {
 
     if (!confirmar) return;
 
+    // Usamos SOLO la columna 'activa' que ya existe en tu tabla
     const { error } = await supabase
       .from("jornadas")
-      .update({ 
-        cerrada: true,
-        estado: "cerrada"
-      })
+      .update({ activa: false })
       .eq("id", jornadaId);
 
     if (error) {
@@ -550,8 +548,12 @@ export default function Admin() {
       </h2>
 
       {jornadas.map(
-        (jornada) => (
-
+        (jornada) => {
+          // Determinar si la jornada está cerrada (por fecha o manualmente)
+          const cerradaPorFecha = horaMexico && jornada.fecha_limite && new Date(jornada.fecha_limite) < horaMexico;
+          const cerradaManualmente = !jornada.activa && !cerradaPorFecha && jornada.fecha_limite;
+          
+          return (
           <div
             key={jornada.id}
             className="border rounded p-4 mb-3 shadow-sm"
@@ -577,22 +579,25 @@ export default function Admin() {
 
             <div className="mt-2">
 
-              {horaMexico &&
-                (new Date(
-                  jornada.fecha_limite
-                ) < horaMexico ? (
+              {cerradaPorFecha ? (
 
-                  <span className="text-red-600 font-bold">
-                    🔒 Jornada cerrada
-                  </span>
+                <span className="text-red-600 font-bold">
+                  🔒 Jornada cerrada (por fecha)
+                </span>
 
-                ) : (
+              ) : cerradaManualmente ? (
 
-                  <span className="text-green-600 font-bold">
-                    🟢 Jornada abierta
-                  </span>
+                <span className="text-orange-600 font-bold">
+                  🔒 Jornada cerrada (manualmente)
+                </span>
 
-                ))}
+              ) : (
+
+                <span className="text-green-600 font-bold">
+                  🟢 Jornada abierta
+                </span>
+
+              )}
 
             </div>
 
@@ -606,20 +611,14 @@ export default function Admin() {
 
               )}
 
-              {/* 🚨 NUEVO: Botón para cerrar jornada (solo si no está cerrada) */}
-              {!jornada.cerrada && jornada.estado !== "cerrada" && (
+              {/* 🚨 Botón para cerrar jornada manualmente (solo si está abierta) */}
+              {!cerradaPorFecha && !cerradaManualmente && (
                 <button
                   onClick={() => cerrarJornada(jornada.id)}
                   className="bg-yellow-500 text-white px-3 py-1 rounded font-bold hover:bg-yellow-600"
                 >
                   🔒 Cerrar Jornada
                 </button>
-              )}
-
-              {jornada.cerrada && (
-                <span className="bg-red-100 text-red-700 px-3 py-1 rounded font-bold">
-                  🔒 Cerrada
-                </span>
               )}
 
               <button
@@ -636,8 +635,8 @@ export default function Admin() {
                      </div>
 
           </div>
-
-        )
+          );
+        }
       )}
 
     </div>
