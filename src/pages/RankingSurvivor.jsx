@@ -20,7 +20,6 @@ export default function AdminSurvivor() {
   const [rawPerfiles, setRawPerfiles] = useState([]);
   const [rawPartidos, setRawPartidos] = useState([]);
 
-  // 🚨 Estado para controlar la hora del servidor y el desbloqueo automático
   const [horaMexico, setHoraMexico] = useState(null);
 
   const tablaRef = useRef(null);
@@ -33,7 +32,6 @@ export default function AdminSurvivor() {
   useEffect(() => {
     cargarDatosIniciales();
     
-    // 🚨 Actualiza la hora cada 60 segundos para desbloquear automáticamente al llegar el límite
     const intervaloHora = setInterval(async () => {
       const hora = await obtenerHoraMexico();
       setHoraMexico(hora);
@@ -99,7 +97,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // 🚨 VALIDACIÓN DE SEGURIDAD DE JORNADA (CORREGIDA)
+  // 🚨 VALIDACIÓN DE SEGURIDAD DE JORNADA
   //=========================================
   const jornadaActualObj = jornadas.find((j) => Number(j.id) === Number(jornadaSeleccionada));
   
@@ -107,7 +105,6 @@ export default function AdminSurvivor() {
     if (jornadaSeleccionada === "general") return true;
     if (!jornadaActualObj || !horaMexico) return false;
     
-    // 🚨 CORRECCIÓN: Usamos OR (||) para que CUALQUIERA de estas condiciones cierre la jornada
     const cerradaPorTiempo = jornadaActualObj.fecha_limite && horaMexico > new Date(jornadaActualObj.fecha_limite);
     const cerradaManualmente = jornadaActualObj.activa === false || jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada";
     
@@ -168,7 +165,6 @@ export default function AdminSurvivor() {
     });
 
     for (const jornada of jornadasOrdenadas) {
-      // 🚨 CORRECCIÓN: Usamos OR (||) en lugar de ternario (? :) para evaluar TODAS las condiciones de cierre
       const cerradaPorTiempo = jornada.fecha_limite && horaActual > new Date(jornada.fecha_limite);
       const cerradaManualmente = jornada.activa === false || jornada.cerrada === true || jornada.estado === "cerrada";
       const esPasadaYCerrada = cerradaPorTiempo || cerradaManualmente;
@@ -189,7 +185,6 @@ export default function AdminSurvivor() {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
-        // 🚨 Si no hay selección y la jornada YA CERRÓ, se pierde 1 vida
         if (!seleccion && esPasadaYCerrada) {
           if (registroAcumulado.vidas < 3) {
             registroAcumulado.vidas += 1;
@@ -248,11 +243,10 @@ export default function AdminSurvivor() {
 
     let rankingFinal = Object.values(acumulado);
 
-    // 🚨 CORRECCIÓN CLAVE: Ahora mostramos a TODOS los jugadores activos (vidas < 3).
     if (jornadaSeleccionada !== "general") {
       rankingFinal = rankingFinal.filter((fila) => {
-        if (fila.vidas >= 3) return false; // Solo eliminamos a los que ya perdieron las 3 vidas
-        return true; // Mantenemos a los que tienen 0, 1 o 2 vidas, HAYAN elegido o no
+        if (fila.vidas >= 3) return false;
+        return true;
       });
     }
 
@@ -341,9 +335,6 @@ export default function AdminSurvivor() {
   //=========================================
   // 🚨 FUNCIONES PARA EXPORTAR
   //=========================================
-  const esperarRender = () =>
-    new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
   const exportarJPG = async (ref, nombreArchivo) => {
     if (!ref || !ref.current) {
       alert("⚠️ No se encontró el elemento a exportar. Intenta de nuevo.");
@@ -351,7 +342,8 @@ export default function AdminSurvivor() {
     }
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // Pequeña pausa extra para asegurar que el DOM esté 100% pintado
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       const canvas = await html2canvas(ref.current, {
         scale: 2,
@@ -369,7 +361,7 @@ export default function AdminSurvivor() {
       link.click();
     } catch (error) {
       console.error("Error al exportar JPG:", error);
-      alert("❌ Ocurrió un error al generar la imagen. Revisa la consola del navegador (F12) para más detalles.");
+      alert("❌ Ocurrió un error al generar la imagen. Revisa la consola del navegador (F12).");
     }
   };
 
@@ -523,7 +515,6 @@ export default function AdminSurvivor() {
                         </td>
                         <td className="px-6 py-4 font-bold" style={{ color: '#1e293b' }}>{fila.nombre}</td>
                         
-                        {/* 🚨 CORRECCIÓN: Ahora muestra "Sin selección" claramente si el usuario no eligió */}
                         {jornadaSeleccionada !== "general" && (
                           <td className="px-6 py-4 text-sm font-medium" style={{ color: '#475569' }}>
                             {!jornadaEstaCerrada ? (
@@ -553,6 +544,7 @@ export default function AdminSurvivor() {
                           )}
                         </td>
                         
+                        {/* 🚨 CORRECCIÓN: Usamos opacity en lugar de filter: grayscale para compatibilidad total con html2canvas */}
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-1">
                             {[...Array(3)].map((_, i) => {
@@ -562,9 +554,9 @@ export default function AdminSurvivor() {
                                   key={i} 
                                   className="text-2xl transition-all"
                                   style={{ 
-                                    color: estaLleno ? '#ef4444' : '#e2e8f0',
-                                    transform: estaLleno ? 'scale(1)' : 'scale(0.9)',
-                                    filter: estaLleno ? 'none' : 'grayscale(100%)'
+                                    color: estaLleno ? '#ef4444' : '#cbd5e1', // Gris más definido
+                                    opacity: estaLleno ? 1 : 0.4, // Opacidad en lugar de filter
+                                    transform: estaLleno ? 'scale(1)' : 'scale(0.9)'
                                   }}
                                 >
                                   ❤️
@@ -585,7 +577,7 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* Reporte Elecciones (CON BLOQUEO DE SEGURIDAD) */}
+        {/* Reporte Elecciones */}
         {jornadaSeleccionada !== "general" && (
           <div ref={reporteRef} className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden" style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
             <div className="px-6 py-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: '#f1f5f9' }}>
@@ -606,16 +598,11 @@ export default function AdminSurvivor() {
                 <p className="font-medium flex flex-col items-center justify-center gap-2" style={{ color: '#475569' }}>
                   <svg className="w-8 h-8" style={{ color: '#94a3b8' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                   <span>Las elecciones de los participantes están ocultas por seguridad.</span>
-                  <span className="text-sm" style={{ color: '#64748b' }}>
-                    Se revelarán automáticamente al cerrar la jornada 
-                    {jornadaActualObj?.fecha_limite && ` (${new Date(jornadaActualObj.fecha_limite).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })})`}.
-                  </span>
                 </p>
               </div>
             ) : reporteJornada.length === 0 ? (
               <div className="p-8 text-center" style={{ backgroundColor: '#fffbeb', borderBottom: '1px solid #fcd34d' }}>
                 <p className="font-medium flex items-center justify-center gap-2" style={{ color: '#92400e' }}>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                   No se registraron selecciones válidas en esta jornada.
                 </p>
               </div>
