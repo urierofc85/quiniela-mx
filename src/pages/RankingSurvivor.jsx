@@ -189,6 +189,7 @@ export default function AdminSurvivor() {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
+        // 🚨 Si no hay selección y la jornada YA CERRÓ, se pierde 1 vida
         if (!seleccion && esPasadaYCerrada) {
           if (registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
           return;
@@ -244,12 +245,12 @@ export default function AdminSurvivor() {
 
     let rankingFinal = Object.values(acumulado);
 
+    // 🚨 CORRECCIÓN CLAVE: Ahora mostramos a TODOS los jugadores activos (vidas < 3).
+    // Antes, este filtro ocultaba a los que no tenían selección, por eso no aparecían.
     if (jornadaSeleccionada !== "general") {
-      const usuariosConSeleccionEnEstaJornada = usuariosConSeleccionPorJornada[String(jornadaSeleccionada)] || new Set();
       rankingFinal = rankingFinal.filter((fila) => {
-        if (!usuariosConSeleccionEnEstaJornada.has(String(fila.usuario_id))) return false;
-        if (fila.vidas >= 3) return false;
-        return true;
+        if (fila.vidas >= 3) return false; // Solo eliminamos a los que ya perdieron las 3 vidas
+        return true; // Mantenemos a los que tienen 0, 1 o 2 vidas, HAYAN elegido o no
       });
     }
 
@@ -520,7 +521,7 @@ export default function AdminSurvivor() {
                         </td>
                         <td className="px-6 py-4 font-bold" style={{ color: '#1e293b' }}>{fila.nombre}</td>
                         
-                        {/* 🚨 CORRECCIÓN DE SEGURIDAD: Ocultar equipo elegido si la jornada no ha cerrado */}
+                        {/* 🚨 CORRECCIÓN: Ahora muestra "Sin selección" claramente si el usuario no eligió */}
                         {jornadaSeleccionada !== "general" && (
                           <td className="px-6 py-4 text-sm font-medium" style={{ color: '#475569' }}>
                             {!jornadaEstaCerrada ? (
@@ -529,7 +530,10 @@ export default function AdminSurvivor() {
                                 Oculto hasta el cierre
                               </span>
                             ) : fila.equipoElegido === "Sin selección" ? (
-                              <span className="italic" style={{ color: '#ef4444' }}>Sin selección</span>
+                              <span className="inline-flex items-center gap-1.5 font-bold italic" style={{ color: '#dc2626' }}>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                Sin selección
+                              </span>
                             ) : (
                               fila.equipoElegido
                             )}
