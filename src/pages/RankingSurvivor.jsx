@@ -111,8 +111,8 @@ export default function AdminSurvivor() {
     if (jornadaActualObj.fecha_limite) {
       return horaMexico > new Date(jornadaActualObj.fecha_limite);
     }
-    // Prioridad 2: Estado manual de cerrada
-    return jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada";
+    // 🚨 CORRECCIÓN: Se agrega "|| jornadaActualObj.activa === false" para detectar el cierre manual desde Admin
+    return jornadaActualObj.cerrada === true || jornadaActualObj.estado === "cerrada" || jornadaActualObj.activa === false;
   }, [jornadaSeleccionada, jornadaActualObj, horaMexico]);
 
   //=========================================
@@ -169,9 +169,10 @@ export default function AdminSurvivor() {
     });
 
     for (const jornada of jornadasOrdenadas) {
+      // 🚨 CORRECCIÓN: Se agrega "|| jornada.activa === false" para detectar el cierre manual desde Admin
       const esPasadaYCerrada = jornada.fecha_limite
         ? horaActual > new Date(jornada.fecha_limite)
-        : jornada.cerrada === true || jornada.estado === "cerrada";
+        : (jornada.cerrada === true || jornada.estado === "cerrada" || jornada.activa === false);
 
       const eleccionesJornada = rawSurvivor.filter(
         (s) => Number(s.jornada_id) === Number(jornada.id)
