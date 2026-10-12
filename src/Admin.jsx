@@ -283,6 +283,31 @@ export default function Admin() {
 
   };
 
+  // 🚨 NUEVA FUNCIÓN: Cerrar jornada manualmente
+  const cerrarJornada = async (jornadaId) => {
+    const confirmar = window.confirm(
+      "¿Deseas cerrar esta jornada? Los participantes ya no podrán hacer cambios."
+    );
+
+    if (!confirmar) return;
+
+    const { error } = await supabase
+      .from("jornadas")
+      .update({ 
+        cerrada: true,
+        estado: "cerrada"
+      })
+      .eq("id", jornadaId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert("✅ Jornada cerrada correctamente");
+    await cargarJornadas();
+  };
+
   const activarJornadaSeleccionada =
     async () => {
 
@@ -294,36 +319,6 @@ export default function Admin() {
 
         return;
 
-      }
-
-      // 🚨 NUEVO: Buscar la jornada que está actualmente activa
-      const { data: jornadaActivaActual, error: errorBusqueda } = await supabase
-        .from("jornadas")
-        .select("id")
-        .eq("activa", true)
-        .maybeSingle();
-
-      if (errorBusqueda) {
-        console.error("Error buscando jornada activa:", errorBusqueda);
-      }
-
-      // 🚨 NUEVO: Si hay una jornada activa y es diferente a la nueva, cerrarla
-      if (jornadaActivaActual && jornadaActivaActual.id !== Number(jornadaSeleccionada)) {
-        console.log(`Cerrando jornada anterior ID: ${jornadaActivaActual.id}`);
-        
-        const { error: errorCerrar } = await supabase
-          .from("jornadas")
-          .update({ 
-            cerrada: true,
-            estado: "cerrada"
-          })
-          .eq("id", jornadaActivaActual.id);
-
-        if (errorCerrar) {
-          console.error("Error cerrando jornada anterior:", errorCerrar);
-          alert("Error al cerrar la jornada anterior: " + errorCerrar.message);
-          return;
-        }
       }
 
       const {
@@ -601,7 +596,7 @@ export default function Admin() {
 
             </div>
 
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex gap-2 flex-wrap">
 
               {jornada.activa && (
 
@@ -609,6 +604,22 @@ export default function Admin() {
                   ✅ Jornada Activa
                 </span>
 
+              )}
+
+              {/* 🚨 NUEVO: Botón para cerrar jornada (solo si no está cerrada) */}
+              {!jornada.cerrada && jornada.estado !== "cerrada" && (
+                <button
+                  onClick={() => cerrarJornada(jornada.id)}
+                  className="bg-yellow-500 text-white px-3 py-1 rounded font-bold hover:bg-yellow-600"
+                >
+                  🔒 Cerrar Jornada
+                </button>
+              )}
+
+              {jornada.cerrada && (
+                <span className="bg-red-100 text-red-700 px-3 py-1 rounded font-bold">
+                  🔒 Cerrada
+                </span>
               )}
 
               <button
