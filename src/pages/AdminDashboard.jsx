@@ -164,7 +164,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO DE DATOS
+  // PROCESAMIENTO DE DATOS (CON LÓGICA EXACTA DE ADMINSURVIVOR)
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -215,7 +215,11 @@ export default function AdminDashboard() {
     jornadasData.forEach(jornada => {
       const jornadaId = jornada.id;
       const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornadaId)?.numero;
-      const esPasadaYCerrada = jornada.fecha_limite ? ahora > new Date(jornada.fecha_limite) : false;
+      
+      // 🚨 EVALUACIÓN DE CIERRE (IDÉNTICA A ADMINSURVIVOR)
+      const cerradaPorTiempo = jornada.fecha_limite && ahora > new Date(jornada.fecha_limite);
+      const cerradaManualmente = jornada.activa === false;
+      const esPasadaYCerrada = cerradaPorTiempo || cerradaManualmente;
 
       quinielasPorJornadaCount[jornadaId] = new Set();
       survivorPorJornadaCount[jornadaId] = new Set();
@@ -231,36 +235,55 @@ export default function AdminDashboard() {
 
         const esJugadorSurvivor = usuariosQueJueganSurvivor.has(usuario.id);
 
+        // 🚨 LÓGICA DE CÁLCULO DE VIDAS (EXACTAMENTE IGUAL QUE ADMINSURVIVOR)
         if (esJugadorSurvivor) {
           const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
-          if (seleccionSurvivor && seleccionSurvivor.equipo) {
+          
+          if (seleccionSurvivor && seleccionSurvivor.equipo && String(seleccionSurvivor.equipo).trim() !== "") {
             reg.survivorEnviados++;
             survivorPorJornadaCount[jornadaId].add(usuario.id);
+            
             if (esPasadaYCerrada) {
-              const normalizar = (texto) => texto.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-              const equipoLimpio = normalizar(seleccionSurvivor.equipo);
-              
-              const partido = partidosDeJornada.find(p => {
-                return normalizar(p.local) === equipoLimpio || normalizar(p.visitante) === equipoLimpio;
+              // Extracción exacta del formato "Equipo (vs Rival)"
+              const partes = seleccionSurvivor.equipo.split(' (vs ');
+              const nombreEquipoBase = partes[0].trim().toLowerCase();
+              const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
+
+              // Búsqueda robusta del partido
+              const partido = partidosDeJornada.find((p) => {
+                const localLimpio = p.local.trim().toLowerCase();
+                const visitaLimpio = p.visitante.trim().toLowerCase();
+                const esEquipoLocal = localLimpio === nombreEquipoBase;
+                const esEquipoVisita = visitaLimpio === nombreEquipoBase;
+                if (!esEquipoLocal && !esEquipoVisita) return false;
+                if (nombreRivalBase) {
+                  return (esEquipoLocal && visitaLimpio === nombreRivalBase) || (esEquipoVisita && localLimpio === nombreRivalBase);
+                }
+                return true;
               });
 
-              if (partido?.resultado) {
+              if (partido && partido.resultado) {
                 let perdio = false;
-                const esLocal = normalizar(partido.local) === equipoLimpio;
+                const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
                 
-                if (esLocal && partido.resultado === "V") perdio = true;
-                if (!esLocal && partido.resultado === "L") perdio = true;
+                if (esLocal) {
+                  if (partido.resultado === "V") perdio = true;
+                } else {
+                  if (partido.resultado === "L") perdio = true;
+                }
                 
                 if (perdio && reg.vidas < 3) reg.vidas++;
               }
             }
           } else if (esPasadaYCerrada && reg.vidas < 3) {
+            // No puso selección y la jornada cerró -> Pierde vida
             reg.vidas++;
           }
         }
 
         if (reg.soloSurvivor) return;
 
+        // LÓGICA DE QUINIELAS (INTACTA)
         const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
         if (quinielasUsuario.length > 0) {
           reg.quinielasEnviadas++;
@@ -313,7 +336,7 @@ export default function AdminDashboard() {
       const quinielasActivaSet = new Set(quinielasDeJornadaActiva.map(q => q.usuario_id));
       
       const survivorDeJornadaActiva = todosSurvivor.filter(s => String(s.jornada_id) === String(idJornadaActiva));
-      const survivorActivaSet = new Set(survivorDeJornadaActiva.filter(s => s.equipo).map(s => s.usuario_id));
+      const survivorActivaSet = new Set(survivorDeJornadaActiva.filter(s => s.equipo && String(s.equipo).trim() !== "").map(s => s.usuario_id));
       
       quinielasActivas = quinielasActivaSet.size;
 
@@ -338,14 +361,16 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
+      // 🚨 FILTRO DEFINITIVO: Usa el cálculo exacto de vidas del bucle principal
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
           if (!usuariosQueJueganSurvivor.has(p.id)) return false;
-          if (survivorActivaSet.has(p.id)) return false;
+          if (survivorActivaSet.has(p.id)) return false; // Ya puso su selección
           
           const reg = acumulado[p.id];
-          if (reg && reg.vidas >= 3) return false;
+          // Si el usuario ya tiene 3 vidas perdidas acumuladas, está ELIMINADO y NO debe aparecer como ausente
+          if (reg && reg.vidas >= 3) return false; 
           
           return true;
         })
@@ -353,6 +378,7 @@ export default function AdminDashboard() {
           const reg = acumulado[p.id];
           let motivo = "Falta en jornada actual";
           let tipo = "normal";
+          
           if (reg && reg.vidas >= 3) {
             motivo = "Eliminado (3 vidas)";
             tipo = "eliminado";
@@ -505,7 +531,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // ✅ EXPORTAR PDF (OPTIMIZADO PARA UNA SOLA HOJA)
+  // EXPORTAR PDF
   //---------------------------------------
   const exportarPDF = async (jornadaId) => {
     if (!jornadaId) {
@@ -604,10 +630,9 @@ export default function AdminDashboard() {
         return columnasDef.map(col => row[col.dataKey]);
       });
 
-      // 🚨 Configuración optimizada para UNA SOLA HOJA HORIZONTAL
       const doc = new jsPDF("landscape", "mm", "a4");
 
-      doc.setFontSize(14); // Ligeramente más pequeño para el título
+      doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(34, 197, 94);
       doc.text(`Quinielas - ${jornadaActivaPDF?.nombre || 'Jornada'}`, 14, 12);
@@ -620,13 +645,13 @@ export default function AdminDashboard() {
       autoTable(doc, {
         head: head,
         body: body,
-        startY: 20, // Empezar más arriba para ganar espacio vertical
+        startY: 20,
         theme: "grid",
         styles: {
-          fontSize: 5, // 🚨 Fuente más pequeña para que quepa todo
+          fontSize: 5,
           halign: "center",
           valign: "middle",
-          cellPadding: 0.5, // 🚨 Relleno mínimo para ahorrar espacio
+          cellPadding: 0.5,
           lineColor: [200, 200, 200],
           lineWidth: 0.1,
         },
@@ -637,7 +662,6 @@ export default function AdminDashboard() {
           fontSize: 5,
           halign: "center",
           cellPadding: 0.5,
-          // 🚨 Se eliminó minCellHeight para que el encabezado no ocupe espacio innecesario
         },
         columnStyles: {
           0: { halign: "center", fontStyle: "bold", fillColor: [240, 240, 240], cellWidth: 12 },
@@ -664,7 +688,6 @@ export default function AdminDashboard() {
             }
           }
         },
-        // 🚨 Márgenes mínimos para aprovechar todo el ancho de la hoja A4 horizontal
         margin: { top: 20, left: 5, right: 5, bottom: 5 },
       });
 
