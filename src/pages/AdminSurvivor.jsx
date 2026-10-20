@@ -31,13 +31,10 @@ export default function AdminSurvivor() {
   useEffect(() => {
     cargarDatosIniciales();
     
-    // 🚨 REFRESCO AUTOMÁTICO: Actualiza hora Y jornadas cada 60 seg.
-    // Esto es crucial para detectar cuando cierras una jornada manualmente desde Admin.jsx
     const intervalo = setInterval(async () => {
       const hora = await obtenerHoraMexico();
       setHoraMexico(hora);
       
-      // Refrescamos las jornadas para detectar cambios en 'activa'
       const { data } = await supabase.from("jornadas").select("*").order("id");
       if (data) setJornadas(data);
     }, 60000);
@@ -98,7 +95,7 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING
+  // LÓGICA DEL RANKING (CON HISTORIAL DETALLADO)
   //=========================================
   const calcularRanking = async () => {
     const horaActual = horaMexico || await obtenerHoraMexico();
@@ -120,10 +117,10 @@ export default function AdminSurvivor() {
         equipoElegido: "-",
         tuvoInfraccion: false,
         equiposUsados: new Set(),
+        historial: {} // 🚨 NUEVO: Para almacenar el resultado de cada jornada
       };
     });
 
-    // Calcular equipos únicos usados por cada usuario en TODO el torneo
     rawSurvivor.forEach(s => {
       if (!s.equipo || !String(s.equipo).trim()) return;
       const equipoBase = s.equipo.split(' (vs ')[0].trim();
@@ -152,8 +149,9 @@ export default function AdminSurvivor() {
     });
 
     for (const jornada of jornadasOrdenadas) {
-      // 🚨 CORREGIDO: Usa solo fecha_limite y activa, que son las columnas que existen en tu BD
-      const esPasadaYCerrada = (jornada.fecha_limite && horaActual > new Date(jornada.fecha_limite)) || !jornada.activa;
+      const cerradaPorTiempo = jornada.fecha_limite && horaActual > new Date(jornada.fecha_limite);
+      const cerradaManualmente = jornada.activa === false;
+      const esPasadaYCerrada = cerradaPorTiempo || cerradaManualmente;
 
       const eleccionesJornada = rawSurvivor.filter(
         (s) => Number(s.jornada_id) === Number(jornada.id)
@@ -167,18 +165,25 @@ export default function AdminSurvivor() {
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
-        // Asignamos el equipo elegido (o "Sin selección") para la vista de jornada específica
+        // Inicializar historial de la jornada
+        registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: false, tipo: '-' };
+
         if (jornadaSeleccionada !== "general") {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
 
-        // 🚨 Si no hay selección y la jornada YA CERRÓ, se pierde 1 vida
         if (!seleccion && esPasadaYCerrada) {
-          if (registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
+          if (registroAcumulado.vidas < 3) {
+            registroAcumulado.vidas += 1;
+            registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: true, tipo: 'X' };
+          }
           return;
         }
 
-        if (!seleccion) return;
+        if (!seleccion) {
+          registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: false, tipo: '-' };
+          return;
+        }
 
         const esInfraccion = seleccionesInfraccion.has(`${usuario.id}_${jornada.id}`);
 
@@ -199,7 +204,9 @@ export default function AdminSurvivor() {
           return true;
         });
 
-        if (!partido || !partido.resultado) return;
+        if (!partido || !partido.resultado) {
+           return; // Se mantiene el tipo '-' si no hay resultado (ej. pospuesto)
+        }
 
         let puntos = 0;
         let perdio = false;
@@ -208,21 +215,38 @@ export default function AdminSurvivor() {
           puntos = 0;
           perdio = true;
           registroAcumulado.tuvoInfraccion = true;
+          registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: true, tipo: 'X' };
         } else {
           const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
           if (esLocal) {
-            if (partido.resultado === "L") puntos = 3;
-            else if (partido.resultado === "E") puntos = 1;
-            else if (partido.resultado === "V") perdio = true;
+            if (partido.resultado === "L") {
+                puntos = 3;
+                registroAcumulado.historial[jornada.id] = { puntos: 3, perdioVida: false, tipo: '3' };
+            } else if (partido.resultado === "E") {
+                puntos = 1;
+                registroAcumulado.historial[jornada.id] = { puntos: 1, perdioVida: false, tipo: '1' };
+            } else if (partido.resultado === "V") {
+                perdio = true;
+                registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: true, tipo: 'X' };
+            }
           } else {
-            if (partido.resultado === "V") puntos = 3;
-            else if (partido.resultado === "E") puntos = 1;
-            else if (partido.resultado === "L") perdio = true;
+            if (partido.resultado === "V") {
+                puntos = 3;
+                registroAcumulado.historial[jornada.id] = { puntos: 3, perdioVida: false, tipo: '3' };
+            } else if (partido.resultado === "E") {
+                puntos = 1;
+                registroAcumulado.historial[jornada.id] = { puntos: 1, perdioVida: false, tipo: '1' };
+            } else if (partido.resultado === "L") {
+                perdio = true;
+                registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: true, tipo: 'X' };
+            }
           }
         }
 
         registroAcumulado.puntos += puntos;
-        if (perdio && registroAcumulado.vidas < 3) registroAcumulado.vidas += 1;
+        if (perdio && registroAcumulado.vidas < 3) {
+          registroAcumulado.vidas += 1;
+        }
       });
     }
 
@@ -231,11 +255,10 @@ export default function AdminSurvivor() {
       equiposUsados: fila.equiposUsados.size,
     }));
 
-    // 🚨 CORRECCIÓN CLAVE: Ahora mostramos a TODOS los jugadores activos (vidas < 3).
     if (jornadaSeleccionada !== "general") {
       rankingFinal = rankingFinal.filter((fila) => {
-        if (fila.vidas >= 3) return false; // Solo eliminamos a los que ya perdieron las 3 vidas
-        return true; // Mantenemos a los que tienen 0, 1 o 2 vidas, HAYAN elegido o no
+        if (fila.vidas >= 3) return false;
+        return true;
       });
     }
 
@@ -288,34 +311,174 @@ export default function AdminSurvivor() {
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // FUNCIONES PARA EXPORTAR
+  // 🚨 EXPORTAR RANKING DETALLADO (NUEVA FUNCIÓN)
+  //=========================================
+  const exportarRankingDetalladoJPG = async () => {
+    if (ranking.length === 0) {
+      alert("No hay datos para exportar.");
+      return;
+    }
+
+    try {
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.top = '0';
+      container.style.left = '0';
+      container.style.width = 'max-content';
+      container.style.background = 'white';
+      container.style.padding = '40px';
+      container.style.zIndex = '9999';
+      container.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+
+      const title = document.createElement('h2');
+      title.textContent = `🏆 Ranking General Survivor - ${jornadaActualObj?.nombre || 'Acumulado'}`;
+      title.style.fontSize = '24px';
+      title.style.fontWeight = 'bold';
+      title.style.marginBottom = '20px';
+      title.style.textAlign = 'center';
+      title.style.color = '#0f172a';
+      container.appendChild(title);
+
+      const table = document.createElement('table');
+      table.style.borderCollapse = 'collapse';
+      table.style.width = '100%';
+      table.style.fontSize = '12px';
+
+      const thStyle = "border: 1px solid #cbd5e1; padding: 8px 12px; text-align: center; background-color: #f8fafc; font-weight: bold; color: #475569;";
+      const tdStyle = "border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; color: #334155;";
+      const tdLeft = "border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; color: #334155;";
+
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      
+      const headers = ["Pos", "Participante", "Puntos", "Equipos Usados"];
+      const jornadasParaExportar = [...jornadas].sort((a, b) => Number(a.id) - Number(b.id));
+      
+      jornadasParaExportar.forEach(j => {
+        headers.push(`J${j.id}`);
+      });
+      headers.push("Vidas");
+
+      headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        th.style.cssText = thStyle;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      ranking.forEach((fila, index) => {
+        const tr = document.createElement('tr');
+        
+        if (index === 0) tr.style.backgroundColor = '#fef9c3';
+        else if (index === 1) tr.style.backgroundColor = '#f1f5f9';
+        else if (index === 2) tr.style.backgroundColor = '#ffedd5';
+
+        // Pos
+        const posTd = document.createElement('td');
+        posTd.textContent = index + 1;
+        posTd.style.cssText = tdStyle + " font-weight: bold;";
+        tr.appendChild(posTd);
+
+        // Nombre
+        const nameTd = document.createElement('td');
+        nameTd.textContent = fila.nombre;
+        nameTd.style.cssText = tdLeft + " font-weight: bold;";
+        tr.appendChild(nameTd);
+
+        // Puntos Totales
+        const ptsTd = document.createElement('td');
+        ptsTd.textContent = fila.puntos;
+        ptsTd.style.cssText = tdStyle + " font-weight: bold; color: #0f172a;";
+        tr.appendChild(ptsTd);
+
+        // Equipos Usados
+        const eqTd = document.createElement('td');
+        eqTd.textContent = fila.equiposUsados;
+        eqTd.style.cssText = tdStyle;
+        tr.appendChild(eqTd);
+
+        // Jornadas
+        jornadasParaExportar.forEach(j => {
+          const jTd = document.createElement('td');
+          const hist = fila.historial && fila.historial[j.id] ? fila.historial[j.id] : { tipo: '-', perdioVida: false };
+          
+          if (hist.tipo === 'X') {
+            jTd.innerHTML = '<span style="color: #dc2626; font-weight: bold;">X</span>';
+          } else if (hist.tipo === '3') {
+            jTd.textContent = '3';
+            jTd.style.cssText = tdStyle + " font-weight: bold; color: #16a34a;";
+          } else if (hist.tipo === '1') {
+            jTd.textContent = '1';
+            jTd.style.cssText = tdStyle + " font-weight: bold; color: #d97706;";
+          } else {
+            jTd.textContent = hist.tipo || '-';
+            jTd.style.cssText = tdStyle + " color: #94a3b8;";
+          }
+          tr.appendChild(jTd);
+        });
+
+        // Vidas Restantes
+        const vidasRestantes = Math.max(0, 3 - fila.vidas);
+        const vidasTd = document.createElement('td');
+        vidasTd.textContent = vidasRestantes;
+        vidasTd.style.cssText = tdStyle + ` font-weight: bold; color: ${vidasRestantes === 0 ? '#dc2626' : '#0f172a'}`;
+        tr.appendChild(vidasTd);
+
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      container.appendChild(table);
+
+      document.body.appendChild(container);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight
+      });
+
+      document.body.removeChild(container);
+
+      const link = document.createElement("a");
+      link.download = `Ranking_Detallado_Survivor.jpg`;
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
+      link.click();
+
+    } catch (error) {
+      console.error("Error al exportar JPG:", error);
+      alert("❌ Ocurrió un error al generar la imagen.");
+    }
+  };
+
+  //=========================================
+  // OTRAS FUNCIONES DE EXPORTACIÓN
   //=========================================
   const exportarJPG = async (ref, nombreArchivo) => {
     if (!ref || !ref.current) {
       alert("⚠️ No se encontró el elemento a exportar. Intenta de nuevo.");
       return;
     }
-    
     try {
       await new Promise(resolve => setTimeout(resolve, 150));
-      
       const canvas = await html2canvas(ref.current, {
-        scale: 2,
-        useCORS: true, 
-        allowTaint: true, 
-        logging: false, 
-        backgroundColor: "#ffffff",
-        windowWidth: ref.current.scrollWidth,
-        windowHeight: ref.current.scrollHeight
+        scale: 2, useCORS: true, allowTaint: true, logging: false, backgroundColor: "#ffffff",
+        windowWidth: ref.current.scrollWidth, windowHeight: ref.current.scrollHeight
       });
-      
       const link = document.createElement("a");
       link.download = `${nombreArchivo}.jpg`;
       link.href = canvas.toDataURL("image/jpeg", 0.95);
       link.click();
     } catch (error) {
       console.error("Error al exportar JPG:", error);
-      alert("❌ Ocurrió un error al generar la imagen. Revisa la consola del navegador (F12) para más detalles.");
+      alert("❌ Ocurrió un error al generar la imagen.");
     }
   };
 
@@ -403,11 +566,11 @@ export default function AdminSurvivor() {
 
           <div className="flex flex-wrap gap-2 w-full lg:w-auto">
             <button
-              onClick={() => exportarJPG(tablaRef, jornadaSeleccionada === "general" ? "Ranking-General-Survivor" : `Ranking-${jornadaActualObj?.nombre || "Jornada"}`)}
+              onClick={exportarRankingDetalladoJPG}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              Exportar Ranking (JPG)
+              Exportar Ranking Detallado (JPG)
             </button>
 
             <button
@@ -428,7 +591,7 @@ export default function AdminSurvivor() {
           </div>
         </div>
 
-        {/* Tabla Ranking General */}
+        {/* Tabla Ranking General (Vista en pantalla) */}
         <div ref={tablaRef} className="rounded-2xl border border-slate-200 shadow-sm overflow-hidden" style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0' }}>
           <div className="px-6 py-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: '#f1f5f9' }}>
             <h2 className="text-xl font-black flex items-center gap-2" style={{ color: '#0f172a' }}>
@@ -472,7 +635,6 @@ export default function AdminSurvivor() {
                         </td>
                         <td className="px-6 py-4 font-bold" style={{ color: '#1e293b' }}>{fila.nombre}</td>
                         
-                        {/* 🚨 Aquí ahora SÍ aparecerá "Sin selección" en rojo si el usuario no eligió */}
                         {jornadaSeleccionada !== "general" && (
                           <td className="px-6 py-4 text-sm font-medium" style={{ color: '#475569' }}>
                             {fila.equipoElegido === "Sin selección" ? (
