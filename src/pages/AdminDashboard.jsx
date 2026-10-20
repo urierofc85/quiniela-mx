@@ -164,7 +164,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO DE DATOS (CON LÓGICA EXACTA DE ADMINSURVIVOR)
+  // PROCESAMIENTO DE DATOS
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -216,7 +216,6 @@ export default function AdminDashboard() {
       const jornadaId = jornada.id;
       const secNum = jornadasSecuenciales.find(j => j.idSupabase === jornadaId)?.numero;
       
-      // 🚨 EVALUACIÓN DE CIERRE (IDÉNTICA A ADMINSURVIVOR)
       const cerradaPorTiempo = jornada.fecha_limite && ahora > new Date(jornada.fecha_limite);
       const cerradaManualmente = jornada.activa === false;
       const esPasadaYCerrada = cerradaPorTiempo || cerradaManualmente;
@@ -235,7 +234,6 @@ export default function AdminDashboard() {
 
         const esJugadorSurvivor = usuariosQueJueganSurvivor.has(usuario.id);
 
-        // 🚨 LÓGICA DE CÁLCULO DE VIDAS (EXACTAMENTE IGUAL QUE ADMINSURVIVOR)
         if (esJugadorSurvivor) {
           const seleccionSurvivor = survivorDeJornada.find(s => s.usuario_id === usuario.id);
           
@@ -244,12 +242,10 @@ export default function AdminDashboard() {
             survivorPorJornadaCount[jornadaId].add(usuario.id);
             
             if (esPasadaYCerrada) {
-              // Extracción exacta del formato "Equipo (vs Rival)"
               const partes = seleccionSurvivor.equipo.split(' (vs ');
               const nombreEquipoBase = partes[0].trim().toLowerCase();
               const nombreRivalBase = partes.length > 1 ? partes[1].replace(')', '').trim().toLowerCase() : null;
 
-              // Búsqueda robusta del partido
               const partido = partidosDeJornada.find((p) => {
                 const localLimpio = p.local.trim().toLowerCase();
                 const visitaLimpio = p.visitante.trim().toLowerCase();
@@ -276,14 +272,12 @@ export default function AdminDashboard() {
               }
             }
           } else if (esPasadaYCerrada && reg.vidas < 3) {
-            // No puso selección y la jornada cerró -> Pierde vida
             reg.vidas++;
           }
         }
 
         if (reg.soloSurvivor) return;
 
-        // LÓGICA DE QUINIELAS (INTACTA)
         const quinielasUsuario = quinielasDeJornada.filter(q => q.usuario_id === usuario.id);
         if (quinielasUsuario.length > 0) {
           reg.quinielasEnviadas++;
@@ -361,15 +355,21 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // 🚨 FILTRO DEFINITIVO: Usa el cálculo exacto de vidas del bucle principal
+      // 🚨 FILTRO MEJORADO CON DIAGNÓSTICO VISUAL
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
           if (!usuariosQueJueganSurvivor.has(p.id)) return false;
-          if (survivorActivaSet.has(p.id)) return false; // Ya puso su selección
+          if (survivorActivaSet.has(p.id)) return false;
           
           const reg = acumulado[p.id];
-          // Si el usuario ya tiene 3 vidas perdidas acumuladas, está ELIMINADO y NO debe aparecer como ausente
+          
+          // 🚨 DEBUG: Si llega aquí con 3 vidas, hay un error lógico. Lo registramos.
+          if (reg && reg.vidas >= 3) {
+             console.warn(`[ALERTA] El usuario ${p.nombre_usuario} tiene ${reg.vidas} vidas pero pasó el filtro. Revisa la consola.`);
+          }
+          
+          // Si tiene 3 o más vidas, está ELIMINADO y NO debe aparecer en la lista de ausentes
           if (reg && reg.vidas >= 3) return false; 
           
           return true;
@@ -379,10 +379,16 @@ export default function AdminDashboard() {
           let motivo = "Falta en jornada actual";
           let tipo = "normal";
           
-          if (reg && reg.vidas >= 3) {
-            motivo = "Eliminado (3 vidas)";
-            tipo = "eliminado";
+          // 🚨 MEJORA VISUAL: Mostrar claramente cuántas vidas lleva para evitar confusión
+          if (reg && reg.vidas > 0) {
+            if (reg.vidas === 2) {
+               tipo = "eliminado"; // Usamos el estilo rojo para advertir que está al borde
+               motivo = `⚠️ ¡AL BORDE! (Lleva ${reg.vidas} vidas perdidas)`;
+            } else {
+               motivo = `Falta en jornada actual (Lleva ${reg.vidas} vida(s) perdida(s))`;
+            }
           }
+          
           return { ...p, motivo, tipo };
         });
     }
