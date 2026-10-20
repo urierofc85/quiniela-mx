@@ -112,7 +112,7 @@ export default function AdminSurvivor() {
   }, [jornadaSeleccionada, jornadaActualObj, horaMexico]);
 
   //=========================================
-  // 🚨 LÓGICA DEL RANKING
+  // 🚨 LÓGICA DEL RANKING (MEJORADA CON HISTORIAL Y USOS)
   //=========================================
   const calcularRanking = async () => {
     const horaActual = horaMexico || await obtenerHoraMexico();
@@ -133,7 +133,18 @@ export default function AdminSurvivor() {
         vidas: 0,
         equipoElegido: "-",
         tuvoInfraccion: false,
+        equiposUsados: new Set(), // 🚨 NUEVO: Para contar equipos únicos
+        historial: {}             // 🚨 NUEVO: Para guardar el resultado por jornada (3, 1, X, -)
       };
+    });
+
+    // 🚨 NUEVO: Calcular equipos únicos usados por cada usuario
+    rawSurvivor.forEach(s => {
+      if (!s.equipo || !String(s.equipo).trim()) return;
+      const equipoBase = s.equipo.split(' (vs ')[0].trim();
+      if (acumulado[s.usuario_id]) {
+        acumulado[s.usuario_id].equiposUsados.add(equipoBase);
+      }
     });
 
     const seleccionesPorUsuarioYEquipo = {};
@@ -181,6 +192,9 @@ export default function AdminSurvivor() {
         const registroAcumulado = acumulado[usuario.id];
         if (!registroAcumulado) return;
 
+        // 🚨 Inicializar historial de la jornada
+        registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: false, tipo: '-' };
+
         if (jornadaSeleccionada !== "general") {
           registroAcumulado.equipoElegido = seleccion ? seleccion.equipo : "Sin selección";
         }
@@ -188,12 +202,16 @@ export default function AdminSurvivor() {
         if (!seleccion && esPasadaYCerrada) {
           if (registroAcumulado.vidas < 3) {
             registroAcumulado.vidas += 1;
+            registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: true, tipo: 'X' };
             console.log(`✅ PENALIZACIÓN: A ${registroAcumulado.nombre} se le restó 1 vida en Jornada ${jornada.id}`);
           }
           return;
         }
 
-        if (!seleccion) return;
+        if (!seleccion) {
+          registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: false, tipo: '-' };
+          return;
+        }
 
         const esInfraccion = seleccionesInfraccion.has(`${usuario.id}_${jornada.id}`);
 
@@ -223,16 +241,31 @@ export default function AdminSurvivor() {
           puntos = 0;
           perdio = true;
           registroAcumulado.tuvoInfraccion = true;
+          registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: true, tipo: 'X' };
         } else {
           const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
           if (esLocal) {
-            if (partido.resultado === "L") puntos = 3;
-            else if (partido.resultado === "E") puntos = 1;
-            else if (partido.resultado === "V") perdio = true;
+            if (partido.resultado === "L") {
+              puntos = 3;
+              registroAcumulado.historial[jornada.id] = { puntos: 3, perdioVida: false, tipo: '3' };
+            } else if (partido.resultado === "E") {
+              puntos = 1;
+              registroAcumulado.historial[jornada.id] = { puntos: 1, perdioVida: false, tipo: '1' };
+            } else if (partido.resultado === "V") {
+              perdio = true;
+              registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: true, tipo: 'X' };
+            }
           } else {
-            if (partido.resultado === "V") puntos = 3;
-            else if (partido.resultado === "E") puntos = 1;
-            else if (partido.resultado === "L") perdio = true;
+            if (partido.resultado === "V") {
+              puntos = 3;
+              registroAcumulado.historial[jornada.id] = { puntos: 3, perdioVida: false, tipo: '3' };
+            } else if (partido.resultado === "E") {
+              puntos = 1;
+              registroAcumulado.historial[jornada.id] = { puntos: 1, perdioVida: false, tipo: '1' };
+            } else if (partido.resultado === "L") {
+              perdio = true;
+              registroAcumulado.historial[jornada.id] = { puntos: 0, perdioVida: true, tipo: 'X' };
+            }
           }
         }
 
@@ -241,7 +274,11 @@ export default function AdminSurvivor() {
       });
     }
 
-    let rankingFinal = Object.values(acumulado);
+    // 🚨 NUEVO: Mapear para incluir el tamaño del Set de equipos usados
+    let rankingFinal = Object.values(acumulado).map(fila => ({
+      ...fila,
+      equiposUsados: fila.equiposUsados.size,
+    }));
 
     if (jornadaSeleccionada !== "general") {
       rankingFinal = rankingFinal.filter((fila) => {
@@ -333,35 +370,153 @@ export default function AdminSurvivor() {
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // 🚨 FUNCIONES PARA EXPORTAR
+  // 🚨 EXPORTAR RANKING DETALLADO (MEJORADA)
   //=========================================
-  const exportarJPG = async (ref, nombreArchivo) => {
-    if (!ref || !ref.current) {
-      alert("⚠️ No se encontró el elemento a exportar. Intenta de nuevo.");
+  const exportarRankingDetallado = async () => {
+    if (ranking.length === 0) {
+      alert("No hay datos para exportar.");
       return;
     }
-    
+
     try {
-      // Pequeña pausa extra para asegurar que el DOM esté 100% pintado
-      await new Promise(resolve => setTimeout(resolve, 300));
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.top = '0';
+      container.style.left = '0';
+      container.style.width = 'max-content';
+      container.style.background = 'white';
+      container.style.padding = '40px';
+      container.style.zIndex = '9999';
+      container.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+
+      const title = document.createElement('h2');
+      title.textContent = `🏆 Ranking General Survivor - ${jornadaSeleccionada === "general" ? 'Acumulado' : jornadaActualObj?.nombre}`;
+      title.style.fontSize = '24px';
+      title.style.fontWeight = 'bold';
+      title.style.marginBottom = '20px';
+      title.style.textAlign = 'center';
+      title.style.color = '#0f172a';
+      container.appendChild(title);
+
+      const table = document.createElement('table');
+      table.style.borderCollapse = 'collapse';
+      table.style.width = '100%';
+      table.style.fontSize = '12px';
+
+      const thStyle = "border: 1px solid #cbd5e1; padding: 8px 12px; text-align: center; background-color: #f8fafc; font-weight: bold; color: #475569;";
+      const tdStyle = "border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; color: #334155; vertical-align: middle;";
+      const tdLeft = "border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; color: #334155; vertical-align: middle;";
+      const tdNarrow = "border: 1px solid #e2e8f0; padding: 8px 4px; text-align: center; color: #334155; vertical-align: middle; width: 70px;";
+
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
       
-      const canvas = await html2canvas(ref.current, {
-        scale: 2,
-        useCORS: true, 
-        allowTaint: true, 
-        logging: false, 
-        backgroundColor: "#ffffff",
-        windowWidth: ref.current.scrollWidth,
-        windowHeight: ref.current.scrollHeight
+      // 🚨 JORNADAS CONSECUTIVAS (J1, J2, J3...)
+      const jornadasParaExportar = [...jornadas].sort((a, b) => Number(a.id) - Number(b.id));
+      
+      const headers = ["Pos", "Participante", "Puntos", "Usos Equip"];
+      jornadasParaExportar.forEach((_, idx) => {
+        headers.push(`J${idx + 1}`);
       });
-      
+      headers.push("Vidas");
+
+      headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        th.style.cssText = h === "Usos Equip" ? thStyle.replace('padding: 8px 12px', 'padding: 8px 4px; width: 70px;') : thStyle;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      ranking.forEach((fila, index) => {
+        const tr = document.createElement('tr');
+        
+        if (index === 0) tr.style.backgroundColor = '#fef9c3';
+        else if (index === 1) tr.style.backgroundColor = '#f1f5f9';
+        else if (index === 2) tr.style.backgroundColor = '#ffedd5';
+
+        // Pos
+        const posTd = document.createElement('td');
+        posTd.textContent = index + 1;
+        posTd.style.cssText = tdStyle + " font-weight: bold;";
+        tr.appendChild(posTd);
+
+        // Nombre
+        const nameTd = document.createElement('td');
+        nameTd.textContent = fila.nombre;
+        nameTd.style.cssText = tdLeft + " font-weight: bold;";
+        tr.appendChild(nameTd);
+
+        // Puntos Totales
+        const ptsTd = document.createElement('td');
+        ptsTd.textContent = fila.puntos;
+        ptsTd.style.cssText = tdStyle + " font-weight: bold; color: #0f172a;";
+        tr.appendChild(ptsTd);
+
+        // 🚨 Usos Equip (Columna angosta)
+        const eqTd = document.createElement('td');
+        eqTd.textContent = fila.equiposUsados;
+        eqTd.style.cssText = tdNarrow + " font-weight: bold;";
+        tr.appendChild(eqTd);
+
+        // 🚨 Jornadas Consecutivas
+        jornadasParaExportar.forEach(j => {
+          const jTd = document.createElement('td');
+          const hist = fila.historial && fila.historial[j.id] ? fila.historial[j.id] : { tipo: '-', perdioVida: false };
+          
+          // 🚨 X PERFECTAMENTE CENTRADA
+          if (hist.tipo === 'X') {
+            jTd.innerHTML = '<span style="color: #dc2626; font-weight: 900; font-size: 14px; display: block; width: 100%; text-align: center; line-height: 1;">X</span>';
+          } else if (hist.tipo === '3') {
+            jTd.textContent = '3';
+            jTd.style.cssText = tdNarrow + " font-weight: bold; color: #16a34a;";
+          } else if (hist.tipo === '1') {
+            jTd.textContent = '1';
+            jTd.style.cssText = tdNarrow + " font-weight: bold; color: #d97706;";
+          } else {
+            jTd.textContent = hist.tipo || '-';
+            jTd.style.cssText = tdNarrow + " color: #94a3b8;";
+          }
+          tr.appendChild(jTd);
+        });
+
+        // Vidas Restantes
+        const vidasRestantes = Math.max(0, 3 - fila.vidas);
+        const vidasTd = document.createElement('td');
+        vidasTd.textContent = vidasRestantes;
+        vidasTd.style.cssText = tdStyle + ` font-weight: bold; color: ${vidasRestantes === 0 ? '#dc2626' : '#0f172a'}`;
+        tr.appendChild(vidasTd);
+
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      container.appendChild(table);
+
+      document.body.appendChild(container);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight
+      });
+
+      document.body.removeChild(container);
+
       const link = document.createElement("a");
-      link.download = `${nombreArchivo}.jpg`;
+      link.download = `Ranking_Detallado_Survivor.jpg`;
       link.href = canvas.toDataURL("image/jpeg", 0.95);
       link.click();
+
     } catch (error) {
       console.error("Error al exportar JPG:", error);
-      alert("❌ Ocurrió un error al generar la imagen. Revisa la consola del navegador (F12).");
+      alert("❌ Ocurrió un error al generar la imagen.");
     }
   };
 
@@ -446,11 +601,11 @@ export default function AdminSurvivor() {
 
           <div className="flex flex-wrap gap-2 w-full lg:w-auto">
             <button
-              onClick={() => exportarJPG(tablaRef, jornadaSeleccionada === "general" ? "Ranking-General-Survivor" : `Ranking-${jornadaActualObj?.nombre || "Jornada"}`)}
+              onClick={exportarRankingDetallado}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all duration-200 hover:scale-[1.02]"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              Exportar Ranking (JPG)
+              Exportar Ranking Detallado (JPG)
             </button>
 
             <button
@@ -544,7 +699,6 @@ export default function AdminSurvivor() {
                           )}
                         </td>
                         
-                        {/* 🚨 CORRECCIÓN: Usamos opacity en lugar de filter: grayscale para compatibilidad total con html2canvas */}
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center gap-1">
                             {[...Array(3)].map((_, i) => {
@@ -554,8 +708,8 @@ export default function AdminSurvivor() {
                                   key={i} 
                                   className="text-2xl transition-all"
                                   style={{ 
-                                    color: estaLleno ? '#ef4444' : '#cbd5e1', // Gris más definido
-                                    opacity: estaLleno ? 1 : 0.4, // Opacidad en lugar de filter
+                                    color: estaLleno ? '#ef4444' : '#cbd5e1',
+                                    opacity: estaLleno ? 1 : 0.4,
                                     transform: estaLleno ? 'scale(1)' : 'scale(0.9)'
                                   }}
                                 >
