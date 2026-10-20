@@ -164,7 +164,7 @@ export default function AdminDashboard() {
   };
 
   //---------------------------------------
-  // PROCESAMIENTO DE DATOS
+  // PROCESAMIENTO DE DATOS (CON LÓGICA DE INFRACCIÓN DE ADMINSURVIVOR)
   //---------------------------------------
   const procesarTodosLosDatos = (
     jornadasData,
@@ -206,6 +206,26 @@ export default function AdminDashboard() {
       };
       jornadasSecuenciales.forEach(j => {
         acumulado[usuario.id].aciertosPorJornada[j.numero] = 0;
+      });
+    });
+
+    // 🚨 NUEVO: Lógica de detección de infracciones (idéntica a AdminSurvivor)
+    const seleccionesPorUsuarioYEquipo = {};
+    todosSurvivor.forEach(s => {
+      if (!s.equipo || !String(s.equipo).trim()) return;
+      if (!seleccionesPorUsuarioYEquipo[s.usuario_id]) seleccionesPorUsuarioYEquipo[s.usuario_id] = {};
+      const baseTeam = s.equipo.split(' (vs ')[0].trim().toLowerCase();
+      if (!seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam]) seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam] = [];
+      seleccionesPorUsuarioYEquipo[s.usuario_id][baseTeam].push(s);
+    });
+
+    const seleccionesInfraccion = new Set();
+    Object.keys(seleccionesPorUsuarioYEquipo).forEach(userId => {
+      Object.keys(seleccionesPorUsuarioYEquipo[userId]).forEach(team => {
+        const selecciones = seleccionesPorUsuarioYEquipo[userId][team].sort((a, b) => Number(a.jornada_id) - Number(b.jornada_id));
+        for (let i = 3; i < selecciones.length; i++) {
+          seleccionesInfraccion.add(`${userId}_${selecciones[i].jornada_id}`);
+        }
       });
     });
 
@@ -260,12 +280,19 @@ export default function AdminDashboard() {
 
               if (partido && partido.resultado) {
                 let perdio = false;
-                const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
                 
-                if (esLocal) {
-                  if (partido.resultado === "V") perdio = true;
+                // 🚨 AQUÍ SE APLICA LA INFRACCIÓN: Si usó el equipo más de 2 veces, pierde automáticamente
+                const esInfraccion = seleccionesInfraccion.has(`${usuario.id}_${jornadaId}`);
+                
+                if (esInfraccion) {
+                  perdio = true;
                 } else {
-                  if (partido.resultado === "L") perdio = true;
+                  const esLocal = partido.local.trim().toLowerCase() === nombreEquipoBase;
+                  if (esLocal) {
+                    if (partido.resultado === "V") perdio = true;
+                  } else {
+                    if (partido.resultado === "L") perdio = true;
+                  }
                 }
                 
                 if (perdio && reg.vidas < 3) reg.vidas++;
@@ -355,7 +382,6 @@ export default function AdminDashboard() {
           return { ...p, motivo, tipo };
         });
 
-      // 🚨 FILTRO MEJORADO CON DIAGNÓSTICO VISUAL
       ausentesSurvivor = perfilesData
         .filter(p => {
           if (esAdmin(p)) return false;
@@ -363,13 +389,6 @@ export default function AdminDashboard() {
           if (survivorActivaSet.has(p.id)) return false;
           
           const reg = acumulado[p.id];
-          
-          // 🚨 DEBUG: Si llega aquí con 3 vidas, hay un error lógico. Lo registramos.
-          if (reg && reg.vidas >= 3) {
-             console.warn(`[ALERTA] El usuario ${p.nombre_usuario} tiene ${reg.vidas} vidas pero pasó el filtro. Revisa la consola.`);
-          }
-          
-          // Si tiene 3 o más vidas, está ELIMINADO y NO debe aparecer en la lista de ausentes
           if (reg && reg.vidas >= 3) return false; 
           
           return true;
@@ -379,10 +398,9 @@ export default function AdminDashboard() {
           let motivo = "Falta en jornada actual";
           let tipo = "normal";
           
-          // 🚨 MEJORA VISUAL: Mostrar claramente cuántas vidas lleva para evitar confusión
           if (reg && reg.vidas > 0) {
             if (reg.vidas === 2) {
-               tipo = "eliminado"; // Usamos el estilo rojo para advertir que está al borde
+               tipo = "eliminado";
                motivo = `⚠️ ¡AL BORDE! (Lleva ${reg.vidas} vidas perdidas)`;
             } else {
                motivo = `Falta en jornada actual (Lleva ${reg.vidas} vida(s) perdida(s))`;
