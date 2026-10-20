@@ -95,10 +95,27 @@ export default function AdminSurvivor() {
   };
 
   //=========================================
-  // LÓGICA DEL RANKING (CON HISTORIAL DETALLADO)
+  // 🚨 FILTROS: Excluir Admins y No Jugadores
+  //=========================================
+  const esAdmin = (p) => {
+    const rol = (p.rol || "").toLowerCase();
+    const email = (p.email || "").toLowerCase();
+    const nombre = (p.nombre_usuario || p.nombre || "").toLowerCase();
+    return rol === "admin" || email.includes("admin") || nombre.includes("admin") || email.includes("root");
+  };
+
+  //=========================================
+  // LÓGICA DEL RANKING
   //=========================================
   const calcularRanking = async () => {
     const horaActual = horaMexico || await obtenerHoraMexico();
+
+    // 1. Filtrar solo a los que JUEGAN survivor y NO son admin
+    const usuariosConSurvivor = new Set(rawSurvivor.map(s => s.usuario_id));
+    const perfilesJugadores = rawPerfiles.filter(p => {
+      if (esAdmin(p)) return false;
+      return usuariosConSurvivor.has(p.id) || p.solo_survivor === true;
+    });
 
     const jornadasAProcesar = jornadas.filter((j) => {
       if (jornadaSeleccionada === "general") return true;
@@ -108,7 +125,7 @@ export default function AdminSurvivor() {
     const jornadasOrdenadas = [...jornadasAProcesar].sort((a, b) => Number(a.id) - Number(b.id));
 
     const acumulado = {};
-    rawPerfiles.forEach((usuario) => {
+    perfilesJugadores.forEach((usuario) => {
       acumulado[usuario.id] = {
         usuario_id: usuario.id,
         nombre: usuario?.nombre_usuario || usuario?.nombre || usuario?.nombre_completo || "Sin nombre",
@@ -117,16 +134,17 @@ export default function AdminSurvivor() {
         equipoElegido: "-",
         tuvoInfraccion: false,
         equiposUsados: new Set(),
-        historial: {} // 🚨 NUEVO: Para almacenar el resultado de cada jornada
+        historial: {} 
       };
     });
 
-    rawSurvivor.forEach(s => {
-      if (!s.equipo || !String(s.equipo).trim()) return;
-      const equipoBase = s.equipo.split(' (vs ')[0].trim();
-      if (acumulado[s.usuario_id]) {
-        acumulado[s.usuario_id].equiposUsados.add(equipoBase);
-      }
+    perfilesJugadores.forEach(usuario => {
+      // Calcular equipos únicos usados por cada usuario
+      const seleccionesUsuario = rawSurvivor.filter(s => s.usuario_id === usuario.id && s.equipo && String(s.equipo).trim() !== "");
+      seleccionesUsuario.forEach(s => {
+        const equipoBase = s.equipo.split(' (vs ')[0].trim();
+        acumulado[usuario.id].equiposUsados.add(equipoBase);
+      });
     });
 
     const seleccionesPorUsuarioYEquipo = {};
@@ -157,7 +175,7 @@ export default function AdminSurvivor() {
         (s) => Number(s.jornada_id) === Number(jornada.id)
       );
 
-      rawPerfiles.forEach((usuario) => {
+      perfilesJugadores.forEach((usuario) => {
         const seleccion = eleccionesJornada.find(
           (s) => s.usuario_id === usuario.id && s.equipo && String(s.equipo).trim() !== ""
         );
@@ -204,9 +222,7 @@ export default function AdminSurvivor() {
           return true;
         });
 
-        if (!partido || !partido.resultado) {
-           return; // Se mantiene el tipo '-' si no hay resultado (ej. pospuesto)
-        }
+        if (!partido || !partido.resultado) return;
 
         let puntos = 0;
         let perdio = false;
@@ -275,7 +291,14 @@ export default function AdminSurvivor() {
   // CALCULAR USOS POR EQUIPO
   //=========================================
   const datosUsosEquipo = useMemo(() => {
-    const usuarios = rawPerfiles.map((u) => ({
+    // Usamos solo los perfiles de jugadores filtrados
+    const usuariosConSurvivor = new Set(rawSurvivor.map(s => s.usuario_id));
+    const perfilesJugadores = rawPerfiles.filter(p => {
+      if ((p.rol || "").toLowerCase() === "admin" || (p.email || "").toLowerCase().includes("admin")) return false;
+      return usuariosConSurvivor.has(p.id) || p.solo_survivor === true;
+    });
+
+    const usuarios = perfilesJugadores.map((u) => ({
       id: u.id,
       nombre: u.nombre_usuario || u.nombre || u.nombre_completo || "Sin nombre",
     }));
@@ -311,7 +334,7 @@ export default function AdminSurvivor() {
   }, [rawPerfiles, rawPartidos, rawSurvivor]);
 
   //=========================================
-  // 🚨 EXPORTAR RANKING DETALLADO (NUEVA FUNCIÓN)
+  // 🚨 EXPORTAR RANKING DETALLADO (OPTIMIZADO)
   //=========================================
   const exportarRankingDetalladoJPG = async () => {
     if (ranking.length === 0) {
@@ -345,24 +368,27 @@ export default function AdminSurvivor() {
       table.style.fontSize = '12px';
 
       const thStyle = "border: 1px solid #cbd5e1; padding: 8px 12px; text-align: center; background-color: #f8fafc; font-weight: bold; color: #475569;";
-      const tdStyle = "border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; color: #334155;";
-      const tdLeft = "border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; color: #334155;";
+      const tdStyle = "border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; color: #334155; vertical-align: middle;";
+      const tdLeft = "border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; color: #334155; vertical-align: middle;";
+      const tdNarrow = "border: 1px solid #e2e8f0; padding: 8px 4px; text-align: center; color: #334155; vertical-align: middle; width: 70px;";
 
       const thead = document.createElement('thead');
       const headerRow = document.createElement('tr');
       
-      const headers = ["Pos", "Participante", "Puntos", "Equipos Usados"];
+      // 🚨 JORNADAS CONSECUTIVAS (J1, J2, J3...)
       const jornadasParaExportar = [...jornadas].sort((a, b) => Number(a.id) - Number(b.id));
       
-      jornadasParaExportar.forEach(j => {
-        headers.push(`J${j.id}`);
+      const headers = ["Pos", "Participante", "Puntos", "Usos Equip"];
+      jornadasParaExportar.forEach((_, idx) => {
+        headers.push(`J${idx + 1}`);
       });
       headers.push("Vidas");
 
       headers.forEach(h => {
         const th = document.createElement('th');
         th.textContent = h;
-        th.style.cssText = thStyle;
+        // Aplicar estilo angosto solo a "Usos Equip"
+        th.style.cssText = h === "Usos Equip" ? thStyle.replace('padding: 8px 12px', 'padding: 8px 4px; width: 70px;') : thStyle;
         headerRow.appendChild(th);
       });
       thead.appendChild(headerRow);
@@ -394,28 +420,29 @@ export default function AdminSurvivor() {
         ptsTd.style.cssText = tdStyle + " font-weight: bold; color: #0f172a;";
         tr.appendChild(ptsTd);
 
-        // Equipos Usados
+        // 🚨 Usos Equip (Columna angosta)
         const eqTd = document.createElement('td');
         eqTd.textContent = fila.equiposUsados;
-        eqTd.style.cssText = tdStyle;
+        eqTd.style.cssText = tdNarrow + " font-weight: bold;";
         tr.appendChild(eqTd);
 
-        // Jornadas
+        // 🚨 Jornadas Consecutivas
         jornadasParaExportar.forEach(j => {
           const jTd = document.createElement('td');
           const hist = fila.historial && fila.historial[j.id] ? fila.historial[j.id] : { tipo: '-', perdioVida: false };
           
+          // 🚨 X PERFECTAMENTE CENTRADA
           if (hist.tipo === 'X') {
-            jTd.innerHTML = '<span style="color: #dc2626; font-weight: bold;">X</span>';
+            jTd.innerHTML = '<span style="color: #dc2626; font-weight: 900; font-size: 14px; display: block; width: 100%; text-align: center; line-height: 1;">X</span>';
           } else if (hist.tipo === '3') {
             jTd.textContent = '3';
-            jTd.style.cssText = tdStyle + " font-weight: bold; color: #16a34a;";
+            jTd.style.cssText = tdNarrow + " font-weight: bold; color: #16a34a;";
           } else if (hist.tipo === '1') {
             jTd.textContent = '1';
-            jTd.style.cssText = tdStyle + " font-weight: bold; color: #d97706;";
+            jTd.style.cssText = tdNarrow + " font-weight: bold; color: #d97706;";
           } else {
             jTd.textContent = hist.tipo || '-';
-            jTd.style.cssText = tdStyle + " color: #94a3b8;";
+            jTd.style.cssText = tdNarrow + " color: #94a3b8;";
           }
           tr.appendChild(jTd);
         });
